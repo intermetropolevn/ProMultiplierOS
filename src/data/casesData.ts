@@ -1,0 +1,88 @@
+import { PracticalCase } from '../types';
+
+export const CASES_DATA: PracticalCase[] = [
+  {
+    id: 'case-payment-double-spend',
+    title: 'The Ghost Payment Bug: Preventing Double-Billing in Unstable Mobile Networks',
+    companyType: 'High-growth Fintech Unicorn',
+    sector: 'Fintech & Payments',
+    roleCategory: 'Software Engineering',
+    difficulty: 'Senior',
+    backgroundScenario: 'During peak commuter transit hours, users on subway lines in metropolitan areas submit payments for transit top-ups. Due to intermittent underground tunnel cell-service drops, mobile clients frequently timeout after 3 seconds, triggering client-side automatic retries while the server actually succeeded in charging the credit card.',
+    theCoreConflict: 'Customers are being billed 2 to 4 times for a single transit fare. Merchant processing fees have skyrocketed by 18%, and chargeback dispute rates are threatening payment network penalties.',
+    engineeringOrProductTradeoffs: {
+      optionA: 'Short-circuit client retries and mandate manual refresh from users.',
+      optionB: 'Server-side distributed Idempotency-Key caching with atomic distributed locks.',
+      prosA: ['Instant to ship; minimal backend changes.'],
+      consA: ['Horrendous user experience; subway turnstiles remain blocked; customer abandonment increases.'],
+      prosB: ['Completely eliminates duplicate charges; transparent to mobile clients; handles arbitrary retries gracefully.'],
+      consB: ['Requires distributed cache coordination (Redis); risk of deadlocks if timeouts are misconfigured; cache state must survive node failover.'],
+    },
+    recommendedResolution: 'Implement an Idempotency-Key header mechanism. On each intent to checkout, the client generates a UUIDv4. The backend uses Redis atomic `SET key lock NX EX 30` to acquire a lock on the transaction key. If another request with the same key arrives while processing, it polls until the original transaction commits and returns the cached HTTP response payload. If processing fails, the lock is released with an explicit rollback token. Furthermore, the database table uses a UNIQUE constraint on `(tenant_id, idempotency_key)` as a defensive safety net.',
+    keyTakeaways: [
+      'Never rely on the client network connection being stable.',
+      'Always design financial APIs to be idempotent by default.',
+      'Defensive database unique constraints provide ultimate durability even if cache layers suffer eviction.',
+    ],
+    interviewDiscussionPrompts: [
+      'How do you handle the case where the third-party payment gateway (e.g. Stripe) is down while holding the local lock?',
+      'What happens if the Redis cache instance crashes mid-flight during key acquisition?',
+    ],
+  },
+  {
+    id: 'case-saas-noisy-neighbor',
+    title: 'Taming the 800-Pound Gorilla: Multi-Tenant Resource Starvation',
+    companyType: 'Enterprise B2B Collaborative Workspace',
+    sector: 'Enterprise SaaS',
+    roleCategory: 'DevOps & Cloud',
+    difficulty: 'Senior',
+    backgroundScenario: 'A multi-tenant project management SaaS runs on a shared PostgreSQL cluster with 14,000 corporate tenants. A newly signed Fortune 50 enterprise client imports 4 million historical tickets via the API during normal European business hours. The resulting database CPU hits 100%, causing query timeouts for thousands of smaller customers.',
+    theCoreConflict: 'Small and medium business customers are unable to load their dashboards, posting angry complaints on Twitter/X, while the sales team insists that the new Fortune 50 enterprise client must not be throttled into failing their initial migration.',
+    engineeringOrProductTradeoffs: {
+      optionA: 'Immediately rate-limit the Fortune 50 client to 10 requests per second across all endpoints.',
+      optionB: 'Partition database workload dynamically: route bulk write syncs to a decoupled tenant queue and spin up read replicas.',
+      prosA: ['Instantly saves small customers from ongoing timeout degradation.'],
+      consA: ['Fortune 50 onboarding fails, jeopardizing a $1.8M ARR contract.'],
+      prosB: ['Protects interactive traffic SLAs while allowing the bulk migration to progress smoothly without starving shared CPU.'],
+      consB: ['Requires 24-hour architectural sprint to isolate asynchronous ingestion workers.'],
+    },
+    recommendedResolution: 'Decouple interactive REST queries from batch ingestion pipelines. Introduce tenant-aware queue tiering: high-priority real-time queue vs. background bulk queue with fair-share scheduling (using Redis or SQS with FIFO message grouping by tenant_id). Implement Postgres connection pooling with PgBouncer set to transaction pooling, and configure per-user connection limits so no single organization can saturate the 200-connection database pool. Long term, migrate high-volume enterprise tiers to isolated schemas with dedicated compute read-replicas.',
+    keyTakeaways: [
+      'In multi-tenant SaaS, architectural isolation must exist at the queuing, connection pool, and storage layers.',
+      'Fair-share throttling prevents single tenants from degrading communal system health.',
+      'Interactive user clicks and automated background imports should never share synchronous thread pools.',
+    ],
+    interviewDiscussionPrompts: [
+      'How would you pitch this architectural change to the executive team when sales is pushing for fast delivery?',
+      'Compare database-level Row Level Security (RLS) vs. dedicated database per enterprise tenant.',
+    ],
+  },
+  {
+    id: 'case-llm-hallucination-customer-support',
+    title: 'When the AI Promises a Free Car: Guarding LLMs in Enterprise Support',
+    companyType: 'Automotive Digital Marketplace',
+    sector: 'AI & Machine Learning',
+    roleCategory: 'Data & Machine Learning',
+    difficulty: 'Lead / Staff',
+    backgroundScenario: 'An e-commerce auto platform deployed an autonomous LLM support chatbot to answer customer queries regarding vehicle warranties and trade-in valuations. An adversarial user posted a screenshot showing the chatbot agreeing to sell a $45,000 SUV for $1 under contract law, going viral on social media.',
+    theCoreConflict: 'Legal team demands immediate shutdown of the AI chatbot, which handles 60% of tier-1 support volume. Customer support leadership warns that shutting it down will cause support ticket wait times to balloon from 4 minutes to 3 hours.',
+    engineeringOrProductTradeoffs: {
+      optionA: 'Revert to hard-coded decision-tree bot with strict static canned responses.',
+      optionB: 'Implement multi-stage semantic guardrails, strict deterministic tool calling, and human-in-the-loop escalation.',
+      prosA: ['Guaranteed zero hallucinated liability; 100% predictable.'],
+      consA: ['Customer satisfaction drops 40%; resolution rate plummets; human agents overwhelmed.'],
+      prosB: ['Preserves natural language conversational benefits while enforcing legally binding guardrails and sanity checks.'],
+      consB: ['Adds ~180ms latency to model responses and requires continuous benchmark evals.'],
+    },
+    recommendedResolution: 'Deploy a multi-tier guardrail architecture: 1) Pre-guardrail: Adversarial prompt injection classifier (checks for role-play, jailbreaks, and delimiter tampering). 2) Strict Grounding RAG: The model is instructed in its system prompt that it has zero authority to quote pricing or agree to contracts; any pricing is strictly executed via deterministic tool calls to a backend pricing service with verified cryptographic tokens. 3) Post-guardrail: Output moderation scanner verifies whether the drafted message contains unauthorized promises before sending to the client. 4) Escalation: High-stakes contract commitments are routed to human review with one-click approval.',
+    keyTakeaways: [
+      'Never allow generative AI to author binding financial or contractual commitments without deterministic programmatic verification.',
+      'Defensive guardrails must operate both on prompt ingestion and response egress.',
+      'Automated evals (LLM-as-a-judge) must continuously run adversarial red-team benchmarks in CI before any prompt change is pushed.',
+    ],
+    interviewDiscussionPrompts: [
+      'How do you design an automated red-teaming test suite to catch jailbreaks before deployment?',
+      'How would you manage latency budgets when stacking multiple guardrail models?',
+    ],
+  },
+];

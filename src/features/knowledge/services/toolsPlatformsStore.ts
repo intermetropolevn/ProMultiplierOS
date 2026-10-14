@@ -1,0 +1,153 @@
+import { 
+  ToolPlatformEntry, 
+  ToolHistoricalVersion 
+} from '../types/toolsPlatforms';
+import { resolveProvenance } from '../types/provenance';
+import { TOOLS_PLATFORMS_DATA } from '../data/toolsPlatformsData';
+
+const STORAGE_KEY = 'career_os_tools_platforms_v3';
+
+function normalizeTool(t: ToolPlatformEntry): ToolPlatformEntry {
+  return {
+    ...t,
+    provenance: t.provenance || resolveProvenance(t)
+  };
+}
+
+class ToolsPlatformsStore {
+  private tools: ToolPlatformEntry[] = [];
+  private listeners: Set<() => void> = new Set();
+
+  constructor() {
+    this.loadFromStorage();
+  }
+
+  private loadFromStorage(): void {
+    try {
+      const stored = localStorage.getItem(STORAGE_KEY);
+      if (stored) {
+        const parsed = JSON.parse(stored);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          this.tools = parsed.map(normalizeTool);
+          return;
+        }
+      }
+    } catch (err) {
+      console.error('Failed to load tools & platforms from storage:', err);
+    }
+    // Fallback to seed data
+    this.tools = TOOLS_PLATFORMS_DATA.map(normalizeTool);
+    this.saveToStorage();
+  }
+
+  private saveToStorage(): void {
+    try {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(this.tools));
+      this.notifyListeners();
+    } catch (err) {
+      console.error('Failed to persist tools & platforms:', err);
+    }
+  }
+
+  private notifyListeners(): void {
+    this.listeners.forEach(fn => fn());
+  }
+
+  public subscribe(fn: () => void): () => void {
+    this.listeners.add(fn);
+    return () => this.listeners.delete(fn);
+  }
+
+  public getTools(): ToolPlatformEntry[] {
+    return [...this.tools];
+  }
+
+  public getTool(id: string): ToolPlatformEntry | undefined {
+    return this.tools.find(t => t.id === id);
+  }
+
+  public addTool(tool: ToolPlatformEntry): void {
+    this.tools.unshift(tool);
+    this.saveToStorage();
+  }
+
+  public updateTool(
+    id: string, 
+    updates: Partial<ToolPlatformEntry>, 
+    preserveVersionHistory: boolean = true
+  ): void {
+    const index = this.tools.findIndex(t => t.id === id);
+    if (index === -1) return;
+
+    const existing = this.tools[index];
+    let updatedHistory: ToolHistoricalVersion[] = existing.versionHistory ? [...existing.versionHistory] : [];
+
+    // If version changed or user requested preservation, archive the previous version info
+    const versionChanged = updates.version && updates.version !== existing.version;
+    if (preserveVersionHistory && (versionChanged || updates.status === 'Previous Version')) {
+      const historyItem: ToolHistoricalVersion = {
+        version: existing.version || 'Previous Edition',
+        releaseDate: existing.releaseDate,
+        observedDate: existing.observedDate || new Date().toISOString().split('T')[0],
+        lastVerified: existing.lastVerified,
+        dataSourceDate: existing.dataSourceDate,
+        status: 'Previous Version',
+        notes: `Archived on ${new Date().toISOString().split('T')[0]} during version update to ${updates.version || 'newer release'}.`,
+        capabilitiesSnapshot: existing.tagline || existing.capabilitiesSummary.keyCapacities[0],
+        archivedAt: new Date().toISOString()
+      };
+      // Prepend to history
+      updatedHistory.unshift(historyItem);
+    }
+
+    const updatedTool: ToolPlatformEntry = {
+      ...existing,
+      ...updates,
+      versionHistory: updatedHistory,
+      lastUpdated: new Date().toISOString().split('T')[0]
+    };
+
+    this.tools[index] = updatedTool;
+    this.saveToStorage();
+  }
+
+  public duplicateTool(id: string): ToolPlatformEntry | null {
+    const existing = this.tools.find(t => t.id === id);
+    if (!existing) return null;
+
+    const duplicated: ToolPlatformEntry = {
+      ...existing,
+      id: `tool-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
+      name: `${existing.name} (Copy)`,
+      lastUpdated: new Date().toISOString().split('T')[0],
+      sourceState: 'User Edited'
+    };
+
+    this.tools.unshift(duplicated);
+    this.saveToStorage();
+    return duplicated;
+  }
+
+  public archiveTool(id: string): void {
+    const index = this.tools.findIndex(t => t.id === id);
+    if (index === -1) return;
+    this.tools[index] = {
+      ...this.tools[index],
+      isArchived: !this.tools[index].isArchived,
+      lastUpdated: new Date().toISOString().split('T')[0]
+    };
+    this.saveToStorage();
+  }
+
+  public deleteTool(id: string): void {
+    this.tools = this.tools.filter(t => t.id !== id);
+    this.saveToStorage();
+  }
+
+  public resetToDefault(): void {
+    this.tools = [...TOOLS_PLATFORMS_DATA];
+    this.saveToStorage();
+  }
+}
+
+export const toolsPlatformsStore = new ToolsPlatformsStore();
