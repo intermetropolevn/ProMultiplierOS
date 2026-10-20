@@ -123,6 +123,22 @@ export interface CompetencyPillar {
   keyIndicators: string[];
 }
 
+export interface CompensationBenchmarkTier {
+  level: 'junior' | 'mid' | 'senior' | 'lead';
+  levelLabel?: string;
+  min: number | string;
+  max: number | string;
+  currency: string;
+  hasVariable?: boolean;
+}
+
+export interface InterviewPipelineStage {
+  order: number;
+  name: string;
+  duration: string;
+  description?: string;
+}
+
 export interface RoleBlueprint {
   id: string;
   title: string;
@@ -136,7 +152,7 @@ export interface RoleBlueprint {
     senior: string;
     lead: string;
   };
-  marketDemand: 'High' | 'Very High' | 'Surging';
+  marketDemand: 'High' | 'Very High' | 'Surging' | 'Medium' | 'Emerging';
   competencies: CompetencyPillar[];
   dailyTasksTimeline: {
     time: string;
@@ -148,6 +164,24 @@ export interface RoleBlueprint {
   keyPerformanceMetrics: string[];
   careerProgression: string[];
   typicalInterviewStages: string[];
+
+  // Extended fields for Role Blueprint Creator & Editor
+  roleFamily?: string;
+  industryDomain?: SectorDomain | string;
+  seniorityLevel?: ExperienceLevel | string;
+  missionScope?: string;
+  compensationBenchmarks?: CompensationBenchmarkTier[];
+  typicalDay?: {
+    time: string;
+    activity: string;
+    description: string;
+  }[];
+  techStack?: string[];
+  interviewPipeline?: InterviewPipelineStage[];
+  status?: 'draft' | 'published';
+  createdAt?: string;
+  updatedAt?: string;
+  isCustom?: boolean;
 }
 
 export interface IndustryDomainGuide {
@@ -241,6 +275,8 @@ export interface InterviewQuestion {
   keywordsToMention: string[];
   exemplaryModelAnswer: string;
   storedFollowUps?: string[];
+  seniorCalibrationFocus?: string;
+  sampleAnswer?: string;
 }
 
 export type QuestionSetId = 
@@ -262,6 +298,7 @@ export interface InterviewConfig {
   mockExperienceType?: 'realtime_ai' | 'classic' | 'timed_assignment';
   questionSet?: QuestionSetId;
   timedAssignmentType?: TimedAssignmentType;
+  companyName?: string;
 }
 
 export type TimedAssignmentType = 
@@ -385,3 +422,224 @@ export interface UserCareerProfile {
   bookmarkedQuestionIds: string[];
   readinessScore: number;
 }
+
+// ==================================================
+// CAREER OPPORTUNITY & REUSABLE COMMERCIAL LAYER
+// ==================================================
+
+export type OpportunityType = 
+  | 'challenge' 
+  | 'learning' 
+  | 'venture' 
+  | 'promotion' 
+  | 'company_signal';
+
+export type OpportunitySubtype = 
+  // A. Challenges & Hackathons
+  | 'hackathon' 
+  | 'competition' 
+  | 'case_competition' 
+  | 'product_challenge' 
+  | 'ai_challenge' 
+  | 'design_challenge' 
+  | 'open_innovation_challenge'
+  // B. Learning & Career Programs (Internal Category)
+  | 'bootcamp' 
+  | 'training_program' 
+  | 'fellowship' 
+  | 'mentorship_program' 
+  | 'career_accelerator' 
+  | 'upskilling_program' 
+  | 'reskilling_program' 
+  | 'certification_program' 
+  | 'apprenticeship' 
+  | 'residency_learning_program'
+  // C. Venture & Founder Programs
+  | 'startup_accelerator' 
+  | 'incubator' 
+  | 'founder_program' 
+  | 'pitching_competition' 
+  | 'startup_challenge' 
+  | 'venture_program' 
+  | 'grant' 
+  | 'funding_program' 
+  | 'entrepreneurship_fellowship'
+  // D. Promotions & Deals
+  | 'career_service' 
+  | 'professional_service' 
+  | 'course_deal' 
+  | 'tool_deal' 
+  | 'software_deal' 
+  | 'subscription' 
+  | 'bundle' 
+  | 'discount' 
+  | 'partner_benefit' 
+  | 'member_benefit' 
+  | 'career_product'
+  // E. Company Signals & Upvotes
+  | 'company_ranking' 
+  | 'company_upvote' 
+  | 'trending_company' 
+  | 'employer_popularity' 
+  | 'employer_award' 
+  | 'community_score' 
+  | 'hiring_momentum' 
+  | 'community_signal'
+  // Backward compatibility aliases
+  | 'accelerator' 
+  | 'deal' 
+  | 'pro_service' 
+  | 'course' 
+  | 'tool' 
+  | 'product' 
+  | 'venture' 
+  | 'pitching';
+
+export type OpportunityMonetizationType = 
+  | 'organic' 
+  | 'sponsored' 
+  | 'partnership' 
+  | 'affiliate' 
+  | 'quest' 
+  | 'membership' 
+  | 'promotion' 
+  | 'hybrid';
+
+export type OpportunitySponsorshipBadge = 
+  | 'organic'
+  | 'sponsored' 
+  | 'partner' 
+  | 'featured' 
+  | 'member_benefit';
+
+export type OpportunityStatus = 'active' | 'upcoming' | 'closing_soon' | 'completed' | 'archived';
+
+export interface ProgramMetadata {
+  duration?: string; // e.g. "8 weeks", "12 weeks full-time"
+  schedule?: string; // e.g. "Mon & Wed 6-9 PM PT", "Self-paced"
+  deliveryMode?: 'Remote' | 'Hybrid' | 'In-Person' | 'Self-Paced' | 'Live Cohort';
+  cost?: string; // e.g. "Free", "$1,200", "Income Share Agreement"
+  isFree?: boolean;
+  scholarship?: string; // e.g. "Scholarship Available", "Up to 100% Merit & Need"
+  scholarshipAvailable?: boolean;
+  certificate?: boolean | string; // e.g. "Certificate of Completion"
+  careerOutcomes?: string[]; // e.g. ["Product Manager", "AI Product Specialist"]
+  targetRoles?: string[]; // e.g. ["Product Manager", "Technical PM"]
+  skillsGained?: string[];
+  placementSupport?: string; // e.g. "1-on-1 Career Coaching & Hiring Partner Introductions"
+  hiringPartners?: string[]; // e.g. ["Google", "Stripe", "OpenAI"]
+  syllabusModules?: Array<{
+    title: string;
+    description?: string;
+    duration?: string;
+  }>;
+}
+
+export interface OpportunityQuestReward {
+  questId: string;
+  questTitle?: string;
+  questAction: string; // e.g. "Complete application", "Submit project", "Activate offer"
+  creditsReward: number; // e.g. 300, 500 Credits
+  badgeReward?: string;
+  xpReward?: number;
+}
+
+export interface OpportunityCommercial {
+  opportunityId: string;
+  partnerId?: string;
+  partnerName?: string;
+  campaignId?: string;
+  monetizationType: OpportunityMonetizationType;
+  sponsorshipStatus: OpportunitySponsorshipBadge;
+  featuredStatus?: boolean;
+  sponsoredPlacement?: boolean;
+  affiliateUrl?: string;
+  affiliateCommission?: string; // e.g. "15%" or "$25/sale"
+  questId?: string;
+  questAction?: string; // e.g. "Complete submission"
+  membershipBenefitId?: string;
+  membershipTierRequired?: 'free' | 'pro' | 'executive';
+  rewardId?: string;
+  rewardCredits?: number; // e.g. 500 Credits
+  trackingId?: string;
+}
+
+export interface OpportunityCompanySignal {
+  companyRanking?: number; // e.g. #12
+  upvoteCount: number;
+  trendingScore: number; // e.g. 96
+  communityScore: number; // e.g. 4.8 / 5.0
+  reviewCount?: number;
+  employerPopularity?: 'Top 1%' | 'Top 5%' | 'Trending' | 'Rising Star';
+  awards?: string[];
+  hiringMomentum?: 'Aggressive' | 'Selective' | 'Steady' | 'Freezing';
+  userHasUpvoted?: boolean;
+}
+
+export interface CareerOpportunity {
+  id: string;
+  title: string;
+  type: OpportunityType;
+  subtype: OpportunitySubtype;
+  organization: string;
+  organizationId?: string;
+  organizationLogo?: string;
+  description: string;
+  shortDescription: string;
+  status: OpportunityStatus;
+  deadline?: string; // e.g. "2026-11-20" or "Nov 20, 2026" or "Rolling"
+  startDate?: string;
+  endDate?: string;
+  location: string; // e.g. "Remote · Global" or "San Francisco, CA"
+  isRemote: boolean;
+  eligibility: string; // e.g. "Open to all software engineers and AI builders"
+  requirements?: string[];
+  skills: string[];
+  industry: string; // e.g. "AI & Machine Learning", "Fintech", "Developer Tools"
+  reward?: string; // e.g. "$10,000+ Prize Pool", "$50k Non-dilutive Grant", "30% Lifetime Discount"
+  benefits?: string[];
+  price?: string; // e.g. "$1,200", "Free"
+  applicationUrl: string;
+  sourceUrl?: string;
+  image?: string;
+  tags: string[];
+  ctaText: string; // e.g. "Register", "Join Hackathon", "Apply for Grant", "Claim Offer", "Enroll", "Learn More", "Submit Pitch"
+  commercial?: OpportunityCommercial;
+  companySignal?: OpportunityCompanySignal;
+  programMetadata?: ProgramMetadata;
+  quest?: OpportunityQuestReward;
+  matchScore?: number; // e.g. 94
+  recommendationReason?: string; // e.g. "Matches your Product Manager + AI career path"
+  personalizationMatch?: {
+    matchPercentage: number;
+    reason: string;
+    matchedRoles?: string[];
+    matchedSkills?: string[];
+  };
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface TrackedRadarOpportunity {
+  opportunityId: string;
+  opportunity: CareerOpportunity;
+  addedAt: string;
+  deadline?: string;
+  status: 'saved' | 'interested' | 'applied_joined' | 'registered' | 'completed' | 'in_progress';
+  notes?: string;
+  completionDate?: string;
+  pinnedToDesk?: boolean;
+}
+
+// ==================================================
+export * from './types/builderMatch';
+
+// ==================================================
+// CAREER MISSION & GROWTH LOOP TYPES
+// ==================================================
+export * from './types/careerMission';
+
+// ==================================================
+// EXPERT FEEDBACK & EXPERT NETWORK TYPES
+// ==================================================
+export * from './types/expertFeedback';

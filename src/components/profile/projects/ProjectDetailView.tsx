@@ -23,11 +23,13 @@ import {
   ExternalLink,
   Save,
   Tag,
-  Share2
+  Share2,
+  CheckSquare
 } from 'lucide-react';
 import { CareerProject } from '../../../features/projects/types';
 import { ProjectStorageService } from '../../../features/projects/services/projectStorageService';
 import { KnowledgeStorageService } from '../../../features/knowledge/services/knowledgeStorageService';
+import { applicationStore } from '../../../features/applications/services/applicationStore';
 import { CandidateStory, StructuredAnswerBlueprint } from '../../../features/knowledge/types';
 import { BlueprintRichTextRenderer } from '../../common/BlueprintRichTextRenderer';
 import { GenerateFromProjectModal } from './GenerateFromProjectModal';
@@ -106,6 +108,31 @@ export const ProjectDetailView: React.FC<ProjectDetailViewProps> = ({
   const linkedBlueprints = allBlueprints.filter(
     b => project.linkedBlueprintIds.includes(b.id) || b.storyId === project.id || b.title === project.title
   );
+
+  const applications = applicationStore.getApplications();
+  const linkedParticipationItem = applications.find(a => 
+    a.roleTitle.toLowerCase().includes(project.title.toLowerCase()) ||
+    a.companyName.toLowerCase().includes(project.company.toLowerCase()) ||
+    a.hackathonData?.projectName?.toLowerCase().includes(project.title.toLowerCase()) ||
+    a.builderMatchData?.projectTitle?.toLowerCase().includes(project.title.toLowerCase())
+  );
+
+  const handleConnectToTracker = () => {
+    applicationStore.createApplicationFromOpportunity({
+      roleTitle: `${project.title} (${project.role})`,
+      companyName: project.company,
+      organization: project.company,
+      domain: project.domain,
+      priority: 'HIGH',
+      participationType: 'career_opportunity',
+      notes: `Connected from Career Project portfolio. Key metrics: ${project.metrics.join(', ')}`
+    });
+    window.dispatchEvent(new CustomEvent('career_applications_updated'));
+  };
+
+  const handleViewInTracker = (itemId: string) => {
+    window.dispatchEvent(new CustomEvent('open_participation_item', { detail: { itemId } }));
+  };
 
   const handleSaveNotes = () => {
     ProjectStorageService.addOrUpdateProject({
@@ -223,6 +250,27 @@ export const ProjectDetailView: React.FC<ProjectDetailViewProps> = ({
             <Sparkles className="w-3.5 h-3.5" />
             <span>Generate Story / Q&A</span>
           </button>
+
+          {/* Participation Tracker Action */}
+          {linkedParticipationItem ? (
+            <button
+              type="button"
+              onClick={() => handleViewInTracker(linkedParticipationItem.id)}
+              className="px-3.5 py-1.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-300 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-colors cursor-pointer shadow-3xs"
+            >
+              <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
+              <span>View in Participation Tracker</span>
+            </button>
+          ) : (
+            <button
+              type="button"
+              onClick={handleConnectToTracker}
+              className="px-3.5 py-1.5 bg-purple-50 hover:bg-purple-100 text-purple-700 border border-purple-200 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-colors cursor-pointer"
+            >
+              <CheckSquare className="w-3.5 h-3.5 text-purple-600" />
+              <span>+ Connect to Tracker</span>
+            </button>
+          )}
         </div>
       </div>
 

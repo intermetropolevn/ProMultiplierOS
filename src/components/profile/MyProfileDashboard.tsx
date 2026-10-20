@@ -49,6 +49,9 @@ interface MyProfileDashboardProps {
   onStartPracticeDomain: (domainName: string) => void;
   onOpenApplicationWorkspace?: (applicationId: string) => void;
   onNavigateToBusinessEnglish?: (tab?: string) => void;
+  onOpenMissionControl?: () => void;
+  onOpenCreateMission?: () => void;
+  onGetExpertFeedback?: (context?: any) => void;
   initialTab?: ProfileViewTab;
 }
 
@@ -65,6 +68,9 @@ export const MyProfileDashboard: React.FC<MyProfileDashboardProps> = ({
   onStartPracticeDomain,
   onOpenApplicationWorkspace,
   onNavigateToBusinessEnglish,
+  onOpenMissionControl,
+  onOpenCreateMission,
+  onGetExpertFeedback,
   initialTab = 'qa_blueprints',
 }) => {
   const [activeTab, setActiveTab] = useState<ProfileViewTab>(initialTab);
@@ -149,7 +155,11 @@ export const MyProfileDashboard: React.FC<MyProfileDashboardProps> = ({
             }}
           />
 
-          <ChecklistSection />
+          <ChecklistSection 
+            onOpenMissionControl={onOpenMissionControl}
+            onOpenCreateMission={onOpenCreateMission}
+            onGetExpertFeedback={onGetExpertFeedback}
+          />
         </div>
 
         {/* CAREER STATUS & READINESS SIGNALS (5 cols) */}
@@ -222,7 +232,13 @@ export const MyProfileDashboard: React.FC<MyProfileDashboardProps> = ({
                         category: saved.job.roleCategory,
                         level: saved.job.level,
                         tagline: saved.job.description.slice(0, 80),
+                        overview: saved.job.description,
+                        dailyTasksTimeline: [],
                         primaryTechStack: saved.job.requiredSkills || [],
+                        commonTools: [],
+                        keyPerformanceMetrics: [],
+                        careerProgression: [],
+                        typicalInterviewStages: [],
                         competencies: [],
                         marketDemand: 'High',
                         salaryBenchmark: { junior: '$100k - $140k', mid: '$140k - $180k', senior: '$180k - $240k', lead: '$220k - $300k' }

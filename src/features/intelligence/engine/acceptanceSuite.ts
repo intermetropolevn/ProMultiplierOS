@@ -260,7 +260,7 @@ export const ACCEPTANCE_SCENARIOS: AcceptanceScenario[] = [
 ];
 
 export async function runAllAcceptanceTests(
-  onProgress?: (index: number, total: number, result: { id: number; passed: boolean; note: string }) => void
+  onProgress?: (index: number, total: number, result: { id: number; title: string; passed: boolean; note: string }) => void
 ): Promise<Array<{ id: number; title: string; passed: boolean; note: string; response: CareerIntelligenceResponse }>> {
   const results: Array<{ id: number; title: string; passed: boolean; note: string; response: CareerIntelligenceResponse }> = [];
 
@@ -279,7 +279,7 @@ export async function runAllAcceptanceTests(
 
     results.push(item);
     if (onProgress) {
-      onProgress(i + 1, ACCEPTANCE_SCENARIOS.length, { id: scenario.id, passed: check.passed, note: check.note });
+      onProgress(i + 1, ACCEPTANCE_SCENARIOS.length, { id: scenario.id, title: scenario.title, passed: check.passed, note: check.note });
     }
   }
 

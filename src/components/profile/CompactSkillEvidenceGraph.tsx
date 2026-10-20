@@ -69,7 +69,7 @@ export const CompactSkillEvidenceGraph: React.FC<CompactSkillEvidenceGraphProps>
       {/* Interactive Skill Nodes */}
       <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 mb-2.5">
         {profiles.map(skill => {
-          const badge = getStrengthBadge(skill.highestEvidenceLevel);
+          const badge = getStrengthBadge(skill.maxStrength);
           const isSelected = selectedSkill?.skillName === skill.skillName;
 
           return (
@@ -88,7 +88,7 @@ export const CompactSkillEvidenceGraph: React.FC<CompactSkillEvidenceGraphProps>
                   {skill.skillName}
                 </span>
                 <span className={`text-[9px] font-extrabold uppercase px-1 py-0.2 rounded-sm border shrink-0 ${badge.bg}`}>
-                  L{skill.highestEvidenceLevel}
+                  L{skill.maxStrength}
                 </span>
               </div>
 
@@ -96,11 +96,11 @@ export const CompactSkillEvidenceGraph: React.FC<CompactSkillEvidenceGraphProps>
               <div className="w-full bg-slate-100 rounded-full h-1.5 overflow-hidden">
                 <div 
                   className={`h-full rounded-full ${
-                    skill.highestEvidenceLevel === 4 ? 'bg-emerald-500' :
-                    skill.highestEvidenceLevel === 3 ? 'bg-blue-500' :
+                    skill.maxStrength >= 4 ? 'bg-emerald-500' :
+                    skill.maxStrength === 3 ? 'bg-blue-500' :
                     'bg-purple-500'
                   }`}
-                  style={{ width: `${(skill.highestEvidenceLevel / 4) * 100}%` }}
+                  style={{ width: `${Math.min(100, (skill.maxStrength / 4) * 100)}%` }}
                 />
               </div>
             </button>
@@ -118,12 +118,12 @@ export const CompactSkillEvidenceGraph: React.FC<CompactSkillEvidenceGraphProps>
             <div className="leading-tight">
               <span className="font-bold text-slate-900">{selectedSkill.skillName}:</span>{' '}
               <span className="text-slate-600">
-                Backed by {selectedSkill.evidenceItems?.length || selectedSkill.sources?.length || 2} verified source deliverables.
+                Backed by {selectedSkill.evidenceList?.length || selectedSkill.totalSourcesCount || 2} verified source deliverables.
               </span>
             </div>
           </div>
           <span className="font-mono text-[10px] text-blue-600 font-bold shrink-0">
-            {getStrengthBadge(selectedSkill.highestEvidenceLevel).label}
+            {getStrengthBadge(selectedSkill.maxStrength).label}
           </span>
         </div>
       )}

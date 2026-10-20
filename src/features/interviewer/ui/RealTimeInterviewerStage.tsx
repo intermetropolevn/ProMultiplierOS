@@ -172,7 +172,7 @@ export const RealTimeInterviewerStage: React.FC<RealTimeInterviewerStageProps> =
     const callbacks = {
       onInterim: (text: string) => {
         setInterimTranscript(text);
-        if (bargeInControllerRef.current && (interviewerState === 'ASKING' || interviewerState === 'FOLLOW_UP')) {
+        if (bargeInControllerRef.current) {
           bargeInControllerRef.current.onCandidateSpeech(text);
         }
         resetSilenceDetection();

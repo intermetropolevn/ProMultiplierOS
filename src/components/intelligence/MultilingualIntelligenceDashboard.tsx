@@ -319,7 +319,7 @@ export const MultilingualIntelligenceDashboard: React.FC<MultilingualIntelligenc
                         <span className="text-[10px] font-mono text-slate-400">{skill.canonicalId}</span>
                       </div>
                       <span className="text-[10px] font-bold text-blue-600 bg-blue-50 px-2 py-0.5 rounded border border-blue-100">
-                        Match {Math.round(skill.matchConfidence * 100)}%
+                        Match {Math.round(skill.confidence * 100)}%
                       </span>
                     </div>
                   ))}
@@ -346,7 +346,7 @@ export const MultilingualIntelligenceDashboard: React.FC<MultilingualIntelligenc
                         <span className="text-[10px] font-mono text-purple-400">{k.canonicalId}</span>
                       </div>
                       <span className="text-[10px] font-bold text-purple-700 bg-white px-2 py-0.5 rounded border border-purple-200">
-                        {k.type}
+                        {k.entityType}
                       </span>
                     </div>
                   ))}

@@ -4,76 +4,33 @@ import {
   Plus, 
   CheckSquare, 
   Square, 
-  Filter, 
-  ExternalLink, 
   Trash2, 
-  Bookmark, 
-  Briefcase, 
   Sparkles, 
-  Tag, 
-  ChevronRight,
-  ChevronDown,
-  ChevronUp,
-  ArrowRight,
-  Clock,
-  Minimize2,
-  Maximize2
+  ChevronDown, 
+  ChevronUp, 
+  Clock, 
+  MoreVertical, 
+  ArrowRight, 
+  Edit3, 
+  Copy, 
+  Check, 
+  X,
+  FileText,
+  CheckCircle2,
+  ListTodo,
+  Tag,
+  Briefcase,
+  BookOpen
 } from 'lucide-react';
 import { SavedJobApplication } from '../../types';
-
-export interface PinnedItem {
-  id: string;
-  title: string;
-  category: 'task' | 'note' | 'job' | 'knowledge';
-  tags: string[];
-  date: string;
-  excerpt?: string;
-  tasks?: { id: string; text: string; completed: boolean }[];
-  linkUrl?: string;
-  sourceType?: string;
-}
-
-const STORAGE_KEY = 'career_os_user_pins_v1';
-const INTENT_KEY = 'career_os_pins_intent';
-
-const INITIAL_PINS: PinnedItem[] = [
-  {
-    id: 'pin-1',
-    title: 'Design homework',
-    category: 'task',
-    tags: ['Urgent task', 'Course'],
-    date: '29.07.2025',
-    excerpt: 'Talking about functionality today - how every element should have a reason to exist. Focus on user clarity.',
-    tasks: [
-      { id: 't1', text: 'Create a prototype of landing', completed: false },
-      { id: 't2', text: 'Calibrate STAR story for Stripe payment idempotency', completed: true },
-    ]
-  },
-  {
-    id: 'pin-2',
-    title: 'Little notes about design',
-    category: 'note',
-    tags: ['Personal'],
-    date: '29.07.2025',
-    excerpt: "Talking about functionality today — how every element should have a reason to exist. 'If it doesn't help the user, it's just decoration.' That really stuck. Rethink layout hierarchies.",
-  },
-  {
-    id: 'pin-3',
-    title: 'Stripe — Staff Backend Engineer',
-    category: 'job',
-    tags: ['Applied', 'Tier-1 Fintech'],
-    date: 'Active',
-    excerpt: 'High-throughput payment rails, distributed transaction guarantees, Kafka idempotent consumer.',
-  },
-  {
-    id: 'pin-4',
-    title: 'Local-First CRDT Deep Dive',
-    category: 'knowledge',
-    tags: ['Architecture', 'P1 Preparation'],
-    date: '29.07.2026',
-    excerpt: 'Contrast commutative replicated data types with 2-phase commit under split-brain states.',
-  }
-];
+import { 
+  UnifiedTaskService, 
+  PinnedViewItem, 
+  TaskPriority, 
+  CareerTask, 
+  CareerNote,
+  PinCategory 
+} from '../../services/unifiedTaskService';
 
 interface PersistentPinsProps {
   savedJobs?: SavedJobApplication[];
@@ -85,6 +42,8 @@ interface PersistentPinsProps {
   autoCollapseDelayMs?: number;
 }
 
+const INTENT_KEY = 'career_os_pins_intent';
+
 export const PersistentPins: React.FC<PersistentPinsProps> = ({
   savedJobs = [],
   onNavigateToJob,
@@ -92,48 +51,84 @@ export const PersistentPins: React.FC<PersistentPinsProps> = ({
   onStartPracticeTopic,
   className = '',
   variant = 'dashboard-strip',
-  autoCollapseDelayMs = 5000,
+  autoCollapseDelayMs = 4500,
 }) => {
-  const [pins, setPins] = useState<PinnedItem[]>(() => {
-    try {
-      const saved = localStorage.getItem(STORAGE_KEY);
-      return saved ? JSON.parse(saved) : INITIAL_PINS;
-    } catch {
-      return INITIAL_PINS;
-    }
+  const [pinnedItems, setPinnedItems] = useState<PinnedViewItem[]>(() => {
+    return UnifiedTaskService.getAllPinnedItems(savedJobs);
   });
 
-  // Intent: did user explicitly expand or collapse during this session?
+  // State: expanded vs collapsed
   const [isExpanded, setIsExpanded] = useState<boolean>(() => {
     if (variant === 'sidebar') return true;
     const storedIntent = sessionStorage.getItem(INTENT_KEY);
     if (storedIntent === 'collapsed') return false;
     if (storedIntent === 'expanded') return true;
-    return true; // Initial state: expanded so user understands where pins live
+    return true; // Initial state: expanded for discovery
   });
 
   const [hasInteracted, setHasInteracted] = useState(false);
-  const [filterCategory, setFilterCategory] = useState<'all' | 'task' | 'note' | 'job' | 'knowledge'>('all');
-  const [isFilterOpen, setIsFilterOpen] = useState(false);
-  const [newPinText, setNewPinText] = useState('');
+  const [filterCategory, setFilterCategory] = useState<PinCategory>('all');
+  
+  // Compact Creation Form State
+  const [isCreateOpen, setIsCreateOpen] = useState(false);
+  const [createType, setCreateType] = useState<'note' | 'task'>('note');
+  const [createTitle, setCreateTitle] = useState('');
+  const [createContent, setCreateContent] = useState('');
+  const [createPriority, setCreatePriority] = useState<TaskPriority>('high');
+  const [createDueDate, setCreateDueDate] = useState('Tomorrow');
+  const [createTags, setCreateTags] = useState('');
+  const [createContext, setCreateContext] = useState('');
+
+  // Note -> Task Conversion Modal State
+  const [conversionNote, setConversionNote] = useState<CareerNote | null>(null);
+  const [convertTitle, setConvertTitle] = useState('');
+  const [convertDescription, setConvertDescription] = useState('');
+  const [convertPriority, setConvertPriority] = useState<TaskPriority>('high');
+  const [convertDueDate, setConvertDueDate] = useState('Tomorrow');
+
+  // Note Edit Modal State
+  const [editingNote, setEditingNote] = useState<CareerNote | null>(null);
+  const [editTitle, setEditTitle] = useState('');
+  const [editContent, setEditContent] = useState('');
+  const [editTags, setEditTags] = useState('');
+
+  // Active contextual menu dropdown
+  const [activeMenuId, setActiveMenuId] = useState<string | null>(null);
+
   const timerRef = useRef<NodeJS.Timeout | null>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
 
-  // Sync to local storage
+  // Sync pinned items whenever shared tasks or notes are modified
   useEffect(() => {
-    try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(pins));
-    } catch (e) {
-      console.error('Failed to persist pins', e);
-    }
-  }, [pins]);
+    const handleSync = () => {
+      setPinnedItems(UnifiedTaskService.getAllPinnedItems(savedJobs));
+    };
+    window.addEventListener('career_tasks_updated', handleSync);
+    window.addEventListener('career_pins_updated', handleSync);
+    window.addEventListener('career_radar_updated', handleSync);
+    return () => {
+      window.removeEventListener('career_tasks_updated', handleSync);
+      window.removeEventListener('career_pins_updated', handleSync);
+      window.removeEventListener('career_radar_updated', handleSync);
+    };
+  }, [savedJobs]);
 
-  // AUTO-COLLAPSE BEHAVIOR:
-  // After a short period of inactivity (autoCollapseDelayMs) on initial entrance,
-  // transition into a compact collapsed horizontal launcher strip unless user interacted
+  // Click outside listener for note menus
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
+        setActiveMenuId(null);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
+  // Progressive Disclosure: Auto-collapse in dashboard-strip mode unless interacted
   useEffect(() => {
     if (variant !== 'dashboard-strip') return;
     const storedIntent = sessionStorage.getItem(INTENT_KEY);
-    if (storedIntent) return; // Respect explicit user decision in session
+    if (storedIntent) return;
 
     timerRef.current = setTimeout(() => {
       if (!hasInteracted) {
@@ -155,54 +150,149 @@ export const PersistentPins: React.FC<PersistentPinsProps> = ({
     });
   };
 
-  // Toggle subtask completion
-  const handleToggleTask = (pinId: string, taskId: string) => {
+  // Toggle Task Completion
+  const handleToggleTaskComplete = (taskId: string) => {
     setHasInteracted(true);
-    setPins(prev => prev.map(pin => {
-      if (pin.id === pinId && pin.tasks) {
-        return {
-          ...pin,
-          tasks: pin.tasks.map(t => t.id === taskId ? { ...t, completed: !t.completed } : t)
-        };
-      }
-      return pin;
-    }));
+    UnifiedTaskService.toggleTaskComplete(taskId);
   };
 
-  // Quick add new pin
-  const handleAddQuickPin = (e?: React.FormEvent) => {
-    if (e) e.preventDefault();
-    if (!newPinText.trim()) return;
+  // Unpin item
+  const handleUnpinItem = (item: PinnedViewItem, e?: React.MouseEvent) => {
+    if (e) e.stopPropagation();
     setHasInteracted(true);
+    setActiveMenuId(null);
 
-    const newPin: PinnedItem = {
-      id: `pin-${Date.now()}`,
-      title: newPinText.trim(),
-      category: 'note',
-      tags: ['Active Thought', 'Personal'],
-      date: new Date().toLocaleDateString('en-GB', { day: '2-digit', month: '2-digit', year: 'numeric' }),
-      excerpt: newPinText.trim(),
-    };
-
-    setPins(prev => [newPin, ...prev]);
-    setNewPinText('');
+    if (item.type === 'task') {
+      UnifiedTaskService.toggleTaskPin(item.originalId);
+    } else if (item.type === 'note') {
+      UnifiedTaskService.toggleNotePin(item.originalId);
+    } else {
+      // Remove other item types from view
+      setPinnedItems(prev => prev.filter(p => p.id !== item.id));
+    }
   };
 
-  const handleDeletePin = (id: string, e: React.MouseEvent) => {
-    e.stopPropagation();
+  // Delete item completely
+  const handleDeleteItem = (item: PinnedViewItem, e?: React.MouseEvent) => {
+    if (e) e.stopPropagation();
     setHasInteracted(true);
-    setPins(prev => prev.filter(p => p.id !== id));
+    setActiveMenuId(null);
+
+    if (item.type === 'task') {
+      UnifiedTaskService.deleteTask(item.originalId);
+    } else if (item.type === 'note') {
+      UnifiedTaskService.deleteNote(item.originalId);
+    } else {
+      setPinnedItems(prev => prev.filter(p => p.id !== item.id));
+    }
   };
 
-  const filteredPins = pins.filter(pin => {
+  // Duplicate Note
+  const handleDuplicateNote = (noteId: string) => {
+    setHasInteracted(true);
+    setActiveMenuId(null);
+    UnifiedTaskService.duplicateNote(noteId);
+  };
+
+  // Submit Unified Creation Form ([Note] or [Task])
+  const handleCreateSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!createTitle.trim()) return;
+    setHasInteracted(true);
+
+    const parsedTags = createTags
+      .split(',')
+      .map(t => t.trim())
+      .filter(Boolean);
+
+    if (createType === 'note') {
+      UnifiedTaskService.addNote({
+        title: createTitle.trim(),
+        content: createContent.trim() || createTitle.trim(),
+        tags: parsedTags.length > 0 ? parsedTags : ['Active Thought'],
+        context: createContext.trim() || 'Quick Note',
+        isPinned: true,
+      });
+    } else {
+      UnifiedTaskService.addTask({
+        title: createTitle.trim(),
+        description: createContent.trim() || undefined,
+        completed: false,
+        priority: createPriority,
+        dueDate: createDueDate.trim() || 'Next actions',
+        source: 'manual',
+        sourceLabel: createContext.trim() || 'Your Pins',
+        isPinned: true,
+        tags: parsedTags.length > 0 ? parsedTags : ['Quick Task'],
+      });
+    }
+
+    // Reset Form
+    setCreateTitle('');
+    setCreateContent('');
+    setCreateTags('');
+    setCreateContext('');
+    setIsCreateOpen(false);
+  };
+
+  // Start Note -> Task Conversion
+  const handleStartConversion = (note: CareerNote) => {
+    setConversionNote(note);
+    setConvertTitle(note.title);
+    setConvertDescription(note.content);
+    setConvertPriority('high');
+    setConvertDueDate('Tomorrow');
+    setActiveMenuId(null);
+  };
+
+  // Execute Note -> Task Conversion
+  const handleExecuteConversion = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!conversionNote || !convertTitle.trim()) return;
+
+    UnifiedTaskService.convertNoteToTask(conversionNote.id, {
+      title: convertTitle.trim(),
+      description: convertDescription.trim(),
+      priority: convertPriority,
+      dueDate: convertDueDate.trim() || 'Tomorrow',
+    });
+
+    setConversionNote(null);
+  };
+
+  // Start Note Edit
+  const handleStartEditNote = (note: CareerNote) => {
+    setEditingNote(note);
+    setEditTitle(note.title);
+    setEditContent(note.content);
+    setEditTags(note.tags.join(', '));
+    setActiveMenuId(null);
+  };
+
+  // Save Note Edit
+  const handleSaveEditNote = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingNote || !editTitle.trim()) return;
+
+    const parsedTags = editTags.split(',').map(t => t.trim()).filter(Boolean);
+    UnifiedTaskService.updateNote(editingNote.id, {
+      title: editTitle.trim(),
+      content: editContent.trim(),
+      tags: parsedTags.length > 0 ? parsedTags : editingNote.tags,
+    });
+
+    setEditingNote(null);
+  };
+
+  const filteredItems = pinnedItems.filter(item => {
     if (filterCategory === 'all') return true;
-    return pin.category === filterCategory;
+    return item.type === filterCategory;
   });
 
-  // 1. COLLAPSED LAUNCHER STATE (Auto-collapsed or manually collapsed)
+  // 1. COLLAPSED LAUNCHER STATE (Progressive Disclosure)
   if (variant === 'dashboard-strip' && !isExpanded) {
-    const mostRecentPin = pins[0];
-    const remainingCount = Math.max(0, pins.length - 1);
+    const mostRecentItem = pinnedItems[0];
+    const remainingCount = Math.max(0, pinnedItems.length - 1);
 
     return (
       <div className={`bg-white/95 rounded-2xl border border-slate-200/90 shadow-2xs px-4 py-2.5 flex items-center justify-between gap-3 transition-all duration-300 ease-in-out ${className}`}>
@@ -211,35 +301,33 @@ export const PersistentPins: React.FC<PersistentPinsProps> = ({
             <Pin className="w-3.5 h-3.5 rotate-45 text-amber-500 fill-amber-500/20" />
           </div>
           
-          {/* Label matching spec: YOUR PINS • 4 */}
           <div className="flex items-center gap-1.5 shrink-0 text-xs">
             <span className="font-bold tracking-wider text-slate-800 uppercase text-[11px]">
               YOUR PINS
             </span>
             <span className="text-slate-400 font-bold">·</span>
             <span className="text-xs font-bold text-amber-900 bg-amber-100/80 px-1.5 py-0.2 rounded-full">
-              {pins.length}
+              {pinnedItems.length}
             </span>
           </div>
 
           <div className="h-3.5 w-px bg-slate-200 shrink-0 hidden sm:block mx-1"></div>
 
-          {/* [most recent pin] [+3] */}
-          {mostRecentPin && (
+          {mostRecentItem && (
             <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar py-0.5 min-w-0">
               <button
                 type="button"
                 onClick={handleToggleExpand}
                 className="px-2.5 py-1 rounded-lg bg-slate-50 hover:bg-slate-100 border border-slate-200/90 text-xs font-medium text-slate-700 truncate max-w-[260px] flex items-center gap-1.5 transition cursor-pointer"
-                title={mostRecentPin.title}
+                title={mostRecentItem.title}
               >
                 <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${
-                  mostRecentPin.category === 'task' ? 'bg-amber-400' :
-                  mostRecentPin.category === 'job' ? 'bg-blue-500' :
-                  mostRecentPin.category === 'knowledge' ? 'bg-purple-500' :
+                  mostRecentItem.type === 'task' ? 'bg-amber-400' :
+                  mostRecentItem.type === 'job' ? 'bg-blue-500' :
+                  mostRecentItem.type === 'knowledge' ? 'bg-purple-500' :
                   'bg-emerald-400'
                 }`} />
-                <span className="truncate">{mostRecentPin.title}</span>
+                <span className="truncate">{mostRecentItem.title}</span>
               </button>
 
               {remainingCount > 0 && (
@@ -256,7 +344,7 @@ export const PersistentPins: React.FC<PersistentPinsProps> = ({
           )}
         </div>
 
-        {/* Expand Affordance Button: [Expand] */}
+        {/* Expand Affordance Button */}
         <button
           type="button"
           onClick={handleToggleExpand}
@@ -270,12 +358,13 @@ export const PersistentPins: React.FC<PersistentPinsProps> = ({
     );
   }
 
-  // 2. EXPANDED DASHBOARD STRIP OR SIDEBAR
+  // 2. EXPANDED WORKSPACE
   const isDashboardStrip = variant === 'dashboard-strip';
 
   return (
-    <div className={`flex flex-col bg-white/95 rounded-2xl border border-slate-200/90 shadow-2xs overflow-hidden transition-all duration-300 ${className}`}>
-      {/* Pins Header */}
+    <div className={`flex flex-col bg-white/95 rounded-2xl border border-slate-200/90 shadow-2xs overflow-hidden transition-all duration-300 relative ${className}`}>
+      
+      {/* Top Header & Controls */}
       <div className="p-3.5 sm:p-4 border-b border-slate-100 flex flex-wrap items-center justify-between gap-3">
         <div className="flex items-center gap-2">
           <div className="w-6 h-6 rounded-lg bg-amber-50 text-amber-600 flex items-center justify-center border border-amber-200/60">
@@ -284,13 +373,13 @@ export const PersistentPins: React.FC<PersistentPinsProps> = ({
           <h3 className="text-sm font-extrabold text-slate-900 tracking-tight">
             Your Pins &amp; Quick Notes
           </h3>
-          <span className="text-[11px] font-bold text-slate-400 bg-slate-100 px-1.5 py-0.2 rounded-full">
-            {filteredPins.length}
+          <span className="text-[11px] font-bold text-slate-500 bg-slate-100 px-1.5 py-0.2 rounded-full">
+            {filteredItems.length}
           </span>
         </div>
 
-        {/* Categories / Filter */}
-        <div className="flex items-center gap-1.5">
+        {/* Categories / Filter Buttons + Actions */}
+        <div className="flex items-center gap-1.5 flex-wrap">
           {(['all', 'task', 'note', 'job', 'knowledge'] as const).map(cat => (
             <button
               key={cat}
@@ -309,11 +398,25 @@ export const PersistentPins: React.FC<PersistentPinsProps> = ({
             </button>
           ))}
 
+          {/* [+ Pin] Trigger Button */}
+          <button
+            type="button"
+            onClick={() => {
+              setHasInteracted(true);
+              setIsCreateOpen(prev => !prev);
+            }}
+            className="ml-1 px-2.5 py-1 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-xs font-semibold flex items-center gap-1 transition-colors cursor-pointer shadow-3xs"
+            title="Create Note or Task"
+          >
+            <Plus className="w-3.5 h-3.5" />
+            <span>Pin</span>
+          </button>
+
           {isDashboardStrip && (
             <button
               type="button"
               onClick={handleToggleExpand}
-              className="ml-2 text-xs font-semibold text-slate-500 hover:text-slate-800 bg-slate-100 hover:bg-slate-200 px-2.5 py-1 rounded-lg flex items-center gap-1 transition cursor-pointer"
+              className="ml-1 text-xs font-semibold text-slate-500 hover:text-slate-800 bg-slate-100 hover:bg-slate-200 px-2 py-1 rounded-lg flex items-center gap-1 transition cursor-pointer"
               title="Collapse into compact launcher"
             >
               <span>Collapse</span>
@@ -323,128 +426,526 @@ export const PersistentPins: React.FC<PersistentPinsProps> = ({
         </div>
       </div>
 
-      {/* Quick Input Bar: "What's on your mind today?" */}
-      <div className="p-2.5 sm:p-3 bg-slate-50/70 border-b border-slate-100">
-        <form onSubmit={handleAddQuickPin} className="flex items-center gap-1.5 bg-white rounded-xl border border-slate-200 px-2.5 py-1.5 shadow-2xs focus-within:border-blue-400 focus-within:ring-2 focus-within:ring-blue-100 transition-all">
-          <input
-            type="text"
-            value={newPinText}
-            onChange={(e) => {
-              setHasInteracted(true);
-              setNewPinText(e.target.value);
-            }}
-            placeholder="Add note, active thought, or quick task..."
-            className="flex-1 text-xs text-slate-800 placeholder:text-slate-400 focus:outline-hidden bg-transparent"
-          />
-          <button
-            type="submit"
-            disabled={!newPinText.trim()}
-            className={`px-2.5 py-1 rounded-lg text-xs font-semibold flex items-center gap-1 transition-colors cursor-pointer ${
-              newPinText.trim() ? 'bg-blue-600 text-white hover:bg-blue-700' : 'bg-slate-100 text-slate-400'
-            }`}
-          >
-            <Plus className="w-3.5 h-3.5" />
-            <span>Pin</span>
-          </button>
-        </form>
-      </div>
+      {/* COMPACT CREATION SURFACE (Single surface with clear [Note] / [Task] type switch) */}
+      {isCreateOpen && (
+        <div className="p-3.5 bg-slate-50 border-b border-slate-200 animate-in fade-in">
+          <form onSubmit={handleCreateSubmit} className="bg-white p-3.5 rounded-xl border border-slate-200 shadow-2xs space-y-3">
+            <div className="flex items-center justify-between border-b border-slate-100 pb-2">
+              <span className="text-xs font-bold text-slate-800">Create new</span>
+              
+              {/* Type Switch: [ Note ] [ Task ] */}
+              <div className="flex items-center p-0.5 bg-slate-100 rounded-lg border border-slate-200/80">
+                <button
+                  type="button"
+                  onClick={() => setCreateType('note')}
+                  className={`px-3 py-1 rounded-md text-xs font-semibold transition-all cursor-pointer ${
+                    createType === 'note'
+                      ? 'bg-white text-slate-900 shadow-3xs'
+                      : 'text-slate-500 hover:text-slate-800'
+                  }`}
+                >
+                  Note
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setCreateType('task')}
+                  className={`px-3 py-1 rounded-md text-xs font-semibold transition-all cursor-pointer ${
+                    createType === 'task'
+                      ? 'bg-white text-slate-900 shadow-3xs'
+                      : 'text-slate-500 hover:text-slate-800'
+                  }`}
+                >
+                  Task
+                </button>
+              </div>
+            </div>
 
-      {/* Pinned Cards Grid (Horizontal in dashboard-strip mode, vertical list in sidebar mode) */}
+            {/* Note Fields */}
+            {createType === 'note' ? (
+              <div className="space-y-2.5">
+                <input
+                  type="text"
+                  value={createTitle}
+                  onChange={(e) => setCreateTitle(e.target.value)}
+                  placeholder="Note title (e.g. System Design principles)..."
+                  className="w-full px-3 py-1.5 text-xs bg-slate-50/70 border border-slate-200 rounded-lg text-slate-900 placeholder:text-slate-400 focus:outline-hidden focus:ring-2 focus:ring-blue-500 focus:bg-white"
+                  autoFocus
+                />
+                <textarea
+                  value={createContent}
+                  onChange={(e) => setCreateContent(e.target.value)}
+                  placeholder="Add note, active thought, or insight..."
+                  rows={2}
+                  className="w-full px-3 py-1.5 text-xs bg-slate-50/70 border border-slate-200 rounded-lg text-slate-900 placeholder:text-slate-400 focus:outline-hidden focus:ring-2 focus:ring-blue-500 focus:bg-white resize-none"
+                />
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                  <input
+                    type="text"
+                    value={createTags}
+                    onChange={(e) => setCreateTags(e.target.value)}
+                    placeholder="Optional tags (e.g. Design, STAR)"
+                    className="px-2.5 py-1 text-xs bg-slate-50/70 border border-slate-200 rounded-md text-slate-700"
+                  />
+                  <input
+                    type="text"
+                    value={createContext}
+                    onChange={(e) => setCreateContext(e.target.value)}
+                    placeholder="Optional context (e.g. Architecture)"
+                    className="px-2.5 py-1 text-xs bg-slate-50/70 border border-slate-200 rounded-md text-slate-700"
+                  />
+                </div>
+              </div>
+            ) : (
+              /* Task Fields */
+              <div className="space-y-2.5">
+                <input
+                  type="text"
+                  value={createTitle}
+                  onChange={(e) => setCreateTitle(e.target.value)}
+                  placeholder="Task title (e.g. Prepare 30 core interview questions)..."
+                  className="w-full px-3 py-1.5 text-xs bg-slate-50/70 border border-slate-200 rounded-lg text-slate-900 placeholder:text-slate-400 focus:outline-hidden focus:ring-2 focus:ring-blue-500 focus:bg-white"
+                  autoFocus
+                />
+                <textarea
+                  value={createContent}
+                  onChange={(e) => setCreateContent(e.target.value)}
+                  placeholder="Description (optional details)..."
+                  rows={2}
+                  className="w-full px-3 py-1.5 text-xs bg-slate-50/70 border border-slate-200 rounded-lg text-slate-900 placeholder:text-slate-400 focus:outline-hidden focus:ring-2 focus:ring-blue-500 focus:bg-white resize-none"
+                />
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                  <select
+                    value={createPriority}
+                    onChange={(e) => setCreatePriority(e.target.value as TaskPriority)}
+                    className="px-2 py-1 text-xs bg-slate-50/70 border border-slate-200 rounded-md text-slate-700 cursor-pointer"
+                  >
+                    <option value="high">HIGH Priority</option>
+                    <option value="medium">MEDIUM Priority</option>
+                    <option value="low">LOW Priority</option>
+                  </select>
+
+                  <input
+                    type="text"
+                    value={createDueDate}
+                    onChange={(e) => setCreateDueDate(e.target.value)}
+                    placeholder="Due date"
+                    className="px-2.5 py-1 text-xs bg-slate-50/70 border border-slate-200 rounded-md text-slate-700"
+                  />
+
+                  <input
+                    type="text"
+                    value={createTags}
+                    onChange={(e) => setCreateTags(e.target.value)}
+                    placeholder="Tags (comma-separated)"
+                    className="px-2.5 py-1 text-xs bg-slate-50/70 border border-slate-200 rounded-md text-slate-700"
+                  />
+
+                  <input
+                    type="text"
+                    value={createContext}
+                    onChange={(e) => setCreateContext(e.target.value)}
+                    placeholder="Related context (e.g. My Profile)"
+                    className="px-2.5 py-1 text-xs bg-slate-50/70 border border-slate-200 rounded-md text-slate-700"
+                  />
+                </div>
+              </div>
+            )}
+
+            {/* Actions */}
+            <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-100">
+              <button
+                type="button"
+                onClick={() => setIsCreateOpen(false)}
+                className="px-3 py-1 rounded-lg text-xs font-semibold text-slate-600 hover:bg-slate-100 transition cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                type="submit"
+                disabled={!createTitle.trim()}
+                className="px-4 py-1.5 bg-blue-600 hover:bg-blue-700 disabled:bg-slate-200 text-white rounded-lg text-xs font-bold transition-all cursor-pointer shadow-3xs"
+              >
+                Pin
+              </button>
+            </div>
+          </form>
+        </div>
+      )}
+
+      {/* PINNED CARDS GRID */}
       <div className={`p-3.5 ${
         isDashboardStrip 
           ? 'grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 max-h-[380px] overflow-y-auto' 
-          : 'space-y-2.5 max-h-[360px] overflow-y-auto'
+          : 'space-y-2.5 max-h-[420px] overflow-y-auto'
       }`}>
-        {filteredPins.length === 0 ? (
-          <div className="py-6 text-center text-xs text-slate-400 col-span-full">
-            <Pin className="w-5 h-5 mx-auto mb-1 text-slate-300 opacity-50" />
-            No pinned items in this category.
+        {filteredItems.length === 0 ? (
+          <div className="py-8 text-center text-xs text-slate-400 col-span-full space-y-1">
+            <Pin className="w-5 h-5 mx-auto text-slate-300 opacity-50" />
+            <p>No pinned items in this category.</p>
+            <p className="text-[11px] text-slate-400">Click [+ Pin] above or pin actions from My Profile.</p>
           </div>
         ) : (
-          filteredPins.map(pin => (
-            <div 
-              key={pin.id} 
-              className="group relative bg-white hover:bg-slate-50/80 p-3 rounded-xl border border-slate-200 hover:border-slate-300 shadow-2xs hover:shadow-xs transition-all flex flex-col justify-between"
-            >
-              <div>
-                {/* Header with category tag & delete */}
-                <div className="flex items-center justify-between gap-1 mb-1.5">
-                  <span className={`text-[10px] font-bold uppercase tracking-wider px-1.5 py-0.2 rounded ${
-                    pin.category === 'task' ? 'bg-amber-100 text-amber-800 border border-amber-200' :
-                    pin.category === 'job' ? 'bg-blue-100 text-blue-800 border border-blue-200' :
-                    pin.category === 'knowledge' ? 'bg-purple-100 text-purple-800 border border-purple-200' :
-                    'bg-emerald-100 text-emerald-800 border border-emerald-200'
-                  }`}>
-                    {pin.category}
-                  </span>
+          filteredItems.map(item => {
+            const isTask = item.type === 'task';
+            const isNote = item.type === 'note';
 
-                  <div className="flex items-center gap-1">
-                    <span className="text-[10px] font-mono text-slate-400">{pin.date}</span>
-                    <button
-                      type="button"
-                      onClick={(e) => handleDeletePin(pin.id, e)}
-                      className="opacity-0 group-hover:opacity-100 text-slate-400 hover:text-rose-600 transition-opacity p-0.5 cursor-pointer"
-                      title="Unpin"
-                    >
-                      <Trash2 className="w-3 h-3" />
-                    </button>
-                  </div>
-                </div>
+            return (
+              <div 
+                key={item.id} 
+                className="group relative bg-white hover:bg-slate-50/80 p-3 rounded-xl border border-slate-200 hover:border-slate-300 shadow-2xs hover:shadow-xs transition-all flex flex-col justify-between"
+              >
+                <div>
+                  {/* Top Metadata Header with Category & Actions */}
+                  <div className="flex items-center justify-between gap-1 mb-1.5">
+                    <div className="flex items-center gap-1.5 flex-wrap">
+                      <span className={`text-[9px] font-extrabold uppercase tracking-wider px-1.5 py-0.2 rounded ${
+                        item.type === 'task' ? 'bg-amber-100 text-amber-800 border border-amber-200' :
+                        item.type === 'job' ? 'bg-blue-100 text-blue-800 border border-blue-200' :
+                        item.type === 'knowledge' ? 'bg-purple-100 text-purple-800 border border-purple-200' :
+                        'bg-emerald-100 text-emerald-800 border border-emerald-200'
+                      }`}>
+                        {item.type}
+                      </span>
 
-                <h4 className="text-xs font-bold text-slate-900 leading-snug mb-1">
-                  {pin.title}
-                </h4>
-
-                {pin.excerpt && (
-                  <p className="text-[11px] text-slate-500 leading-relaxed line-clamp-2 mb-2">
-                    {pin.excerpt}
-                  </p>
-                )}
-
-                {/* Subtasks if any */}
-                {pin.tasks && pin.tasks.length > 0 && (
-                  <div className="space-y-1 pt-1.5 border-t border-slate-100">
-                    {pin.tasks.map(task => (
-                      <div 
-                        key={task.id}
-                        onClick={() => handleToggleTask(pin.id, task.id)}
-                        className="flex items-start gap-1.5 cursor-pointer text-[10px] group/item"
-                      >
-                        <button 
-                          type="button"
-                          className="mt-0.5 shrink-0 text-slate-400 group-hover/item:text-blue-600 transition-colors"
-                        >
-                          {task.completed ? (
-                            <CheckSquare className="w-3 h-3 text-blue-600" />
-                          ) : (
-                            <Square className="w-3 h-3 text-slate-300" />
-                          )}
-                        </button>
-                        <span className={`leading-tight truncate ${
-                          task.completed ? 'line-through text-slate-400' : 'text-slate-700 font-medium'
+                      {item.priority && (
+                        <span className={`text-[9px] font-bold uppercase tracking-wider px-1 py-0.2 rounded ${
+                          item.priority === 'high' ? 'bg-rose-50 text-rose-700' :
+                          item.priority === 'medium' ? 'bg-amber-50 text-amber-700' :
+                          'bg-slate-100 text-slate-600'
                         }`}>
-                          {task.text}
+                          {item.priority}
                         </span>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
+                      )}
 
-              {/* Tags footer */}
-              {pin.tags && pin.tags.length > 0 && (
-                <div className="mt-2.5 pt-2 border-t border-slate-100 flex items-center gap-1 flex-wrap">
-                  {pin.tags.map((tag, idx) => (
-                    <span key={idx} className="text-[9px] font-semibold text-slate-500 bg-slate-100 px-1.5 py-0.2 rounded">
-                      #{tag}
-                    </span>
-                  ))}
+                      {item.convertedFromNote && (
+                        <span className="text-[9px] font-semibold text-indigo-700 bg-indigo-50 border border-indigo-100 px-1 py-0.2 rounded">
+                          Converted from Note
+                        </span>
+                      )}
+                    </div>
+
+                    {/* Contextual Action Menu / Unpin */}
+                    <div className="flex items-center gap-0.5">
+                      {isNote && item.rawNote ? (
+                        <div className="relative">
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setActiveMenuId(activeMenuId === item.id ? null : item.id);
+                            }}
+                            className="p-1 rounded-md text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-colors cursor-pointer"
+                            title="Note options"
+                          >
+                            <MoreVertical className="w-3.5 h-3.5" />
+                          </button>
+
+                          {/* Contextual Note Menu [⋯] */}
+                          {activeMenuId === item.id && (
+                            <div 
+                              ref={menuRef}
+                              className="absolute right-0 top-full mt-1 w-36 bg-white rounded-xl border border-slate-200 shadow-xl py-1 z-30 text-xs font-medium text-slate-700 animate-in fade-in"
+                            >
+                              <button
+                                type="button"
+                                onClick={() => item.rawNote && handleStartEditNote(item.rawNote)}
+                                className="w-full text-left px-3 py-1.5 hover:bg-slate-50 flex items-center gap-1.5 text-slate-700 cursor-pointer"
+                              >
+                                <Edit3 className="w-3 h-3 text-slate-400" />
+                                <span>Edit Note</span>
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => item.rawNote && handleStartConversion(item.rawNote)}
+                                className="w-full text-left px-3 py-1.5 hover:bg-blue-50 text-blue-700 font-semibold flex items-center gap-1.5 cursor-pointer"
+                              >
+                                <ListTodo className="w-3 h-3 text-blue-600" />
+                                <span>Convert to Task</span>
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => item.rawNote && handleDuplicateNote(item.rawNote.id)}
+                                className="w-full text-left px-3 py-1.5 hover:bg-slate-50 flex items-center gap-1.5 text-slate-700 cursor-pointer"
+                              >
+                                <Copy className="w-3 h-3 text-slate-400" />
+                                <span>Duplicate</span>
+                              </button>
+                              <button
+                                type="button"
+                                onClick={(e) => handleUnpinItem(item, e)}
+                                className="w-full text-left px-3 py-1.5 hover:bg-slate-50 flex items-center gap-1.5 text-slate-600 cursor-pointer"
+                              >
+                                <Pin className="w-3 h-3 text-slate-400" />
+                                <span>Unpin</span>
+                              </button>
+                              <div className="h-px bg-slate-100 my-1" />
+                              <button
+                                type="button"
+                                onClick={(e) => handleDeleteItem(item, e)}
+                                className="w-full text-left px-3 py-1.5 hover:bg-rose-50 text-rose-600 flex items-center gap-1.5 cursor-pointer"
+                              >
+                                <Trash2 className="w-3 h-3 text-rose-500" />
+                                <span>Delete</span>
+                              </button>
+                            </div>
+                          )}
+                        </div>
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={(e) => handleUnpinItem(item, e)}
+                          className="opacity-0 group-hover:opacity-100 text-slate-400 hover:text-amber-600 p-0.5 transition-opacity cursor-pointer"
+                          title="Unpin from Your Pins"
+                        >
+                          <Pin className="w-3 h-3 rotate-45" />
+                        </button>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Title & Checkbox for Task */}
+                  {isTask ? (
+                    <div className="flex items-start gap-2 pt-0.5">
+                      <button
+                        type="button"
+                        onClick={() => handleToggleTaskComplete(item.originalId)}
+                        className="mt-0.5 shrink-0 text-slate-400 hover:text-blue-600 transition-colors cursor-pointer"
+                      >
+                        {item.completed ? (
+                          <CheckSquare className="w-3.5 h-3.5 text-blue-600" />
+                        ) : (
+                          <Square className="w-3.5 h-3.5 text-slate-300" />
+                        )}
+                      </button>
+
+                      <div className="min-w-0 flex-1">
+                        <h4 className={`text-xs font-bold leading-snug ${
+                          item.completed ? 'line-through text-slate-400' : 'text-slate-900'
+                        }`}>
+                          {item.title}
+                        </h4>
+
+                        {item.excerpt && (
+                          <p className={`text-[11px] leading-relaxed line-clamp-2 mt-1 ${
+                            item.completed ? 'text-slate-400' : 'text-slate-500'
+                          }`}>
+                            {item.excerpt}
+                          </p>
+                        )}
+                      </div>
+                    </div>
+                  ) : (
+                    <div>
+                      <h4 className="text-xs font-bold text-slate-900 leading-snug mb-1">
+                        {item.title}
+                      </h4>
+                      {item.excerpt && (
+                        <p className="text-[11px] text-slate-500 leading-relaxed line-clamp-3 mb-2">
+                          {item.excerpt}
+                        </p>
+                      )}
+                    </div>
+                  )}
                 </div>
-              )}
-            </div>
-          ))
+
+                {/* Footer Metadata: Source, Due Date, Tags */}
+                <div className="mt-2.5 pt-2 border-t border-slate-100 flex items-center justify-between gap-1 text-[10px] text-slate-400 flex-wrap">
+                  <div className="flex items-center gap-1.5 truncate max-w-[200px]">
+                    {item.sourceLabel && (
+                      <span className="font-semibold text-slate-600 truncate">
+                        {item.sourceLabel}
+                      </span>
+                    )}
+                    {item.dueDate && (
+                      <>
+                        <span>·</span>
+                        <span className="text-slate-500 font-medium">
+                          {item.dueDate}
+                        </span>
+                      </>
+                    )}
+                  </div>
+
+                  {/* Tags */}
+                  {item.tags && item.tags.length > 0 && (
+                    <div className="flex items-center gap-1">
+                      {item.tags.slice(0, 2).map((t, idx) => (
+                        <span key={idx} className="bg-slate-100 text-slate-500 px-1 py-0.2 rounded font-medium text-[9px]">
+                          #{t}
+                        </span>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </div>
+            );
+          })
         )}
       </div>
+
+      {/* NOTE -> TASK CONVERSION MODAL */}
+      {conversionNote && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-xs animate-in fade-in">
+          <div className="bg-white w-full max-w-md rounded-2xl shadow-2xl border border-slate-200 p-5 space-y-4">
+            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+              <div className="flex items-center gap-2">
+                <ListTodo className="w-4 h-4 text-blue-600" />
+                <h3 className="text-sm font-bold text-slate-900">Convert Note to Task</h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => setConversionNote(null)}
+                className="text-slate-400 hover:text-slate-600 p-1 rounded-md"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <form onSubmit={handleExecuteConversion} className="space-y-3.5 text-xs">
+              <div>
+                <label className="block text-slate-700 font-semibold mb-1">Task Title</label>
+                <input
+                  type="text"
+                  value={convertTitle}
+                  onChange={(e) => setConvertTitle(e.target.value)}
+                  className="w-full px-3 py-1.5 border border-slate-300 rounded-lg text-slate-900 font-medium focus:ring-2 focus:ring-blue-500"
+                  required
+                />
+              </div>
+
+              <div>
+                <label className="block text-slate-700 font-semibold mb-1">Description / Context</label>
+                <textarea
+                  value={convertDescription}
+                  onChange={(e) => setConvertDescription(e.target.value)}
+                  rows={3}
+                  className="w-full px-3 py-1.5 border border-slate-300 rounded-lg text-slate-900 resize-none focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-slate-700 font-semibold mb-1">Priority</label>
+                  <select
+                    value={convertPriority}
+                    onChange={(e) => setConvertPriority(e.target.value as TaskPriority)}
+                    className="w-full px-3 py-1.5 border border-slate-300 rounded-lg text-slate-900 cursor-pointer"
+                  >
+                    <option value="high">HIGH</option>
+                    <option value="medium">MEDIUM</option>
+                    <option value="low">LOW</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-slate-700 font-semibold mb-1">Due Date</label>
+                  <input
+                    type="text"
+                    value={convertDueDate}
+                    onChange={(e) => setConvertDueDate(e.target.value)}
+                    placeholder="e.g. Due tomorrow"
+                    className="w-full px-3 py-1.5 border border-slate-300 rounded-lg text-slate-900"
+                  />
+                </div>
+              </div>
+
+              <p className="text-[11px] text-slate-500 italic">
+                The original note will be converted into this shared task without duplicate records.
+              </p>
+
+              <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-100">
+                <button
+                  type="button"
+                  onClick={() => setConversionNote(null)}
+                  className="px-3 py-1.5 rounded-lg text-slate-600 hover:bg-slate-100 font-semibold cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={!convertTitle.trim()}
+                  className="px-4 py-1.5 bg-blue-600 hover:bg-blue-700 disabled:bg-slate-200 text-white rounded-lg font-bold cursor-pointer shadow-3xs"
+                >
+                  Convert to Task
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* NOTE EDIT MODAL */}
+      {editingNote && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-xs animate-in fade-in">
+          <div className="bg-white w-full max-w-md rounded-2xl shadow-2xl border border-slate-200 p-5 space-y-4">
+            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+              <div className="flex items-center gap-2">
+                <Edit3 className="w-4 h-4 text-blue-600" />
+                <h3 className="text-sm font-bold text-slate-900">Edit Note</h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => setEditingNote(null)}
+                className="text-slate-400 hover:text-slate-600 p-1 rounded-md"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveEditNote} className="space-y-3.5 text-xs">
+              <div>
+                <label className="block text-slate-700 font-semibold mb-1">Title</label>
+                <input
+                  type="text"
+                  value={editTitle}
+                  onChange={(e) => setEditTitle(e.target.value)}
+                  className="w-full px-3 py-1.5 border border-slate-300 rounded-lg text-slate-900 font-medium focus:ring-2 focus:ring-blue-500"
+                  required
+                />
+              </div>
+
+              <div>
+                <label className="block text-slate-700 font-semibold mb-1">Content</label>
+                <textarea
+                  value={editContent}
+                  onChange={(e) => setEditContent(e.target.value)}
+                  rows={3}
+                  className="w-full px-3 py-1.5 border border-slate-300 rounded-lg text-slate-900 resize-none focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
+
+              <div>
+                <label className="block text-slate-700 font-semibold mb-1">Tags (comma-separated)</label>
+                <input
+                  type="text"
+                  value={editTags}
+                  onChange={(e) => setEditTags(e.target.value)}
+                  placeholder="e.g. Design, Personal"
+                  className="w-full px-3 py-1.5 border border-slate-300 rounded-lg text-slate-900"
+                />
+              </div>
+
+              <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-100">
+                <button
+                  type="button"
+                  onClick={() => setEditingNote(null)}
+                  className="px-3 py-1.5 rounded-lg text-slate-600 hover:bg-slate-100 font-semibold cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={!editTitle.trim()}
+                  className="px-4 py-1.5 bg-blue-600 hover:bg-blue-700 disabled:bg-slate-200 text-white rounded-lg font-bold cursor-pointer shadow-3xs"
+                >
+                  Save Changes
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
     </div>
   );
 };

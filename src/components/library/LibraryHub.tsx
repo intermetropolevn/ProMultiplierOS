@@ -25,6 +25,7 @@ import { InnovationTransformativeSystemsView } from './InnovationTransformativeS
 import { innovationSystemsStore } from '../../features/knowledge/services/innovationSystemsStore';
 import { ToolsPlatformsView } from './ToolsPlatformsView';
 import { toolsPlatformsStore } from '../../features/knowledge/services/toolsPlatformsStore';
+import { RoleJobArchitectureView } from './RoleJobArchitectureView';
 import { 
   Search, 
   Plus, 
@@ -60,6 +61,7 @@ import { CANONICAL_DOMAINS, CANONICAL_ROLES } from '../../data/jobTaxonomies';
 
 export type LibraryPillar = 
   | 'all'
+  | 'role_job_architecture'
   | 'work_relevant_pathways'
   | 'public_sector_civic_systems'
   | 'innovation_transformative_systems'
@@ -68,6 +70,17 @@ export type LibraryPillar =
   | 'standards_certifications'
   | 'playbooks_frameworks'
   | 'global_voices_publications';
+
+export type CredentialLearningSubtype = 
+  | 'all'
+  | 'certifications'
+  | 'certificates'
+  | 'diplomas'
+  | 'degrees'
+  | 'courses'
+  | 'professional_programs'
+  | 'assessments'
+  | 'learning_paths';
 
 interface LibraryHubProps {
   onOpenSourceDetail?: (sourceId: string) => void;
@@ -102,19 +115,25 @@ export const LibraryHub: React.FC<LibraryHubProps> = ({
   const [isMoreOpen, setIsMoreOpen] = useState(false);
   const moreMenuRef = useRef<HTMLDivElement>(null);
 
+  // Credentials & Learning dropdown & subtype selection
+  const [selectedCredentialSubtype, setSelectedCredentialSubtype] = useState<CredentialLearningSubtype>('all');
+  const [isCredentialsDropdownOpen, setIsCredentialsDropdownOpen] = useState(false);
+  const credentialsDropdownRef = useRef<HTMLDivElement>(null);
+
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
       if (moreMenuRef.current && !moreMenuRef.current.contains(event.target as Node)) {
         setIsMoreOpen(false);
       }
+      if (credentialsDropdownRef.current && !credentialsDropdownRef.current.contains(event.target as Node)) {
+        setIsCredentialsDropdownOpen(false);
+      }
     };
-    if (isMoreOpen) {
-      document.addEventListener('mousedown', handleClickOutside);
-    }
+    document.addEventListener('mousedown', handleClickOutside);
     return () => {
       document.removeEventListener('mousedown', handleClickOutside);
     };
-  }, [isMoreOpen]);
+  }, []);
 
   // Aggregate Metrics
   const metrics = useMemo(() => sourceStore.getAggregateMetrics(), [sources]);
@@ -139,10 +158,116 @@ export const LibraryHub: React.FC<LibraryHubProps> = ({
     };
   }, []);
 
+  // Helpers for Credentials & Learning Subtypes
+  const isCredentialsAndLearning = (src: NormalizedSource): boolean => {
+    if (src.sourceFamily === 'credential' || src.sourceFamily === 'assessment') return true;
+    if (src.sourceFamily === 'learn') {
+      const learningTypes = [
+        'course', 'mooc', 'university_course', 'professional_program',
+        'bootcamp', 'cohort_program', 'learning_path', 'executive_education', 'workshop'
+      ];
+      return learningTypes.includes(src.sourceType);
+    }
+    return false;
+  };
+
+  const matchesCredentialSubtype = (src: NormalizedSource, subtype: CredentialLearningSubtype): boolean => {
+    if (subtype === 'all') {
+      return isCredentialsAndLearning(src);
+    }
+    switch (subtype) {
+      case 'certifications':
+        return src.sourceType === 'professional_certification' || 
+               src.sourceType === 'certification' ||
+               src.sourceType === 'license' ||
+               src.id === 'cred-aws-solutions-architect' ||
+               src.id === 'cred-scrum-pspo';
+
+      case 'certificates':
+        return src.sourceType === 'certificate' || 
+               src.sourceType === 'course_completion' || 
+               src.sourceType === 'digital_badge' || 
+               src.sourceType === 'micro_credential';
+
+      case 'diplomas':
+        return src.sourceType === 'diploma';
+
+      case 'degrees':
+        return src.sourceType === 'degree';
+
+      case 'courses':
+        return src.sourceType === 'course' || 
+               src.sourceType === 'mooc' || 
+               src.sourceType === 'university_course';
+
+      case 'professional_programs':
+        return src.sourceType === 'professional_program' || 
+               src.sourceType === 'cohort_program' || 
+               src.sourceType === 'bootcamp' || 
+               src.sourceType === 'executive_education';
+
+      case 'assessments':
+        return src.sourceFamily === 'assessment' || 
+               src.sourceType === 'product_case' || 
+               src.sourceType === 'takehome_assessment' || 
+               src.sourceType === 'technical_assessment' ||
+               src.sourceType === 'live_interview_case' ||
+               src.sourceType === 'assessment';
+
+      case 'learning_paths':
+        return src.sourceType === 'learning_path';
+
+      default:
+        return false;
+    }
+  };
+
+  const getCredentialSubtypeLabel = (subtype: CredentialLearningSubtype): string => {
+    switch (subtype) {
+      case 'certifications': return 'Certifications';
+      case 'certificates': return 'Certificates';
+      case 'diplomas': return 'Diplomas';
+      case 'degrees': return 'Degrees';
+      case 'courses': return 'Courses';
+      case 'professional_programs': return 'Professional Programs';
+      case 'assessments': return 'Assessments';
+      case 'learning_paths': return 'Learning Paths';
+      default: return 'All Credentials & Learning';
+    }
+  };
+
+  const credentialsSubtypes: { id: CredentialLearningSubtype; label: string }[] = [
+    { id: 'certifications', label: 'Certifications' },
+    { id: 'certificates', label: 'Certificates' },
+    { id: 'diplomas', label: 'Diplomas' },
+    { id: 'degrees', label: 'Degrees' },
+  ];
+
+  const learningSubtypes: { id: CredentialLearningSubtype; label: string }[] = [
+    { id: 'courses', label: 'Courses' },
+    { id: 'professional_programs', label: 'Professional Programs' },
+    { id: 'assessments', label: 'Assessments' },
+    { id: 'learning_paths', label: 'Learning Paths' },
+  ];
+
+  const credentialCounts = useMemo(() => {
+    return {
+      all: sources.filter(s => isCredentialsAndLearning(s)).length,
+      certifications: sources.filter(s => matchesCredentialSubtype(s, 'certifications')).length,
+      certificates: sources.filter(s => matchesCredentialSubtype(s, 'certificates')).length,
+      diplomas: sources.filter(s => matchesCredentialSubtype(s, 'diplomas')).length,
+      degrees: sources.filter(s => matchesCredentialSubtype(s, 'degrees')).length,
+      courses: sources.filter(s => matchesCredentialSubtype(s, 'courses')).length,
+      professional_programs: sources.filter(s => matchesCredentialSubtype(s, 'professional_programs')).length,
+      assessments: sources.filter(s => matchesCredentialSubtype(s, 'assessments')).length,
+      learning_paths: sources.filter(s => matchesCredentialSubtype(s, 'learning_paths')).length,
+    };
+  }, [sources]);
+
   // Pillar Counts
   const pillarCounts = useMemo(() => {
     const dmi = sources.filter(s => s.sourceFamily === 'learn' || s.sourceFamily === 'knowledge').length;
-    const sc = sources.filter(s => s.sourceFamily === 'credential' || s.sourceFamily === 'assessment').length;
+    const sc = sources.filter(s => isCredentialsAndLearning(s)).length;
     const pf = sources.filter(s => s.sourceFamily === 'playbook' || s.sourceFamily === 'project').length;
     const gvp = sources.filter(s => s.sourceFamily === 'publication' || s.sourceFamily === 'content').length;
     const pathwaysCount = workPathwaysStore.getPathways().filter(p => !p.isArchived).length;
@@ -194,7 +319,7 @@ export const LibraryHub: React.FC<LibraryHubProps> = ({
       if (selectedPillar === 'domain_market_intelligence') {
         if (src.sourceFamily !== 'learn' && src.sourceFamily !== 'knowledge') return false;
       } else if (selectedPillar === 'standards_certifications') {
-        if (src.sourceFamily !== 'credential' && src.sourceFamily !== 'assessment') return false;
+        if (!matchesCredentialSubtype(src, selectedCredentialSubtype)) return false;
       } else if (selectedPillar === 'playbooks_frameworks') {
         if (src.sourceFamily !== 'playbook' && src.sourceFamily !== 'project') return false;
       } else if (selectedPillar === 'global_voices_publications') {
@@ -278,12 +403,13 @@ export const LibraryHub: React.FC<LibraryHubProps> = ({
 
   const featuredTabs: { id: LibraryPillar; label: string; icon: React.FC<{ className?: string }> }[] = [
     { id: 'all', label: 'All Knowledge Sources', icon: Layers },
-    { id: 'domain_market_intelligence', label: 'Domain & Market Intelligence', icon: BookOpen },
+    { id: 'standards_certifications', label: 'Credentials & Learning', icon: Award },
     { id: 'work_relevant_pathways', label: 'Work-relevant Pathways', icon: GitBranch },
+    { id: 'domain_market_intelligence', label: 'Domain & Market Intelligence', icon: BookOpen },
   ];
 
   const secondaryTabs: { id: LibraryPillar; label: string; icon: React.FC<{ className?: string }> }[] = [
-    { id: 'standards_certifications', label: 'Standards & Certifications', icon: Award },
+    { id: 'role_job_architecture', label: 'Role & Job Architecture', icon: SlidersHorizontal },
     { id: 'playbooks_frameworks', label: 'Playbooks & Frameworks', icon: Compass },
     { id: 'tools_platforms', label: 'Tools & Platforms', icon: Wrench },
     { id: 'innovation_transformative_systems', label: 'Innovation & Transformative Systems', icon: Sparkles },
@@ -303,6 +429,156 @@ export const LibraryHub: React.FC<LibraryHubProps> = ({
           {featuredTabs.map(tab => {
             const Icon = tab.icon;
             const isActive = selectedPillar === tab.id;
+
+            if (tab.id === 'standards_certifications') {
+              return (
+                <div className="relative" ref={credentialsDropdownRef} key={tab.id}>
+                  <div className="inline-flex items-center rounded-xl overflow-hidden shadow-2xs">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setSelectedPillar('standards_certifications');
+                        setSelectedCredentialSubtype('all');
+                        setSelectedFamily('all');
+                        setSelectedType('all');
+                        setIsMoreOpen(false);
+                        setIsCredentialsDropdownOpen(false);
+                      }}
+                      className={`px-3 sm:px-4 py-2 text-xs sm:text-sm font-semibold transition-all cursor-pointer flex items-center gap-2 ${
+                        isActive
+                          ? 'bg-slate-900 text-white shadow-xs font-bold'
+                          : 'bg-white text-slate-600 hover:bg-slate-100 hover:text-slate-900 border border-slate-200'
+                      }`}
+                    >
+                      <Icon className={`w-4 h-4 shrink-0 ${isActive ? 'text-amber-400' : 'text-amber-600'}`} />
+                      <span>{tab.label}</span>
+                      {isActive && selectedCredentialSubtype !== 'all' && (
+                        <span className="px-1.5 py-0.5 rounded-md text-[10px] font-black bg-amber-400/20 text-amber-200 border border-amber-400/30">
+                          {getCredentialSubtypeLabel(selectedCredentialSubtype)}
+                        </span>
+                      )}
+                    </button>
+
+                    <button
+                      type="button"
+                      title="Open Credentials & Learning categories"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setIsCredentialsDropdownOpen(prev => !prev);
+                        setIsMoreOpen(false);
+                      }}
+                      className={`px-2.5 py-2 text-xs sm:text-sm transition-all cursor-pointer border-l ${
+                        isActive
+                          ? 'bg-slate-900 text-white border-slate-800 hover:bg-slate-800'
+                          : 'bg-white text-slate-500 border-slate-200 hover:bg-slate-100 hover:text-slate-900'
+                      }`}
+                    >
+                      <ChevronDown className={`w-3.5 h-3.5 shrink-0 transition-transform duration-150 ${isCredentialsDropdownOpen ? 'rotate-180' : ''}`} />
+                    </button>
+                  </div>
+
+                  {/* Compact Credentials & Learning Dropdown Menu */}
+                  {isCredentialsDropdownOpen && (
+                    <div className="absolute left-0 mt-2 w-72 bg-white rounded-2xl shadow-xl border border-slate-200 py-2 z-40 animate-in fade-in zoom-in-95 duration-150">
+                      {/* All Credentials & Learning */}
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setSelectedPillar('standards_certifications');
+                          setSelectedCredentialSubtype('all');
+                          setSelectedFamily('all');
+                          setSelectedType('all');
+                          setIsCredentialsDropdownOpen(false);
+                        }}
+                        className={`w-full px-3.5 py-2 text-left text-xs font-semibold flex items-center justify-between transition-colors cursor-pointer ${
+                          isActive && selectedCredentialSubtype === 'all'
+                            ? 'bg-blue-50 text-blue-700 font-bold'
+                            : 'text-slate-700 hover:bg-slate-50'
+                        }`}
+                      >
+                        <div className="flex items-center gap-2">
+                          <Award className="w-4 h-4 text-amber-500 shrink-0" />
+                          <span>All Credentials & Learning</span>
+                        </div>
+                        <div className="flex items-center gap-1.5">
+                          <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-slate-100 text-slate-600">
+                            {credentialCounts.all}
+                          </span>
+                          {isActive && selectedCredentialSubtype === 'all' && (
+                            <Check className="w-3.5 h-3.5 text-blue-600 shrink-0" />
+                          )}
+                        </div>
+                      </button>
+
+                      {/* Header 1: Credentials */}
+                      <div className="px-3.5 pt-2.5 pb-1 text-2xs font-bold text-slate-400 uppercase tracking-wider border-t border-slate-100 mt-1">
+                        Credentials
+                      </div>
+                      {credentialsSubtypes.map(item => {
+                        const isItemActive = isActive && selectedCredentialSubtype === item.id;
+                        return (
+                          <button
+                            key={item.id}
+                            type="button"
+                            onClick={() => {
+                              setSelectedPillar('standards_certifications');
+                              setSelectedCredentialSubtype(item.id);
+                              setSelectedFamily('all');
+                              setSelectedType('all');
+                              setIsCredentialsDropdownOpen(false);
+                            }}
+                            className={`w-full px-3.5 py-1.5 text-left text-xs font-semibold flex items-center justify-between transition-colors cursor-pointer ${
+                              isItemActive ? 'bg-blue-50 text-blue-700 font-bold' : 'text-slate-700 hover:bg-slate-50'
+                            }`}
+                          >
+                            <span>{item.label}</span>
+                            <div className="flex items-center gap-1.5">
+                              <span className="text-[10px] font-bold text-slate-400">
+                                {credentialCounts[item.id] || 0}
+                              </span>
+                              {isItemActive && <Check className="w-3.5 h-3.5 text-blue-600 shrink-0" />}
+                            </div>
+                          </button>
+                        );
+                      })}
+
+                      {/* Header 2: Learning */}
+                      <div className="px-3.5 pt-2.5 pb-1 text-2xs font-bold text-slate-400 uppercase tracking-wider border-t border-slate-100 mt-1">
+                        Learning
+                      </div>
+                      {learningSubtypes.map(item => {
+                        const isItemActive = isActive && selectedCredentialSubtype === item.id;
+                        return (
+                          <button
+                            key={item.id}
+                            type="button"
+                            onClick={() => {
+                              setSelectedPillar('standards_certifications');
+                              setSelectedCredentialSubtype(item.id);
+                              setSelectedFamily('all');
+                              setSelectedType('all');
+                              setIsCredentialsDropdownOpen(false);
+                            }}
+                            className={`w-full px-3.5 py-1.5 text-left text-xs font-semibold flex items-center justify-between transition-colors cursor-pointer ${
+                              isItemActive ? 'bg-blue-50 text-blue-700 font-bold' : 'text-slate-700 hover:bg-slate-50'
+                            }`}
+                          >
+                            <span>{item.label}</span>
+                            <div className="flex items-center gap-1.5">
+                              <span className="text-[10px] font-bold text-slate-400">
+                                {credentialCounts[item.id] || 0}
+                              </span>
+                              {isItemActive && <Check className="w-3.5 h-3.5 text-blue-600 shrink-0" />}
+                            </div>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+              );
+            }
+
             return (
               <button
                 key={tab.id}
@@ -312,6 +588,7 @@ export const LibraryHub: React.FC<LibraryHubProps> = ({
                   setSelectedFamily('all');
                   setSelectedType('all');
                   setIsMoreOpen(false);
+                  setIsCredentialsDropdownOpen(false);
                 }}
                 className={`px-4 py-2 rounded-xl text-xs sm:text-sm font-semibold transition-all cursor-pointer flex items-center gap-2 ${
                   isActive
@@ -470,11 +747,12 @@ export const LibraryHub: React.FC<LibraryHubProps> = ({
             </button>
 
             {/* Reset Filters */}
-            {(selectedPillar !== 'all' || selectedDomain !== 'all' || selectedRole !== 'all' || selectedStrength !== 'all' || selectedType !== 'all' || searchQuery) && (
+            {(selectedPillar !== 'all' || selectedCredentialSubtype !== 'all' || selectedDomain !== 'all' || selectedRole !== 'all' || selectedStrength !== 'all' || selectedType !== 'all' || searchQuery) && (
               <button
                 type="button"
                 onClick={() => {
                   setSelectedPillar('all');
+                  setSelectedCredentialSubtype('all');
                   setSelectedDomain('all');
                   setSelectedRole('all');
                   setSelectedStrength('all');
@@ -544,7 +822,13 @@ export const LibraryHub: React.FC<LibraryHubProps> = ({
       </div>
 
       {/* 5. Main Content Area */}
-      {selectedPillar === 'work_relevant_pathways' ? (
+      {selectedPillar === 'role_job_architecture' ? (
+        <RoleJobArchitectureView
+          onNavigateToRoleIntelligence={() => {
+            window.dispatchEvent(new CustomEvent('career_navigate_tab', { detail: 'role_intelligence' }));
+          }}
+        />
+      ) : selectedPillar === 'work_relevant_pathways' ? (
         <WorkRelevantPathwaysView
           searchQuery={searchQuery}
           selectedDomain={selectedDomain}
@@ -570,6 +854,94 @@ export const LibraryHub: React.FC<LibraryHubProps> = ({
         />
       ) : (
         <div className="space-y-4">
+          {/* Credentials & Learning Banner & Subtype Filters */}
+          {selectedPillar === 'standards_certifications' && (
+            <div className="p-4 sm:p-5 rounded-3xl bg-linear-to-r from-amber-50/90 via-orange-50/60 to-slate-50 border border-amber-200/90 shadow-2xs space-y-3.5">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                <div className="flex items-start sm:items-center gap-3">
+                  <div className="w-10 h-10 rounded-2xl bg-amber-500 text-white flex items-center justify-center shrink-0 shadow-xs mt-0.5 sm:mt-0">
+                    <Award className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <h2 className="text-base font-black text-slate-900 tracking-tight">
+                        Credentials & Learning
+                      </h2>
+                      <span className="px-2 py-0.5 rounded-md text-[10px] font-black uppercase tracking-wider bg-amber-100 text-amber-800 border border-amber-200">
+                        {selectedCredentialSubtype === 'all' ? 'All Assets' : getCredentialSubtypeLabel(selectedCredentialSubtype)}
+                      </span>
+                    </div>
+                    <p className="text-xs text-slate-600 font-medium mt-0.5">
+                      What can I learn, earn, or use as evidence of professional qualification: Certifications, Certificates, Diplomas, Degrees, Courses, Programs, Assessments, and Learning Paths.
+                    </p>
+                  </div>
+                </div>
+
+                {selectedCredentialSubtype !== 'all' && (
+                  <button
+                    type="button"
+                    onClick={() => setSelectedCredentialSubtype('all')}
+                    className="self-start sm:self-center px-3 py-1.5 rounded-xl bg-white hover:bg-slate-50 border border-slate-200 text-xs font-bold text-slate-700 shadow-2xs cursor-pointer flex items-center gap-1.5 shrink-0"
+                  >
+                    <span>✕ Show All ({credentialCounts.all})</span>
+                  </button>
+                )}
+              </div>
+
+              {/* Subtype Quick Filter Bar */}
+              <div className="pt-2.5 border-t border-amber-200/60 flex flex-wrap items-center gap-1.5 text-xs">
+                <span className="text-[11px] font-bold text-slate-500 mr-1">Categories:</span>
+                <button
+                  type="button"
+                  onClick={() => setSelectedCredentialSubtype('all')}
+                  className={`px-3 py-1 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                    selectedCredentialSubtype === 'all'
+                      ? 'bg-amber-600 text-white shadow-xs'
+                      : 'bg-white hover:bg-slate-50 text-slate-700 border border-slate-200'
+                  }`}
+                >
+                  All ({credentialCounts.all})
+                </button>
+
+                <span className="text-slate-300">|</span>
+                <span className="text-[10px] font-bold text-amber-800 uppercase tracking-wider">Credentials:</span>
+
+                {credentialsSubtypes.map(item => (
+                  <button
+                    key={item.id}
+                    type="button"
+                    onClick={() => setSelectedCredentialSubtype(item.id)}
+                    className={`px-3 py-1 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                      selectedCredentialSubtype === item.id
+                        ? 'bg-amber-600 text-white shadow-xs'
+                        : 'bg-white hover:bg-slate-50 text-slate-700 border border-slate-200'
+                    }`}
+                  >
+                    {item.label} ({credentialCounts[item.id] || 0})
+                  </button>
+                ))}
+
+                <span className="text-slate-300">|</span>
+                <span className="text-[10px] font-bold text-amber-800 uppercase tracking-wider">Learning:</span>
+
+                {learningSubtypes.map(item => (
+                  <button
+                    key={item.id}
+                    type="button"
+                    onClick={() => setSelectedCredentialSubtype(item.id)}
+                    className={`px-3 py-1 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                      selectedCredentialSubtype === item.id
+                        ? 'bg-amber-600 text-white shadow-xs'
+                        : 'bg-white hover:bg-slate-50 text-slate-700 border border-slate-200'
+                    }`}
+                  >
+                    {item.label} ({credentialCounts[item.id] || 0})
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+
           {/* Work-Relevant Pathways Prompt Banner when viewing 'all' */}
           {selectedPillar === 'all' && !searchQuery && (
             <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-3">
@@ -705,9 +1077,11 @@ export const LibraryHub: React.FC<LibraryHubProps> = ({
               Showing <strong>{filteredSources.length}</strong> of <strong>{sources.length}</strong> sources
             </span>
 
-            {(selectedFamily !== 'all' || selectedType !== 'all' || selectedStrength !== 'all' || searchQuery) && (
+            {(selectedPillar !== 'all' || selectedCredentialSubtype !== 'all' || selectedFamily !== 'all' || selectedType !== 'all' || selectedStrength !== 'all' || searchQuery) && (
               <button
                 onClick={() => {
+                  setSelectedPillar('all');
+                  setSelectedCredentialSubtype('all');
                   setSelectedFamily('all');
                   setSelectedType('all');
                   setSelectedStrength('all');
@@ -749,7 +1123,9 @@ export const LibraryHub: React.FC<LibraryHubProps> = ({
                             {getFamilyIcon(src.sourceFamily)}
                           </span>
                           <span className="text-[11px] font-bold text-slate-600 uppercase tracking-wider">
-                            {typeConfig?.type.label || src.sourceType}
+                            {src.id === 'ass-grab-product-ops-case' || src.sourceType === 'product_case'
+                              ? 'Assessment / Product Case'
+                              : typeConfig?.type.label || src.sourceType}
                           </span>
                         </div>
 

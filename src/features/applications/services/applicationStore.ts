@@ -17,7 +17,11 @@ import {
   mapPipelineStateToLegacyStatus,
   AssessmentType,
   AssessmentStatus,
-  JobApplicationStatus
+  JobApplicationStatus,
+  ParticipationType,
+  ParticipationStatus,
+  TrackerActivity,
+  PARTICIPATION_LIFECYCLES
 } from '../types';
 import { JobListing } from '../../../types';
 import { ContextualIntelligenceEngine } from './contextualIntelligenceEngine';
@@ -520,6 +524,738 @@ const SEED_APPLICATION_5: JobApplication = {
   updatedAt: '2026-08-10T09:00:00.000Z'
 };
 
+// Example 6: Challenge / Hackathon - Shopee Hackathon 2026
+const SEED_HACKATHON_1: JobApplication = {
+  id: 'hack-shopee-ai-2026',
+  participationType: 'challenge_hackathon',
+  participationStatus: 'ACTIVE',
+  companyName: 'Shopee Sea Group',
+  organization: 'Shopee Engineering & Sea Labs',
+  roleTitle: 'Shopee Hackathon 2026: AI Merchant Assistant',
+  domain: 'AI & E-Commerce',
+  location: 'Singapore & Regional (Hybrid)',
+  currentStageId: 'submission',
+  currentStageName: 'Submission',
+  priority: 'HIGH',
+  deadline: '2026-11-15T23:59:59.000Z',
+  startDate: '2026-10-01T09:00:00.000Z',
+  expectedOutcome: 'Finalist demo presentation & $20,000 top prototype prize',
+  appliedAt: '2026-10-02T10:00:00.000Z',
+  pipelineState: 'assessment_case',
+  pipelineSubState: 'take_home',
+  status: 'CASE',
+  requirementIds: [],
+  requirements: [],
+  skillIds: ['Generative AI', 'Product Discovery', 'FastAPI', 'Vector Search'],
+  knowledgeIds: [],
+  assessmentIds: [],
+  notes: 'Registered as squad lead with 3 engineers. Completed data flow RFC; currently finalizing live multimodal catalog demo.',
+  hackathonData: {
+    teamName: 'VectorVanguard',
+    teamMembers: ['Alex (Product Lead)', 'Minh (AI Architect)', 'Sarah (Frontend)', 'Hao (Infra)'],
+    projectName: 'CatalogVision: Multimodal Merchant Catalog Agent',
+    projectDescription: 'Automated catalog ingestion, image enhancement, and automated localized Vietnamese/Indonesian product copy generation.',
+    repositoryUrl: 'https://github.com/careeros/catalogvision-agent',
+    pitchDeckUrl: 'https://pitch.careeros.app/shopee-hackathon-deck.pdf',
+    submissionUrl: 'https://hackathon.shopee.com/submissions/vectorvanguard',
+    deliverables: [
+      { id: 'del-1', title: 'Architecture RFC & Data Flow Diagram', completed: true },
+      { id: 'del-2', title: 'Core Agent Prototype & API Benchmarks', completed: true },
+      { id: 'del-3', title: '3-Minute Demo Video & Final Pitch Deck', completed: false, dueDate: '2026-11-10' }
+    ]
+  },
+  documents: [
+    { id: 'doc-hack-1', name: 'CatalogVision_Architecture_RFC.pdf', type: 'PDF', uploadedAt: '2026-10-08T10:00:00.000Z', fileSize: '2.1 MB' }
+  ],
+  activities: [
+    { id: 'act-h1', itemId: 'hack-shopee-ai-2026', type: 'STAGE_CHANGE', title: 'Registration confirmed & squad accepted', timestamp: '2026-10-02T10:00:00.000Z' },
+    { id: 'act-h2', itemId: 'hack-shopee-ai-2026', type: 'UPDATE', title: 'Formed team VectorVanguard with 4 cross-functional builders', timestamp: '2026-10-05T14:30:00.000Z' },
+    { id: 'act-h3', itemId: 'hack-shopee-ai-2026', type: 'STAGE_CHANGE', title: 'Advanced to Submission stage', timestamp: '2026-10-12T16:00:00.000Z' }
+  ],
+  createdAt: '2026-10-02T10:00:00.000Z',
+  updatedAt: '2026-10-14T11:00:00.000Z'
+};
+
+// Example 7: Builder Match - AI Product Builder
+const SEED_BUILDER_MATCH_1: JobApplication = {
+  id: 'match-builder-ai-pm',
+  participationType: 'builder_match',
+  participationStatus: 'ACTIVE',
+  companyName: 'ProMultiplier Builder Network',
+  organization: 'Builder Match Network',
+  roleTitle: 'Builder Match — AI Product Builder',
+  domain: 'Developer Tools & AI Agents',
+  location: 'Remote · Global',
+  currentStageId: 'collaboration',
+  currentStageName: 'Collaboration',
+  priority: 'HIGH',
+  deadline: '2026-11-30T18:00:00.000Z',
+  startDate: '2026-09-18T10:00:00.000Z',
+  expectedOutcome: 'Ship production-ready multi-tenant AI workflow MVP to 20 alpha testers',
+  appliedAt: '2026-09-18T10:00:00.000Z',
+  pipelineState: 'interviews',
+  pipelineSubState: 'technical',
+  status: 'INTERVIEW',
+  requirementIds: [],
+  requirements: [],
+  skillIds: ['Agent Orchestration', 'PyTorch', 'Product Strategy', 'System Architecture'],
+  knowledgeIds: [],
+  assessmentIds: [],
+  notes: 'Matched with Minh Tran. Complementary synergy: Minh handles backend vector infra and model fine-tuning; I lead product discovery, PRD, and user testing.',
+  builderMatchData: {
+    matchedBuilderId: 'builder-minh-tran',
+    matchedBuilderName: 'Minh Tran',
+    matchedBuilderRole: 'Lead AI Architect & Systems Engineer',
+    matchedBuilderAvatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=100&auto=format&fit=crop&q=60',
+    matchedBuilderSkills: ['PyTorch', 'FastAPI', 'Vector Search', 'Distributed Systems'],
+    teamName: 'AgentFlow Core Squad',
+    projectTitle: 'Self-Optimizing Knowledge Extraction Agent',
+    availability: '15 hrs/week (Evenings & Weekends)',
+    collaborationStatus: 'active_sprint',
+    nextAction: 'Synchronize on vector indexing pipeline schema for MVP test run.'
+  },
+  documents: [],
+  activities: [
+    { id: 'act-bm1', itemId: 'match-builder-ai-pm', type: 'STAGE_CHANGE', title: 'Profile approved in Builder Match network', timestamp: '2026-09-18T10:00:00.000Z' },
+    { id: 'act-bm2', itemId: 'match-builder-ai-pm', type: 'UPDATE', title: 'Matched with Minh Tran (96% compatibility score)', timestamp: '2026-09-22T11:00:00.000Z' },
+    { id: 'act-bm3', itemId: 'match-builder-ai-pm', type: 'STAGE_CHANGE', title: 'Completed intro call & kicked off active sprint collaboration', timestamp: '2026-09-26T15:00:00.000Z' }
+  ],
+  createdAt: '2026-09-18T10:00:00.000Z',
+  updatedAt: '2026-10-15T09:00:00.000Z'
+};
+
+// Example 8: Mentor & Mentee - Product Leadership Mentorship
+const SEED_MENTORSHIP_1: JobApplication = {
+  id: 'mentor-prod-leadership',
+  participationType: 'mentor_mentee',
+  participationStatus: 'ACTIVE',
+  companyName: 'Executive Leadership Fellowship',
+  organization: 'Product Mentorship Guild',
+  roleTitle: 'Product Leadership Mentorship',
+  domain: 'Enterprise SaaS & Executive Product',
+  location: 'Remote 1-on-1',
+  currentStageId: 'active',
+  currentStageName: 'Active Cadence',
+  priority: 'CRITICAL',
+  deadline: '2026-12-15T18:00:00.000Z',
+  startDate: '2026-08-15T10:00:00.000Z',
+  expectedOutcome: 'Executive promotion readiness & board presentation mastery',
+  appliedAt: '2026-08-15T10:00:00.000Z',
+  pipelineState: 'interviews',
+  pipelineSubState: 'hiring_manager',
+  status: 'INTERVIEW',
+  requirementIds: [],
+  requirements: [],
+  skillIds: ['Executive Synthesis', 'Product Strategy', 'Managing Up', 'Cross-Functional Leadership'],
+  knowledgeIds: [],
+  assessmentIds: [],
+  notes: 'Bi-weekly 60m session cadence. Focus on structuring enterprise expansion trade-offs and communicating with C-suite stakeholders.',
+  mentorshipData: {
+    mentorOrMenteeName: 'Elena Vance (VP of Product @ FinTech Global)',
+    mentorshipRole: 'mentee',
+    mentorAvatar: 'https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?w=100&auto=format&fit=crop&q=60',
+    mentorTitle: 'VP of Product, ex-Stripe Product Director',
+    programName: 'Executive Product Leadership Fellows 2026',
+    completedSessions: 4,
+    totalSessions: 8,
+    nextSessionDate: '2026-10-24T14:00:00.000Z',
+    nextSessionAgenda: 'Reviewing organizational growth loops and cross-functional C-suite alignment.',
+    goals: [
+      'Product Strategy: Scaling B2B enterprise SaaS multi-region expansion',
+      'Leadership: Managing high-performing senior PMs and managing up',
+      'Executive Communication: Minto Pyramid synthesis for board presentations'
+    ],
+    nextAction: 'Prepare 1-page memo on SEA GTM trade-offs before Oct 24 session.'
+  },
+  documents: [],
+  activities: [
+    { id: 'act-m1', itemId: 'mentor-prod-leadership', type: 'STAGE_CHANGE', title: 'Admitted into Executive Fellowship', timestamp: '2026-08-15T10:00:00.000Z' },
+    { id: 'act-m2', itemId: 'mentor-prod-leadership', type: 'UPDATE', title: 'Completed Session 1: Core strengths diagnostic & growth roadmap', timestamp: '2026-08-25T14:00:00.000Z' },
+    { id: 'act-m3', itemId: 'mentor-prod-leadership', type: 'UPDATE', title: 'Completed Session 4: Strategic prioritization framework review', timestamp: '2026-10-10T14:00:00.000Z' }
+  ],
+  createdAt: '2026-08-15T10:00:00.000Z',
+  updatedAt: '2026-10-12T16:00:00.000Z'
+};
+
+// Example 9: Credential - Google UX Certificate
+const SEED_CREDENTIAL_1: JobApplication = {
+  id: 'cred-google-ux-cert',
+  participationType: 'credential',
+  participationStatus: 'ACTIVE',
+  companyName: 'Google Career Certificates',
+  organization: 'Google & Coursera',
+  roleTitle: 'Google UX Certificate',
+  domain: 'Product Design & UX Research',
+  location: 'Online / Self-Paced Cohort',
+  currentStageId: 'coursework',
+  currentStageName: 'Coursework',
+  priority: 'MEDIUM',
+  deadline: '2026-12-01T23:59:59.000Z',
+  startDate: '2026-09-01T10:00:00.000Z',
+  expectedOutcome: 'Google Certified UX Practitioner Credential & 3 Shipped Case Studies',
+  appliedAt: '2026-09-01T10:00:00.000Z',
+  pipelineState: 'applied_screening',
+  pipelineSubState: 'applied',
+  status: 'APPLIED',
+  requirementIds: [],
+  requirements: [],
+  skillIds: ['User Research', 'Figma', 'Wireframing', 'Usability Testing'],
+  knowledgeIds: [],
+  assessmentIds: [],
+  notes: 'Enrolled under company continuing education stipend. Completing Course 3 prototype exercises.',
+  credentialProgramData: {
+    providerName: 'Google & Coursera',
+    credentialType: 'certificate',
+    credentialId: 'GOOG-UX-99214',
+    credentialUrl: 'https://www.coursera.org/professional-certificates/google-ux-design',
+    milestones: [
+      { title: 'Course 1: Foundations of UX Design', completed: true, date: '2026-09-15' },
+      { title: 'Course 2: Start the UX Design Process: Empathize, Define, Ideate', completed: true, date: '2026-09-30' },
+      { title: 'Course 3: Build Wireframes and Low-Fidelity Prototypes', completed: true, date: '2026-10-10' },
+      { title: 'Course 4: Conduct UX Research and Test Early Concepts', completed: false }
+    ]
+  },
+  documents: [],
+  activities: [
+    { id: 'act-c1', itemId: 'cred-google-ux-cert', type: 'STAGE_CHANGE', title: 'Enrolled in 7-course Professional Certificate', timestamp: '2026-09-01T10:00:00.000Z' },
+    { id: 'act-c2', itemId: 'cred-google-ux-cert', type: 'UPDATE', title: 'Completed Course 3 wireframing deliverables', timestamp: '2026-10-10T11:00:00.000Z' }
+  ],
+  createdAt: '2026-09-01T10:00:00.000Z',
+  updatedAt: '2026-10-11T12:00:00.000Z'
+};
+
+// Example 10: Learning Program - Product Management Bootcamp
+const SEED_LEARNING_PROG_1: JobApplication = {
+  id: 'prog-pm-bootcamp-2026',
+  participationType: 'learning_program',
+  participationStatus: 'ACTIVE',
+  companyName: 'Reforge Executive Academy',
+  organization: 'Reforge',
+  roleTitle: 'Product Management Bootcamp',
+  domain: 'Product Strategy & Growth Loops',
+  location: 'Cohort-Based Live Sessions',
+  currentStageId: 'in_progress',
+  currentStageName: 'In Progress',
+  priority: 'HIGH',
+  deadline: '2026-11-20T18:00:00.000Z',
+  startDate: '2026-09-15T18:00:00.000Z',
+  expectedOutcome: 'Executive Product Leadership Graduation & Cohort Capstone Defense',
+  appliedAt: '2026-09-05T10:00:00.000Z',
+  pipelineState: 'assessment_case',
+  pipelineSubState: 'assessment',
+  status: 'ASSESSMENT',
+  requirementIds: [],
+  requirements: [],
+  skillIds: ['Growth Loops', 'Retention Cohorts', 'Monetization Strategy'],
+  knowledgeIds: [],
+  assessmentIds: [],
+  notes: 'Intensive 8-week executive cohort. Module 3 case study due next Friday.',
+  credentialProgramData: {
+    providerName: 'Reforge',
+    credentialType: 'bootcamp',
+    credentialId: 'REFORGE-PM-2026-88',
+    credentialUrl: 'https://www.reforge.com/programs/product-strategy',
+    milestones: [
+      { title: 'Sprint 1: Retention Cohort Analysis & Qualitative Moats', completed: true, date: '2026-09-25' },
+      { title: 'Sprint 2: Compounding Growth Loops vs Linear Funnels', completed: true, date: '2026-10-08' },
+      { title: 'Sprint 3: Enterprise Monetization & Pricing Tiering', completed: false }
+    ]
+  },
+  documents: [],
+  activities: [
+    { id: 'act-lp1', itemId: 'prog-pm-bootcamp-2026', type: 'STAGE_CHANGE', title: 'Admitted to Fall 2026 cohort', timestamp: '2026-09-05T10:00:00.000Z' },
+    { id: 'act-lp2', itemId: 'prog-pm-bootcamp-2026', type: 'UPDATE', title: 'Submitted Sprint 2 Growth Loops teardown', timestamp: '2026-10-08T18:00:00.000Z' }
+  ],
+  createdAt: '2026-09-05T10:00:00.000Z',
+  updatedAt: '2026-10-09T09:00:00.000Z'
+};
+
+// Example 11: Workshop - Agentic AI & LLM Systems Masterclass (Completed / Attended)
+const SEED_WORKSHOP_1: JobApplication = {
+  id: 'workshop-agentic-ai-2026',
+  participationType: 'workshop',
+  participationStatus: 'COMPLETED',
+  unifiedStatus: 'completed',
+  participationRole: 'Participant',
+  companyName: 'Stanford AI Lab & DeepLearning.AI',
+  organization: 'Stanford AI Lab & DeepLearning.AI',
+  roleTitle: 'Agentic AI & LLM Systems Masterclass',
+  domain: 'Artificial Intelligence & Systems Engineering',
+  location: 'Palo Alto, CA / Hybrid Virtual',
+  currentStageId: 'completed',
+  currentStageName: 'Completed',
+  priority: 'HIGH',
+  isOnline: true,
+  startDate: '2026-09-18T09:00:00.000Z',
+  startTime: '09:00 AM',
+  endTime: '04:30 PM',
+  duration: '7.5 hours',
+  description: 'Deep-dive intensive workshop on orchestrating autonomous agents with LangGraph, tool-calling verification, and RAG evaluation pipelines.',
+  topics: ['LangGraph', 'Agentic Workflows', 'RAG Evaluation', 'Pydantic Guardrails', 'Self-Reflection Loops'],
+  skillIds: ['Agent Orchestration', 'LLM Evaluation', 'Prompt Engineering', 'Python', 'Vector Search'],
+  readinessSkills: ['Agent Orchestration', 'LLM Evaluation', 'Vector Search'],
+  readinessContribution: 18,
+  expectedOutcome: 'Shipped production-tested multi-agent customer onboarding pipeline with 94% task completion score',
+  outcomes: 'Successfully benchmarked RAG hallucination guardrails and designed an autonomous verification loop with sub-second latency.',
+  keyTakeaways: [
+    'Evaluate RAG retrieval independently from generation using contextual precision and recall metrics.',
+    'Constrain agent output to Pydantic schemas to prevent runtime deserialization bugs.',
+    'Implement dual-loop reflection: separate the reasoning planner from the code execution executor.'
+  ],
+  notes: 'Outstanding workshop led by Andrew Ng and guest engineers from Anthropic. All lab exercises submitted with 100% test coverage.',
+  workshopDetails: {
+    instructor: 'Dr. Andrew Ng & Harrison Chase',
+    workshopTopic: 'Building Production-Grade Agentic LLM Architectures',
+    learningObjectives: [
+      'Master stateful multi-agent communication topologies',
+      'Implement deterministic tool routing with function calling',
+      'Benchmark hallucination rates using Ragas & TruLens'
+    ],
+    materials: [
+      { title: 'Workshop Slide Deck & Architecture RFC (PDF)', url: 'https://deeplearning.ai/materials/agentic-ai-2026.pdf' },
+      { title: 'Interactive Colab Lab Repo', url: 'https://github.com/deeplearning-ai/agentic-workshop-labs' }
+    ],
+    keyTakeaways: [
+      'Evaluate retrieval precision independent of generation',
+      'Use state machines (LangGraph) rather than unstructured prompts for complex workflows'
+    ],
+    certificateEvidence: 'https://credentials.deeplearning.ai/verify/DL-AGENTIC-2026-X992'
+  },
+  requirementIds: [],
+  requirements: [],
+  knowledgeIds: ['ku-agent-architecture'],
+  assessmentIds: [],
+  documents: [],
+  evidenceItems: [
+    {
+      id: 'ev-ws-cert',
+      title: 'Stanford & DeepLearning.AI Certificate of Completion',
+      type: 'certificate',
+      url: 'https://credentials.deeplearning.ai/verify/DL-AGENTIC-2026-X992',
+      fileSize: '1.4 MB',
+      uploadedAt: '2026-09-18T17:00:00.000Z',
+      description: 'Official verified certificate of completion with credential ID DL-AGENTIC-2026-X992.',
+      verificationBadge: true
+    },
+    {
+      id: 'ev-ws-notes',
+      title: 'Executive Workshop Notes & Architectural Synthesis',
+      type: 'notes',
+      url: 'https://notion.so/agentic-ai-masterclass-notes',
+      fileSize: '420 KB',
+      uploadedAt: '2026-09-19T08:30:00.000Z',
+      description: 'Handwritten diagram transcriptions, latency trade-offs, and evaluation matrix.'
+    },
+    {
+      id: 'ev-ws-project',
+      title: 'AgentFlow Onboarding Prototype (GitHub Repo)',
+      type: 'project_output',
+      url: 'https://github.com/promultiplier/agentflow-core',
+      fileSize: 'Repo',
+      uploadedAt: '2026-09-18T16:00:00.000Z',
+      description: 'Working repository implementing multi-agent tool-calling and self-healing error recovery.'
+    }
+  ],
+  followUpTasks: [
+    { id: 'task-ws-1', title: 'Publish workshop takeaways to engineering knowledge base', completed: true, dueDate: '2026-09-22', priority: 'HIGH' },
+    { id: 'task-ws-2', title: 'Integrate Pydantic guardrail pattern into current sprint project', completed: true, dueDate: '2026-09-28', priority: 'MEDIUM' }
+  ],
+  relatedOpportunityId: 'app-company-x-prod-strat',
+  relatedOpportunityTitle: 'Product Strategy Manager (Company X)',
+  relatedProjectId: 'proj-vector-search',
+  relatedProjectTitle: 'Enterprise Vector Search Architecture',
+  relatedBlueprintId: 'bp-ai-product-manager',
+  relatedBlueprintTitle: 'AI Product Manager Role Blueprint',
+  relatedKnowledgeId: 'ku-market-entry',
+  relatedKnowledgeTitle: 'LLM Systems & Production Benchmarks',
+  activities: [
+    { id: 'act-ws-1', itemId: 'workshop-agentic-ai-2026', type: 'STAGE_CHANGE', title: 'Registered for Stanford Agentic AI Masterclass', timestamp: '2026-09-01T10:00:00.000Z' },
+    { id: 'act-ws-2', itemId: 'workshop-agentic-ai-2026', type: 'STAGE_CHANGE', title: 'Attended live masterclass & completed all 4 coding labs', timestamp: '2026-09-18T16:30:00.000Z' },
+    { id: 'act-ws-3', itemId: 'workshop-agentic-ai-2026', type: 'UPDATE', title: 'Verified and uploaded completion certificate to Career OS Evidence Hub', timestamp: '2026-09-18T17:15:00.000Z' }
+  ],
+  createdAt: '2026-09-01T10:00:00.000Z',
+  updatedAt: '2026-09-19T08:30:00.000Z',
+  pipelineState: 'archived_closed',
+  status: 'ACCEPTED'
+};
+
+// Example 12: Conference - Global Tech Summit & ProductCon 2026 (Upcoming / Confirmed)
+const SEED_CONFERENCE_1: JobApplication = {
+  id: 'conf-global-productcon-2026',
+  participationType: 'conference',
+  participationStatus: 'ACTIVE',
+  unifiedStatus: 'confirmed',
+  participationRole: 'Attendee',
+  companyName: 'Product School & Tech Council',
+  organization: 'ProductCon Global',
+  roleTitle: 'Global Tech Summit & ProductCon 2026',
+  domain: 'Product Management & Strategic Growth',
+  location: 'San Francisco, CA & Online Livestream',
+  currentStageId: 'confirmed',
+  currentStageName: 'Confirmed',
+  priority: 'CRITICAL',
+  isOnline: true,
+  startDate: new Date(Date.now() + 10 * 86400000).toISOString(),
+  startTime: '08:30 AM',
+  endTime: '06:00 PM',
+  duration: '2 Days',
+  description: 'The world’s premier product leadership conference gathering 15,000+ product leaders, founders, and innovators to discuss AI monetization, product strategy, and market expansion.',
+  topics: ['AI Monetization', 'Enterprise Product Strategy', 'Global Market Entry', 'Product-Led Growth'],
+  skillIds: ['Product Strategy', 'Strategic Thinking', 'Monetization Strategy', 'Cross-Functional Leadership'],
+  readinessSkills: ['Product Strategy', 'Strategic Thinking'],
+  readinessContribution: 12,
+  expectedOutcome: 'Network with 20+ enterprise VP/Founders, attend 6 strategic sessions, and scout partner opportunities for Southeast Asia expansion.',
+  notes: 'VIP Pass secured via company sponsorship. Keynotes by Satya Nadella and Claire Vo scheduled on Day 1.',
+  conferenceDetails: {
+    conferenceName: 'ProductCon Global 2026',
+    venue: 'Moscone West, San Francisco & Virtual Stream Hub',
+    speakers: ['Satya Nadella (CEO, Microsoft)', 'Claire Vo (CPO, LaunchDarkly)', 'Aakash Gupta (Author, Product Growth)'],
+    sessions: [
+      { title: 'The Economics of Enterprise AI Infrastructure', speaker: 'Satya Nadella', time: '09:00 AM PST' },
+      { title: 'Building defensible product moats in the era of foundational models', speaker: 'Claire Vo', time: '11:15 AM PST' },
+      { title: 'Multi-Region SaaS GTM Playbook: From Beachhead to $50M ARR', speaker: 'Aakash Gupta', time: '02:00 PM PST' }
+    ],
+    tracks: ['Executive Leadership & Strategy', 'AI Product Engineering', 'Go-to-Market & Retention'],
+    networkingOpportunities: [
+      'VIP Founders & VP of Product Breakfast Roundtable',
+      'Southeast Asian & Global Tech Operators Mixer',
+      'AI Startup Pitch & Demo Lounge'
+    ],
+    keyTakeaways: [
+      'Schedule 1-on-1 chats with enterprise buyers',
+      'Collect case study benchmarks on developer adoption'
+    ],
+    certificateBadge: 'ProductCon 2026 VIP Delegate Badge #99824'
+  },
+  evidenceItems: [
+    {
+      id: 'ev-conf-badge',
+      title: 'ProductCon 2026 Official Delegate Pass & Ticket',
+      type: 'badge',
+      url: 'https://productcon.eventbrite.com/tickets/vip-99824',
+      fileSize: '350 KB',
+      uploadedAt: new Date(Date.now() - 3 * 86400000).toISOString(),
+      description: 'Confirmed VIP All-Access Pass with breakout track entry codes.',
+      verificationBadge: true
+    }
+  ],
+  followUpTasks: [
+    { id: 'task-conf-1', title: 'Download speaker presentation decks and schedule 1-on-1 networking slots', completed: false, dueDate: new Date(Date.now() + 5 * 86400000).toISOString().split('T')[0], priority: 'HIGH' },
+    { id: 'task-conf-2', title: 'Prepare 30-second intro pitch for SEA Tech Mixer', completed: false, priority: 'MEDIUM' }
+  ],
+  relatedOpportunityId: 'app-company-x-prod-strat',
+  relatedOpportunityTitle: 'Product Strategy Manager (Company X)',
+  relatedBlueprintId: 'bp-prod-strategy',
+  relatedBlueprintTitle: 'Product Strategy Manager Blueprint',
+  requirementIds: [],
+  requirements: [],
+  knowledgeIds: ['ku-product-strategy'],
+  assessmentIds: [],
+  documents: [],
+  activities: [
+    { id: 'act-conf-1', itemId: 'conf-global-productcon-2026', type: 'STAGE_CHANGE', title: 'Saved conference from Opportunities & Events Radar', timestamp: new Date(Date.now() - 14 * 86400000).toISOString() },
+    { id: 'act-conf-2', itemId: 'conf-global-productcon-2026', type: 'STAGE_CHANGE', title: 'Confirmed registration with VIP Pass', timestamp: new Date(Date.now() - 3 * 86400000).toISOString() }
+  ],
+  createdAt: new Date(Date.now() - 14 * 86400000).toISOString(),
+  updatedAt: new Date(Date.now() - 3 * 86400000).toISOString(),
+  pipelineState: 'applied_screening',
+  status: 'OFFER'
+};
+
+// Example 13: Meeting - Q4 AI Infrastructure & Technical Architecture Review (Completed / Operational Layout)
+const SEED_MEETING_1: JobApplication = {
+  id: 'meeting-q4-arch-sync',
+  participationType: 'meeting',
+  participationStatus: 'COMPLETED',
+  unifiedStatus: 'completed',
+  participationRole: 'Organizer',
+  companyName: 'Platform Core Team',
+  organization: 'Platform Core Engineering Guild',
+  roleTitle: 'Q4 AI Infrastructure & Technical Architecture Review',
+  domain: 'Cloud Infrastructure & High-Availability Systems',
+  location: 'Google Meet / HQ Room 4A',
+  currentStageId: 'completed',
+  currentStageName: 'Completed & Action Items',
+  priority: 'HIGH',
+  isOnline: true,
+  startDate: new Date(Date.now() - 2 * 86400000).toISOString(),
+  startTime: '02:00 PM',
+  endTime: '03:15 PM',
+  duration: '75 minutes',
+  description: 'Quarterly strategic alignment on distributed telemetry processing, Kafka partitioning strategy, and sub-50ms ingestion latency guarantees.',
+  topics: ['Kafka Partitioning', 'Zero-Downtime Migration', 'Telemetry Data Lake', 'SLA Latency Targets'],
+  skillIds: ['Distributed Systems', 'Kafka', 'System Architecture', 'Executive Synthesis'],
+  readinessSkills: ['Distributed Systems', 'Kafka'],
+  readinessContribution: 10,
+  expectedOutcome: 'Reach cross-functional consensus on Kafka CDC connector vs direct NATS clustering; lock down sprint backlog assignments.',
+  notes: 'Unanimous decision to adopt Kafka CDC with Schema Registry. Minh Tran will lead the connector benchmark; David Pham will configure Terraform staging cluster.',
+  meetingDetails: {
+    participants: [
+      'Elena Vance (VP Product)',
+      'Minh Tran (Lead Systems Architect)',
+      'David Pham (Staff Platform Engineer)',
+      'Alex Nguyen (Product Strategy)'
+    ],
+    agenda: '1. Review telemetry latency bottleneck during peak vehicle fleet ingestion\n2. Evaluate Kafka CDC vs NATS JetStream benchmark findings\n3. Finalize data residency compliance for SEA nodes (Decree 53)\n4. Assign sprint action items and follow-up timeline',
+    meetingObjective: 'Approve final architecture RFC to support 150,000 events/sec with 99.99% uptime guarantee.',
+    decisions: [
+      'Decided to use Kafka CDC connectors with Schema Registry for structured telemetry schema evolution.',
+      'Approved hybrid deployment: on-prem gateway in Hanoi with managed AWS Aurora analytics replica in Singapore.',
+      'Deferred European cluster rollout to Q1 2027 to focus engineering resources on Southeast Asian production rollout.'
+    ],
+    actionItems: [
+      { text: 'Publish final approved Architecture RFC to engineering Confluence space', assignee: 'Alex Nguyen', done: true },
+      { text: 'Provision sandbox Kafka CDC cluster with Terraform', assignee: 'David Pham', done: true },
+      { text: 'Execute 48-hour load test at 200,000 msg/sec and publish latency p99 report', assignee: 'Minh Tran', done: false }
+    ],
+    followUpDate: new Date(Date.now() + 6 * 86400000).toISOString().split('T')[0],
+    relatedProjectId: 'proj-vector-search'
+  },
+  evidenceItems: [
+    {
+      id: 'ev-mtg-rfc',
+      title: 'Approved Architecture RFC Document v2.4 (PDF)',
+      type: 'document',
+      url: 'https://confluence.internal/rfc-q4-telemetry-arch.pdf',
+      fileSize: '890 KB',
+      uploadedAt: new Date(Date.now() - 2 * 86400000).toISOString(),
+      description: 'Formal architectural RFC with multi-region data flows, schema diagrams, and latency calculations.'
+    },
+    {
+      id: 'ev-mtg-notes',
+      title: 'Meeting Recording & Executive Transcript',
+      type: 'recording',
+      url: 'https://drive.google.com/file/d/rec-q4-arch-sync/view',
+      fileSize: '48 MB',
+      uploadedAt: new Date(Date.now() - 2 * 86400000).toISOString(),
+      description: 'Full 75-minute video recording and searchable transcript with speaker attribution.'
+    }
+  ],
+  followUpTasks: [
+    { id: 'task-mtg-1', title: 'Verify Terraform provisioning completed for staging cluster', completed: true, dueDate: new Date(Date.now() + 2 * 86400000).toISOString().split('T')[0], priority: 'HIGH' },
+    { id: 'task-mtg-2', title: 'Schedule follow-up review for load test findings', completed: false, dueDate: new Date(Date.now() + 6 * 86400000).toISOString().split('T')[0], priority: 'MEDIUM' }
+  ],
+  relatedOpportunityId: 'app-vinfast-senior-infra',
+  relatedOpportunityTitle: 'Senior Cloud & Platform Infrastructure Engineer (VinFast)',
+  relatedProjectId: 'proj-vector-search',
+  relatedProjectTitle: 'Enterprise Vector Search Architecture',
+  requirementIds: [],
+  requirements: [],
+  knowledgeIds: ['ku-cloud-infra'],
+  assessmentIds: [],
+  documents: [],
+  activities: [
+    { id: 'act-mtg-1', itemId: 'meeting-q4-arch-sync', type: 'STAGE_CHANGE', title: 'Scheduled sync with VP of Product & Systems Leads', timestamp: new Date(Date.now() - 7 * 86400000).toISOString() },
+    { id: 'act-mtg-2', itemId: 'meeting-q4-arch-sync', type: 'STAGE_CHANGE', title: 'Conducted meeting and recorded binding architecture decisions', timestamp: new Date(Date.now() - 2 * 86400000).toISOString() }
+  ],
+  createdAt: new Date(Date.now() - 7 * 86400000).toISOString(),
+  updatedAt: new Date(Date.now() - 2 * 86400000).toISOString(),
+  pipelineState: 'archived_closed',
+  status: 'ACCEPTED'
+};
+
+// Example 14: Webinar - Mastering SaaS Retention & Growth Loops (Attended / Completed)
+const SEED_WEBINAR_1: JobApplication = {
+  id: 'webinar-retention-loops-2026',
+  participationType: 'webinar',
+  participationStatus: 'COMPLETED',
+  unifiedStatus: 'attended',
+  participationRole: 'Attendee',
+  companyName: 'Reforge Executive Webinars',
+  organization: 'Reforge',
+  roleTitle: 'Mastering SaaS Retention & Compounding Growth Loops',
+  domain: 'Growth Strategy & Product-Led Monetization',
+  location: 'Zoom Livestream / Virtual',
+  currentStageId: 'completed',
+  currentStageName: 'Completed',
+  priority: 'MEDIUM',
+  isOnline: true,
+  startDate: new Date(Date.now() - 12 * 86400000).toISOString(),
+  startTime: '07:00 PM',
+  endTime: '08:30 PM',
+  duration: '90 minutes',
+  description: 'Executive webinar dissecting why linear marketing funnels fail in B2B SaaS and how to model compounding retention loops and qualitative moats.',
+  topics: ['Growth Loops', 'Cohorts Analysis', 'Retention Curves', 'B2B SaaS Moats'],
+  skillIds: ['Growth Loops', 'Retention Cohorts', 'Unit Economics', 'Strategic Thinking'],
+  readinessSkills: ['Growth Loops', 'Retention Cohorts'],
+  readinessContribution: 8,
+  expectedOutcome: 'Gain practical model template for projecting cohort net revenue retention under tiered enterprise usage pricing.',
+  outcomes: 'Adapted Reforge growth loop framework into Company X market entry business case thesis.',
+  keyTakeaways: [
+    'Retention precedes acquisition: fixing leaky buckets multiplies marketing efficiency by 3x.',
+    'Compounding loops outlive linear funnels because user activity directly fuels new user discovery.'
+  ],
+  webinarDetails: {
+    speaker: 'Brian Balfour (CEO, Reforge; ex-VP Growth HubSpot)',
+    topic: 'Product-Led Growth Loops vs Traditional Linear Marketing Funnels',
+    platformOrVenue: 'Zoom Webinar Live & Interactive Q&A',
+    resources: [
+      { title: 'Reforge Retention Cohort Spreadsheets Template', url: 'https://reforge.com/tools/cohort-calculator' },
+      { title: 'Growth Loops Deep-Dive Article', url: 'https://brianbalfour.com/essays/growth-loops' }
+    ],
+    keyTakeaways: [
+      'Focus on cohort NRR stabilization before accelerating paid distribution channels',
+      'Design product telemetry to detect retention drops 60 days before contract renewal'
+    ]
+  },
+  evidenceItems: [
+    {
+      id: 'ev-web-notes',
+      title: 'Growth Loop Teardowns & Mathematical Formulas (PDF)',
+      type: 'notes',
+      url: 'https://drive.google.com/file/d/growth-loop-notes/view',
+      fileSize: '512 KB',
+      uploadedAt: new Date(Date.now() - 12 * 86400000).toISOString(),
+      description: 'Complete synthesized lecture notes with 4 quantitative cohort formulas.'
+    }
+  ],
+  followUpTasks: [
+    { id: 'task-web-1', title: 'Apply cohort retention model to Company X business case', completed: true, priority: 'HIGH' }
+  ],
+  relatedOpportunityId: 'app-company-x-prod-strat',
+  relatedOpportunityTitle: 'Product Strategy Manager (Company X)',
+  relatedKnowledgeId: 'ku-unit-economics',
+  relatedKnowledgeTitle: 'Unit Economics & SaaS Cohort Analytics',
+  requirementIds: [],
+  requirements: [],
+  knowledgeIds: ['ku-unit-economics'],
+  assessmentIds: [],
+  documents: [],
+  activities: [
+    { id: 'act-web-1', itemId: 'webinar-retention-loops-2026', type: 'STAGE_CHANGE', title: 'Registered for Reforge Live Executive Webinar', timestamp: new Date(Date.now() - 20 * 86400000).toISOString() },
+    { id: 'act-web-2', itemId: 'webinar-retention-loops-2026', type: 'STAGE_CHANGE', title: 'Attended live broadcast and participated in interactive Q&A', timestamp: new Date(Date.now() - 12 * 86400000).toISOString() }
+  ],
+  createdAt: new Date(Date.now() - 20 * 86400000).toISOString(),
+  updatedAt: new Date(Date.now() - 12 * 86400000).toISOString(),
+  pipelineState: 'archived_closed',
+  status: 'ACCEPTED'
+};
+
+// Example 15: Volunteer / NGO Event - Pro-Bono Tech Mentorship Day (Completed / Social Impact)
+const SEED_VOLUNTEER_1: JobApplication = {
+  id: 'vol-youth-steam-mentor',
+  participationType: 'volunteer',
+  participationStatus: 'COMPLETED',
+  unifiedStatus: 'completed',
+  participationRole: 'Mentor',
+  companyName: 'VietTech Youth Innovation Foundation',
+  organization: 'VietTech Youth Innovation Foundation',
+  roleTitle: 'Pro-Bono Youth STEAM Mentorship Day',
+  domain: 'Community & Social Impact Education',
+  location: 'Da Nang & Hybrid Online',
+  currentStageId: 'completed',
+  currentStageName: 'Impact Verified',
+  priority: 'MEDIUM',
+  isOnline: true,
+  startDate: new Date(Date.now() - 5 * 86400000).toISOString(),
+  startTime: '08:00 AM',
+  endTime: '05:00 PM',
+  duration: '12 Hours',
+  description: 'Mentoring underrepresented university students and aspiring tech builders through resume optimization, technical portfolio reviews, and mock behavioral interviews.',
+  topics: ['Career Guidance', 'Mock Interviews', 'Portfolio Review', 'STEAM Education'],
+  skillIds: ['Managing Up', 'Executive Synthesis', 'Cross-Functional Leadership'],
+  readinessSkills: ['Managing Up', 'Cross-Functional Leadership'],
+  readinessContribution: 8,
+  expectedOutcome: 'Provide actionable career roadmaps and technical portfolio feedback to at least 4 graduating engineers.',
+  outcomes: 'Directly mentored 4 senior undergraduate students; 2 have already advanced to technical interview rounds at top regional software houses.',
+  communityDetails: {
+    organization: 'VietTech Youth Innovation Foundation',
+    causeOrDomain: 'Equal Opportunity Youth STEAM Education & Tech Literacy',
+    role: 'Senior Technical Mentor & Panelist',
+    contribution: 'Delivered 4 1-on-1 60-minute portfolio review sessions and conducted 2 live mock interviews on algorithms and system design fundamentals.',
+    impactOrOutcome: 'Guided 4 students to revamp their GitHub portfolios and resume narratives; 12 hours of pro-bono service documented and certified.',
+    hours: 12,
+    evidence: 'https://viettechfoundation.org/certificates/mentor-vol-2026-alex'
+  },
+  evidenceItems: [
+    {
+      id: 'ev-vol-cert',
+      title: 'Official Social Impact Service Certificate (12 Hours)',
+      type: 'certificate',
+      url: 'https://viettechfoundation.org/certificates/mentor-vol-2026-alex',
+      fileSize: '740 KB',
+      uploadedAt: new Date(Date.now() - 5 * 86400000).toISOString(),
+      description: 'Officially certified volunteer leadership contribution certificate issued by NGO Board of Trustees.',
+      verificationBadge: true
+    }
+  ],
+  followUpTasks: [
+    { id: 'task-vol-1', title: 'Send curated resource links and resume templates to mentee cohort', completed: true, priority: 'MEDIUM' }
+  ],
+  requirementIds: [],
+  requirements: [],
+  knowledgeIds: ['ku-leadership'],
+  assessmentIds: [],
+  documents: [],
+  activities: [
+    { id: 'act-vol-1', itemId: 'vol-youth-steam-mentor', type: 'STAGE_CHANGE', title: 'Accepted mentor invitation for NGO Youth STEAM drive', timestamp: new Date(Date.now() - 18 * 86400000).toISOString() },
+    { id: 'act-vol-2', itemId: 'vol-youth-steam-mentor', type: 'STAGE_CHANGE', title: 'Completed 12 hours of mentorship and verified social impact', timestamp: new Date(Date.now() - 5 * 86400000).toISOString() }
+  ],
+  createdAt: new Date(Date.now() - 18 * 86400000).toISOString(),
+  updatedAt: new Date(Date.now() - 5 * 86400000).toISOString(),
+  pipelineState: 'archived_closed',
+  status: 'ACCEPTED'
+};
+
+// Example 16: Saved Bootcamp - Generative AI Systems Design Bootcamp (Saved)
+const SEED_SAVED_BOOTCAMP_1: JobApplication = {
+  id: 'saved-genai-bootcamp-2026',
+  participationType: 'bootcamp',
+  participationStatus: 'SAVED',
+  unifiedStatus: 'saved',
+  participationRole: 'Participant',
+  companyName: 'FullStack Academy & Weights and Biases',
+  organization: 'FullStack Academy',
+  roleTitle: 'Generative AI Systems Design Bootcamp',
+  domain: 'Deep Learning & Cloud LLMOps',
+  location: 'Online Cohort Live Labs',
+  currentStageId: 'saved',
+  currentStageName: 'Saved',
+  priority: 'MEDIUM',
+  isOnline: true,
+  startDate: new Date(Date.now() + 25 * 86400000).toISOString(),
+  duration: '6 Weeks',
+  description: 'Curriculum focusing on distributed model fine-tuning with LoRA/QLoRA, vLLM inference acceleration, and building scalable production agent architectures.',
+  topics: ['LoRA Fine-Tuning', 'vLLM', 'Inference Optimization', 'Agentic Systems', 'Kubernetes GPU Clusters'],
+  skillIds: ['PyTorch', 'System Architecture', 'Distributed Systems'],
+  readinessSkills: ['PyTorch', 'Distributed Systems'],
+  readinessContribution: 14,
+  expectedOutcome: 'Capstone: Fine-tune a 7B parameter reasoning model on specialized regional domain corpus and benchmark inference throughput on H100 GPUs.',
+  notes: 'Saved for Winter 2026 cohort intake. Application deadline in 3 weeks; checking with company learning stipend eligibility.',
+  bootcampDetails: {
+    provider: 'FullStack Academy in partnership with Weights & Biases',
+    curriculum: [
+      'Module 1: Foundational Transformers Internals & KV Caching Mechanics',
+      'Module 2: Parameter-Efficient Fine-Tuning (PEFT, LoRA, QLoRA)',
+      'Module 3: High-Throughput Inference Engines (vLLM, TensorRT-LLM)',
+      'Module 4: Multi-Agent Systems & Evaluation with Weights & Biases Weave',
+      'Module 5: Capstone Project Defense & Industry Peer Review'
+    ],
+    startDate: new Date(Date.now() + 25 * 86400000).toISOString().split('T')[0],
+    endDate: new Date(Date.now() + 67 * 86400000).toISOString().split('T')[0],
+    completionStatus: 'Saved / Considering Enrollment',
+    skillsAcquired: ['PyTorch', 'LoRA Fine-Tuning', 'vLLM', 'GPU Inference Benchmarking']
+  },
+  evidenceItems: [],
+  followUpTasks: [
+    { id: 'task-boot-1', title: 'Submit education reimbursement request to HR', completed: false, dueDate: new Date(Date.now() + 7 * 86400000).toISOString().split('T')[0], priority: 'HIGH' }
+  ],
+  relatedBlueprintId: 'bp-ai-product-manager',
+  relatedBlueprintTitle: 'AI Product Manager Role Blueprint',
+  requirementIds: [],
+  requirements: [],
+  knowledgeIds: ['ku-ai-bootcamp'],
+  assessmentIds: [],
+  documents: [],
+  activities: [
+    { id: 'act-boot-1', itemId: 'saved-genai-bootcamp-2026', type: 'STAGE_CHANGE', title: 'Bookmarked bootcamp in Participation Tracker', timestamp: new Date(Date.now() - 4 * 86400000).toISOString() }
+  ],
+  createdAt: new Date(Date.now() - 4 * 86400000).toISOString(),
+  updatedAt: new Date(Date.now() - 4 * 86400000).toISOString(),
+  pipelineState: 'applied_screening',
+  status: 'WISHLIST'
+};
+
 class ApplicationStore {
   private applications: JobApplication[] = [];
   private assessments: ApplicationAssessment[] = [];
@@ -539,27 +1275,44 @@ class ApplicationStore {
       const storedTasks = localStorage.getItem(STORAGE_KEYS.TASKS);
       const storedEv = localStorage.getItem(STORAGE_KEYS.EVIDENCE);
 
-      const defaultApps = [
+      const defaultApps: JobApplication[] = [
         SEED_APPLICATION, 
         SEED_APPLICATION_2, 
         SEED_APPLICATION_3, 
         SEED_APPLICATION_4, 
-        SEED_APPLICATION_5
+        SEED_APPLICATION_5,
+        SEED_HACKATHON_1,
+        SEED_BUILDER_MATCH_1,
+        SEED_MENTORSHIP_1,
+        SEED_CREDENTIAL_1,
+        SEED_LEARNING_PROG_1,
+        SEED_WORKSHOP_1,
+        SEED_CONFERENCE_1,
+        SEED_MEETING_1,
+        SEED_WEBINAR_1,
+        SEED_VOLUNTEER_1,
+        SEED_SAVED_BOOTCAMP_1
       ];
 
       if (storedApps) {
         const parsed: JobApplication[] = JSON.parse(storedApps);
-        // Map missing pipeline states and merge missing seed examples
+        // Map missing pipeline states, assign default participationType, and merge missing seed examples
         this.applications = parsed.map(app => {
           if (!app.pipelineState) {
             const { primary, sub } = mapLegacyStatusToPipelineState(app.status);
             app.pipelineState = primary;
             app.pipelineSubState = sub;
           }
+          if (!app.participationType) {
+            app.participationType = 'career_opportunity';
+          }
+          if (!app.participationStatus) {
+            app.participationStatus = app.pipelineState === 'archived_closed' ? 'ARCHIVED' : 'ACTIVE';
+          }
           return app;
         });
 
-        // Ensure key seed applications exist if user had an older 2-app storage
+        // Ensure key seed applications and participation items exist
         defaultApps.forEach(defApp => {
           if (!this.applications.some(a => a.id === defApp.id)) {
             this.applications.push(defApp);
@@ -684,6 +1437,13 @@ class ApplicationStore {
         capturedAt: new Date().toISOString(),
         originalSourceText: job.description
       },
+      participationType: 'career_opportunity',
+      participationStatus: 'ACTIVE',
+      organization: job.company,
+      domain: job.domain,
+      currentStageId: sub || 'applied',
+      currentStageName: sub === 'screening' ? 'Screening' : 'Applied',
+      priority: 'MEDIUM',
       companyIntelligence: {
         companyName: job.company,
         businessModel: 'Enterprise technology services & cloud platforms',
@@ -702,6 +1462,278 @@ class ApplicationStore {
 
     this.saveApplication(newApp);
     return newApp;
+  }
+
+  createApplicationFromOpportunity(item: Partial<JobApplication>): JobApplication {
+    return this.trackNewParticipation(item);
+  }
+
+  trackNewParticipation(item: Partial<JobApplication>): JobApplication {
+    const pType: ParticipationType = item.participationType || 'career_opportunity';
+    const lifecycle = PARTICIPATION_LIFECYCLES[pType];
+    const initialStage = lifecycle.stages[0];
+
+    const newItem: JobApplication = {
+      id: item.id || `track-${pType.substring(0, 4)}-${Date.now()}`,
+      companyName: item.companyName || item.organization || 'Organization',
+      organization: item.organization || item.companyName || 'Organization',
+      roleTitle: item.roleTitle || (item as Record<string, any>).title || 'Participation Item',
+      domain: item.domain || 'General',
+      location: item.location || 'Remote',
+      participationType: pType,
+      participationStatus: item.participationStatus || lifecycle.defaultStatus,
+      currentStageId: item.currentStageId || initialStage.id,
+      currentStageName: item.currentStageName || initialStage.label,
+      priority: item.priority || 'MEDIUM',
+      deadline: item.deadline,
+      startDate: item.startDate || new Date().toISOString(),
+      expectedOutcome: item.expectedOutcome || '',
+      notes: item.notes || '',
+      pipelineState: (item.pipelineState || (pType === 'career_opportunity' ? 'applied_screening' : 'assessment_case')) as ApplicationPrimaryState,
+      status: (item.status || 'APPLIED') as JobApplicationStatus,
+      requirementIds: item.requirementIds || [],
+      requirements: item.requirements || [],
+      skillIds: item.skillIds || [],
+      knowledgeIds: item.knowledgeIds || [],
+      assessmentIds: item.assessmentIds || [],
+      documents: item.documents || [],
+      hackathonData: item.hackathonData,
+      builderMatchData: item.builderMatchData,
+      mentorshipData: item.mentorshipData,
+      credentialProgramData: item.credentialProgramData,
+      activities: item.activities || [
+        {
+          id: `act-${Date.now()}`,
+          itemId: item.id || `track-${pType.substring(0, 4)}-${Date.now()}`,
+          type: 'STAGE_CHANGE',
+          title: `Tracked in Participation Tracker (${initialStage.label})`,
+          timestamp: new Date().toISOString()
+        }
+      ],
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString()
+    };
+
+    this.saveApplication(newItem);
+    return newItem;
+  }
+
+  updateParticipationStage(id: string, stageId: string, stageName: string, reason?: string): JobApplication | undefined {
+    const item = this.getApplicationById(id);
+    if (!item) return undefined;
+
+    item.currentStageId = stageId;
+    item.currentStageName = stageName;
+    item.updatedAt = new Date().toISOString();
+
+    if (!item.activities) item.activities = [];
+    item.activities.unshift({
+      id: `act-${Date.now()}`,
+      itemId: id,
+      type: 'STAGE_CHANGE',
+      title: `Advanced to ${stageName}`,
+      description: reason,
+      timestamp: new Date().toISOString()
+    });
+
+    this.saveApplication(item);
+    return item;
+  }
+
+  updateMentorshipSessions(id: string, delta: number): JobApplication | undefined {
+    const item = this.getApplicationById(id);
+    if (!item || !item.mentorshipData) return undefined;
+
+    const newCompleted = Math.max(0, Math.min(item.mentorshipData.totalSessions, item.mentorshipData.completedSessions + delta));
+    item.mentorshipData.completedSessions = newCompleted;
+    if (newCompleted >= item.mentorshipData.totalSessions) {
+      item.currentStageId = 'completed';
+      item.currentStageName = 'Completed';
+      item.participationStatus = 'COMPLETED';
+    }
+
+    if (!item.activities) item.activities = [];
+    item.activities.unshift({
+      id: `act-${Date.now()}`,
+      itemId: id,
+      type: 'SESSION',
+      title: delta > 0 ? `Logged Mentorship Session (${newCompleted}/${item.mentorshipData.totalSessions})` : `Adjusted session count (${newCompleted}/${item.mentorshipData.totalSessions})`,
+      timestamp: new Date().toISOString()
+    });
+
+    this.saveApplication(item);
+    return item;
+  }
+
+  toggleDeliverable(id: string, deliverableId: string): JobApplication | undefined {
+    const item = this.getApplicationById(id);
+    if (!item || !item.hackathonData?.deliverables) return undefined;
+
+    const d = item.hackathonData.deliverables.find(x => x.id === deliverableId);
+    if (d) {
+      d.completed = !d.completed;
+      item.updatedAt = new Date().toISOString();
+      this.saveApplication(item);
+    }
+    return item;
+  }
+
+  addActivity(id: string, activity: TrackerActivity): JobApplication | undefined {
+    const item = this.getApplicationById(id);
+    if (!item) return undefined;
+
+    if (!item.activities) item.activities = [];
+    item.activities.unshift(activity);
+    this.saveApplication(item);
+    return item;
+  }
+
+  // --- Participation Unified Methods ---
+  addEvidenceItem(id: string, evidence: import('../types').ParticipationEvidenceItem): JobApplication | undefined {
+    const item = this.getApplicationById(id);
+    if (!item) return undefined;
+    if (!item.evidenceItems) item.evidenceItems = [];
+    item.evidenceItems.unshift(evidence);
+    this.addActivity(id, {
+      id: `act-${Date.now()}`,
+      itemId: id,
+      type: 'UPDATE',
+      title: `Added Evidence: ${evidence.title} (${evidence.type})`,
+      timestamp: new Date().toISOString()
+    });
+    this.saveApplication(item);
+    return item;
+  }
+
+  deleteEvidenceItem(id: string, evidenceId: string): JobApplication | undefined {
+    const item = this.getApplicationById(id);
+    if (!item || !item.evidenceItems) return undefined;
+    item.evidenceItems = item.evidenceItems.filter(e => e.id !== evidenceId);
+    this.saveApplication(item);
+    return item;
+  }
+
+  addFollowUpTask(id: string, task: import('../types').ParticipationFollowUpTask): JobApplication | undefined {
+    const item = this.getApplicationById(id);
+    if (!item) return undefined;
+    if (!item.followUpTasks) item.followUpTasks = [];
+    item.followUpTasks.push(task);
+    this.addActivity(id, {
+      id: `act-${Date.now()}`,
+      itemId: id,
+      type: 'TASK',
+      title: `Added Task: ${task.title}`,
+      timestamp: new Date().toISOString()
+    });
+    this.saveApplication(item);
+    return item;
+  }
+
+  toggleFollowUpTask(id: string, taskId: string): JobApplication | undefined {
+    const item = this.getApplicationById(id);
+    if (!item || !item.followUpTasks) return undefined;
+    const t = item.followUpTasks.find(x => x.id === taskId);
+    if (t) {
+      t.completed = !t.completed;
+      this.saveApplication(item);
+    }
+    return item;
+  }
+
+  updateParticipationUnifiedStatus(id: string, status: import('../types').UnifiedParticipationStatus): JobApplication | undefined {
+    const item = this.getApplicationById(id);
+    if (!item) return undefined;
+    item.unifiedStatus = status;
+    if (status === 'completed' || status === 'attended') {
+      item.participationStatus = 'COMPLETED';
+    } else if (status === 'saved') {
+      item.participationStatus = 'SAVED';
+    } else if (status === 'cancelled' || status === 'no_show') {
+      item.participationStatus = 'CANCELLED';
+    } else {
+      item.participationStatus = 'ACTIVE';
+    }
+    this.addActivity(id, {
+      id: `act-${Date.now()}`,
+      itemId: id,
+      type: 'STAGE_CHANGE',
+      title: `Status changed to ${status.toUpperCase()}`,
+      timestamp: new Date().toISOString()
+    });
+    this.saveApplication(item);
+    return item;
+  }
+
+  addTakeaway(id: string, takeaway: string): JobApplication | undefined {
+    const item = this.getApplicationById(id);
+    if (!item) return undefined;
+    if (!item.keyTakeaways) item.keyTakeaways = [];
+    item.keyTakeaways.push(takeaway.trim());
+    this.saveApplication(item);
+    return item;
+  }
+
+  linkParticipationEntity(
+    id: string, 
+    entityType: 'opportunity' | 'project' | 'knowledge' | 'blueprint', 
+    entityId: string, 
+    entityTitle: string
+  ): JobApplication | undefined {
+    const item = this.getApplicationById(id);
+    if (!item) return undefined;
+    if (entityType === 'opportunity') {
+      item.relatedOpportunityId = entityId;
+      item.relatedOpportunityTitle = entityTitle;
+    } else if (entityType === 'project') {
+      item.relatedProjectId = entityId;
+      item.relatedProjectTitle = entityTitle;
+    } else if (entityType === 'knowledge') {
+      item.relatedKnowledgeId = entityId;
+      item.relatedKnowledgeTitle = entityTitle;
+    } else if (entityType === 'blueprint') {
+      item.relatedBlueprintId = entityId;
+      item.relatedBlueprintTitle = entityTitle;
+    }
+    this.addActivity(id, {
+      id: `act-${Date.now()}`,
+      itemId: id,
+      type: 'UPDATE',
+      title: `Linked to ${entityType}: ${entityTitle}`,
+      timestamp: new Date().toISOString()
+    });
+    this.saveApplication(item);
+    return item;
+  }
+
+  resetParticipationSamples(): void {
+    const sampleApps: JobApplication[] = [
+      SEED_APPLICATION, 
+      SEED_APPLICATION_2, 
+      SEED_APPLICATION_3, 
+      SEED_APPLICATION_4, 
+      SEED_APPLICATION_5,
+      SEED_HACKATHON_1,
+      SEED_BUILDER_MATCH_1,
+      SEED_MENTORSHIP_1,
+      SEED_CREDENTIAL_1,
+      SEED_LEARNING_PROG_1,
+      SEED_WORKSHOP_1,
+      SEED_CONFERENCE_1,
+      SEED_MEETING_1,
+      SEED_WEBINAR_1,
+      SEED_VOLUNTEER_1,
+      SEED_SAVED_BOOTCAMP_1
+    ];
+    this.applications = sampleApps;
+    this.saveToStorage();
+  }
+
+  resetToDefaults(): void {
+    this.resetParticipationSamples();
+  }
+
+  createApplication(data: Partial<JobApplication>): JobApplication {
+    return this.createApplicationFromOpportunity(data);
   }
 
   saveApplication(app: JobApplication): JobApplication {

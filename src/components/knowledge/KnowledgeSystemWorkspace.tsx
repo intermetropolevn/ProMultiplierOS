@@ -3,15 +3,19 @@ import {
   Compass, 
   BookOpen, 
   Plus,
-  Sparkles
+  Sparkles,
+  Sliders,
+  ShieldCheck
 } from 'lucide-react';
 import { RoleBlueprintMappingWorkspace } from './roleBlueprintMapping/RoleBlueprintMappingWorkspace';
 import { LibraryHub } from '../library/LibraryHub';
+import { RoleIntelligenceWorkspace } from '../roleIntelligence/RoleIntelligenceWorkspace';
+import { EvidenceIntelligenceWorkspace } from '../evidenceIntelligence/EvidenceIntelligenceWorkspace';
 import { RoleBlueprint, InterviewQuestion, UserCareerProfile } from '../../types';
 import { UniversalSourceIngestionModal, InputMethod } from '../library/UniversalSourceIngestionModal';
 import { sourceStore } from '../../features/sources/services/sourceStore';
 
-export type KnowledgeChildDestination = 'role_blueprint_mapping' | 'global_knowledge_library';
+export type KnowledgeChildDestination = 'role_blueprint_mapping' | 'global_knowledge_library' | 'role_intelligence' | 'evidence_intelligence';
 
 interface KnowledgeSystemWorkspaceProps {
   initialDestination?: KnowledgeChildDestination;
@@ -25,6 +29,8 @@ interface KnowledgeSystemWorkspaceProps {
   onStartLivePractice?: (scenarioTitle?: string) => void;
   onNavigateToProfile?: () => void;
   onOpenSourceDetail?: (sourceId: string) => void;
+  onNavigateToOpportunities?: () => void;
+  onNavigateToParticipation?: () => void;
 }
 
 export const KnowledgeSystemWorkspace: React.FC<KnowledgeSystemWorkspaceProps> = ({
@@ -39,6 +45,8 @@ export const KnowledgeSystemWorkspace: React.FC<KnowledgeSystemWorkspaceProps> =
   onStartLivePractice,
   onNavigateToProfile,
   onOpenSourceDetail,
+  onNavigateToOpportunities,
+  onNavigateToParticipation,
 }) => {
   const [activeDestination, setActiveDestination] = useState<KnowledgeChildDestination>(initialDestination);
   const [isIngestionOpen, setIsIngestionOpen] = useState(false);
@@ -52,10 +60,10 @@ export const KnowledgeSystemWorkspace: React.FC<KnowledgeSystemWorkspaceProps> =
         <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-4">
           <div className="space-y-1">
             <h1 className="text-2xl sm:text-3xl font-black text-slate-900 tracking-tight">
-              Career Knowledge & Domain Intelligence
+              Career Knowledge &amp; Domain Intelligence
             </h1>
             <p className="text-xs sm:text-sm text-slate-500 font-medium">
-              Explore structural blueprints, industry encyclopedias, workflow SOPs, and the verified global knowledge corpus.
+              Explore structural blueprints, industry encyclopedias, workflow SOPs, and role intelligence evaluation models.
             </p>
           </div>
 
@@ -90,7 +98,41 @@ export const KnowledgeSystemWorkspace: React.FC<KnowledgeSystemWorkspaceProps> =
         </div>
 
         {/* Primary Knowledge System Mode Switch Directly Underneath */}
-        <div className="pt-3 border-t border-slate-100 flex items-center gap-2">
+        <div className="pt-3 border-t border-slate-100 flex items-center gap-2 flex-wrap">
+          <button
+            id="knowledge-dest-role-intelligence"
+            type="button"
+            onClick={() => setActiveDestination('role_intelligence')}
+            className={`px-4 py-2.5 rounded-xl text-xs sm:text-sm font-bold transition-all flex items-center gap-2 cursor-pointer ${
+              activeDestination === 'role_intelligence'
+                ? 'bg-blue-600 text-white shadow-xs ring-2 ring-blue-600/20'
+                : 'bg-slate-100 text-slate-600 hover:bg-slate-200 hover:text-slate-900 border border-slate-200'
+            }`}
+          >
+            <Sliders className={`w-4 h-4 ${activeDestination === 'role_intelligence' ? 'text-white' : 'text-slate-500'}`} />
+            <span>Role Intelligence &amp; Evaluation</span>
+            <span className={`text-[9px] uppercase font-black px-1.5 py-0.5 rounded ${activeDestination === 'role_intelligence' ? 'bg-white/20 text-white' : 'bg-blue-100 text-blue-700'}`}>
+              Featured
+            </span>
+          </button>
+
+          <button
+            id="knowledge-dest-evidence-intelligence"
+            type="button"
+            onClick={() => setActiveDestination('evidence_intelligence')}
+            className={`px-4 py-2.5 rounded-xl text-xs sm:text-sm font-bold transition-all flex items-center gap-2 cursor-pointer ${
+              activeDestination === 'evidence_intelligence'
+                ? 'bg-blue-600 text-white shadow-xs ring-2 ring-blue-600/20'
+                : 'bg-slate-100 text-slate-600 hover:bg-slate-200 hover:text-slate-900 border border-slate-200'
+            }`}
+          >
+            <ShieldCheck className={`w-4 h-4 ${activeDestination === 'evidence_intelligence' ? 'text-white' : 'text-slate-500'}`} />
+            <span>Evidence Intelligence</span>
+            <span className={`text-[9px] uppercase font-black px-1.5 py-0.5 rounded ${activeDestination === 'evidence_intelligence' ? 'bg-white/20 text-white' : 'bg-emerald-100 text-emerald-700'}`}>
+              Signals
+            </span>
+          </button>
+
           <button
             id="knowledge-dest-role-blueprints"
             type="button"
@@ -121,7 +163,29 @@ export const KnowledgeSystemWorkspace: React.FC<KnowledgeSystemWorkspaceProps> =
         </div>
       </div>
 
-      {/* Destination 1: Preferred Role Mapping */}
+      {/* Destination 1: Role Intelligence & Evaluation */}
+      {activeDestination === 'role_intelligence' && (
+        <div className="animate-in fade-in">
+          <RoleIntelligenceWorkspace
+            userProfile={profile}
+            onNavigateToLearning={() => setActiveDestination('global_knowledge_library')}
+            onNavigateToEvidenceIntelligence={() => setActiveDestination('evidence_intelligence')}
+            onNavigateToOpportunities={onNavigateToOpportunities}
+            onNavigateToParticipation={onNavigateToParticipation}
+          />
+        </div>
+      )}
+
+      {/* Destination 1b: Evidence Intelligence */}
+      {activeDestination === 'evidence_intelligence' && (
+        <div className="animate-in fade-in">
+          <EvidenceIntelligenceWorkspace
+            onNavigateToRoleIntelligence={() => setActiveDestination('role_intelligence')}
+          />
+        </div>
+      )}
+
+      {/* Destination 2: Preferred Role Mapping */}
       {activeDestination === 'role_blueprint_mapping' && (
         <div className="animate-in fade-in">
           <RoleBlueprintMappingWorkspace
@@ -135,7 +199,7 @@ export const KnowledgeSystemWorkspace: React.FC<KnowledgeSystemWorkspaceProps> =
         </div>
       )}
 
-      {/* Destination 2: Global Knowledge Library */}
+      {/* Destination 3: Global Knowledge Library */}
       {activeDestination === 'global_knowledge_library' && (
         <div className="animate-in fade-in">
           <LibraryHub
@@ -144,6 +208,7 @@ export const KnowledgeSystemWorkspace: React.FC<KnowledgeSystemWorkspaceProps> =
           />
         </div>
       )}
+
       {/* Universal Source Ingestion Modal */}
       {isIngestionOpen && (
         <UniversalSourceIngestionModal

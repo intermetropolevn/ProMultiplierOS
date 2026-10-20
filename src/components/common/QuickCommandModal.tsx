@@ -1,11 +1,13 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { Search, Briefcase, BookOpen, Sparkles, ArrowRight, X } from 'lucide-react';
+import { Search, Briefcase, BookOpen, Sparkles, ArrowRight, X, Sliders, ShieldCheck } from 'lucide-react';
 import { ROLES_DATA } from '../../data/rolesData';
 import { DOMAINS_DATA } from '../../data/domainsData';
 import { WORKFLOWS_DATA } from '../../data/workflowsData';
 import { CASES_DATA } from '../../data/casesData';
 import { JOBS_DATA } from '../../data/jobsData';
 import { industryStore } from '../../features/industry/services/industryStore';
+import { roleIntelligenceStore } from '../../features/roleIntelligence/services/roleIntelligenceStore';
+import { evidenceIntelligenceStore } from '../../features/evidenceIntelligence/services/evidenceIntelligenceStore';
 import { ActiveTab } from '../layout/Header';
 
 interface QuickCommandModalProps {
@@ -41,11 +43,13 @@ export const QuickCommandModal: React.FC<QuickCommandModalProps> = ({
     if (!q) {
       // Default suggested items
       return [
-        { type: 'Role Guide', title: 'Senior Backend Engineer', category: 'prepare', subType: 'role', id: 'role-backend-eng' },
-        { type: 'Domain Deep-Dive', title: 'Fintech & Payments', category: 'prepare', subType: 'domain', id: 'domain-fintech' },
-        { type: 'Workflow', title: 'Zero-Downtime Database Schema Migration', category: 'prepare', subType: 'workflow', id: 'wf-zero-downtime-migration' },
-        { type: 'Case Study', title: 'The Ghost Payment Bug (Idempotency)', category: 'prepare', subType: 'case', id: 'case-payment-double-spend' },
-        { type: 'Job Opportunity', title: 'Senior Backend Engineer at Stripe', category: 'discover', subType: 'job', id: 'job-stripe-backend' },
+        { type: 'Role Intelligence', title: 'Role Intelligence & Evaluation', category: 'role_intelligence' as ActiveTab, subType: 'intelligence', id: 'role-intel-workspace', description: 'Evaluate role complexity, 10-dimension radar, reference frameworks & leveling' },
+        { type: 'Evidence Intelligence', title: 'Evidence Intelligence Workspace', category: 'evidence_intelligence' as ActiveTab, subType: 'evidence', id: 'evidence-intel-workspace', description: 'Transform fragmented work activity into career evidence for promotion & mobility readiness' },
+        { type: 'Role Guide', title: 'Senior Backend Engineer', category: 'prepare' as ActiveTab, subType: 'role', id: 'role-backend-eng' },
+        { type: 'Domain Deep-Dive', title: 'Fintech & Payments', category: 'prepare' as ActiveTab, subType: 'domain', id: 'domain-fintech' },
+        { type: 'Workflow', title: 'Zero-Downtime Database Schema Migration', category: 'prepare' as ActiveTab, subType: 'workflow', id: 'wf-zero-downtime-migration' },
+        { type: 'Case Study', title: 'The Ghost Payment Bug (Idempotency)', category: 'prepare' as ActiveTab, subType: 'case', id: 'case-payment-double-spend' },
+        { type: 'Job Opportunity', title: 'Senior Backend Engineer at Stripe', category: 'discover' as ActiveTab, subType: 'job', id: 'job-stripe-backend' },
       ];
     }
 
@@ -57,6 +61,65 @@ export const QuickCommandModal: React.FC<QuickCommandModalProps> = ({
       id: string;
       description?: string;
     }> = [];
+
+    // Search Evidence Intelligence initiatives & items
+    const initiatives = evidenceIntelligenceStore.getInitiatives();
+    initiatives.forEach(init => {
+      if (init.title.toLowerCase().includes(q) || init.objective.toLowerCase().includes(q) || q.includes('evidence') || q.includes('initiative')) {
+        items.push({
+          type: 'Work Initiative',
+          title: init.title,
+          category: 'evidence_intelligence',
+          subType: 'initiative',
+          id: init.id,
+          description: `${init.activityCounts.tasks} tasks, ${init.activityCounts.documents} docs, ${init.activityCounts.experiments} experiments · ${init.userRole}`,
+        });
+      }
+    });
+
+    const confirmedEvidence = evidenceIntelligenceStore.getAllEvidence();
+    confirmedEvidence.forEach(ev => {
+      if (ev.title.toLowerCase().includes(q) || ev.description.toLowerCase().includes(q) || ev.skills.some(s => s.toLowerCase().includes(q))) {
+        items.push({
+          type: 'Career Evidence',
+          title: ev.title,
+          category: 'evidence_intelligence',
+          subType: 'evidence_item',
+          id: ev.id,
+          description: `${ev.contributionType} · ${ev.impactSummary}`,
+        });
+      }
+    });
+
+    // Search Role Intelligence Roles & Frameworks
+    const intelRoles = roleIntelligenceStore.getRoles();
+    intelRoles.forEach(ir => {
+      if (ir.title.toLowerCase().includes(q) || ir.jobFamily.toLowerCase().includes(q) || ir.domain.toLowerCase().includes(q)) {
+        items.push({
+          type: 'Role Intelligence',
+          title: `${ir.title} (${ir.levelMapping.levelCode})`,
+          category: 'role_intelligence',
+          subType: 'role_intel',
+          id: ir.id,
+          description: `Evaluated across CareerOS 10 dimensions, Radford, Hay, Mercer, WTW & Patterson`,
+        });
+      }
+    });
+
+    // Framework search
+    const frameworks = roleIntelligenceStore.getFrameworks();
+    frameworks.forEach(fw => {
+      if (fw.name.toLowerCase().includes(q) || fw.shortName.toLowerCase().includes(q) || fw.primaryPurpose.toLowerCase().includes(q) || q.includes('framework') || q.includes('level') || q.includes('eval')) {
+        items.push({
+          type: 'Evaluation Framework',
+          title: fw.name,
+          category: 'role_intelligence',
+          subType: 'framework',
+          id: fw.id,
+          description: fw.primaryPurpose.slice(0, 90) + '...',
+        });
+      }
+    });
 
     // Search Roles
     ROLES_DATA.forEach(r => {

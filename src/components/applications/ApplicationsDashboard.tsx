@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { 
   Briefcase, 
   Building2, 
@@ -6,70 +6,68 @@ import {
   Clock, 
   Plus, 
   Sparkles, 
-  ChevronRight, 
-  ChevronDown,
-  Check,
+  Check, 
   FileText, 
   Award, 
   Target, 
   TrendingUp, 
-  ShieldCheck, 
-  Trash2,
-  Filter,
-  Search,
-  ExternalLink,
-  Kanban,
-  List,
-  Video,
-  Copy,
-  Archive,
-  ArrowRight,
-  MoreVertical,
-  CheckCircle2,
-  AlertTriangle,
-  MapPin,
-  X
+  Trash2, 
+  Filter, 
+  Search, 
+  ExternalLink, 
+  Kanban, 
+  List, 
+  Video, 
+  Copy, 
+  Archive, 
+  ArrowRight, 
+  MoreVertical, 
+  CheckCircle2, 
+  AlertTriangle, 
+  MapPin, 
+  X,
+  Trophy,
+  Hammer,
+  Users,
+  Compass,
+  SlidersHorizontal,
+  Bookmark,
+  Upload,
+  Paperclip,
+  Share2,
+  Tv,
+  BookOpen,
+  Heart,
+  Layers,
+  CheckSquare
 } from 'lucide-react';
 import { 
   JobApplication, 
-  ApplicationPrimaryState,
-  ApplicationSubState,
-  CANONICAL_PIPELINE_STAGES,
+  ParticipationType,
+  ParticipationStatus,
+  UnifiedParticipationStatus,
+  PARTICIPATION_LIFECYCLES,
   UpcomingDeadlineItem 
 } from '../../features/applications/types';
 import { applicationStore } from '../../features/applications/services/applicationStore';
-import { AddApplicationModal } from './AddApplicationModal';
+import { TrackNewParticipationModal } from '../tracker/TrackNewParticipationModal';
+import { ImportParticipationModal } from '../tracker/ImportParticipationModal';
 import { StageTransitionModal } from '../tracker/StageTransitionModal';
 import { AddTestAssignmentModal } from '../tracker/AddTestAssignmentModal';
 import { ScheduleInterviewModal } from '../tracker/ScheduleInterviewModal';
 import { UpcomingDeadlinesWidget } from '../tracker/UpcomingDeadlinesWidget';
 import { PipelineBoardView } from '../tracker/PipelineBoardView';
 
+export type MainTimelineTab = 'all' | 'upcoming' | 'completed' | 'saved';
+
 interface ApplicationsDashboardProps {
   onSelectApplication: (applicationId: string) => void;
+  onNavigateToTab?: (tab: string) => void;
 }
-
-interface StateOption {
-  primary: ApplicationPrimaryState;
-  sub?: ApplicationSubState;
-  label: string;
-  dotColor: string;
-  badgeBg: string;
-}
-
-const PIPELINE_STATE_OPTIONS: StateOption[] = [
-  { primary: 'applied_screening', sub: 'applied', label: 'Applied', dotColor: 'bg-slate-900', badgeBg: 'bg-slate-100 text-slate-800 hover:bg-slate-200' },
-  { primary: 'applied_screening', sub: 'screening', label: 'HR screening', dotColor: 'bg-slate-500', badgeBg: 'bg-slate-100 text-slate-700 hover:bg-slate-200' },
-  { primary: 'assessment_case', sub: 'take_home', label: 'Take-home case', dotColor: 'bg-purple-500', badgeBg: 'bg-purple-50 text-purple-700 hover:bg-purple-100' },
-  { primary: 'interviews', sub: 'technical', label: '1st interview', dotColor: 'bg-pink-500', badgeBg: 'bg-pink-50 text-pink-700 hover:bg-pink-100' },
-  { primary: 'interviews', sub: 'panel', label: '2nd interview', dotColor: 'bg-blue-500', badgeBg: 'bg-blue-50 text-blue-700 hover:bg-blue-100' },
-  { primary: 'interviews', sub: 'final', label: 'Final interview', dotColor: 'bg-emerald-500', badgeBg: 'bg-emerald-50 text-emerald-700 hover:bg-emerald-100' },
-  { primary: 'offer_negotiation', sub: 'offer_received', label: 'Offer received', dotColor: 'bg-teal-500', badgeBg: 'bg-teal-50 text-teal-700 hover:bg-teal-100' },
-  { primary: 'archived_closed', sub: 'rejected', label: 'Archived / Closed', dotColor: 'bg-slate-400', badgeBg: 'bg-slate-100 text-slate-600 hover:bg-slate-200' },
-];
 
 export const ApplicationsDashboard: React.FC<ApplicationsDashboardProps> = ({
-  onSelectApplication
+  onSelectApplication,
+  onNavigateToTab
 }) => {
   const [applications, setApplications] = useState<JobApplication[]>(() => 
     applicationStore.getApplications()
@@ -78,14 +76,30 @@ export const ApplicationsDashboard: React.FC<ApplicationsDashboardProps> = ({
     applicationStore.getAllUpcomingDeadlines()
   );
 
-  // View state - List view default as in Image 2
+  // View state: List view default
   const [viewMode, setViewMode] = useState<'list' | 'board'>('list');
-  const [filterStage, setFilterStage] = useState<string>('All');
+  
+  // Section 3 Tabs: All, Upcoming, Completed, Saved
+  const [activeTab, setActiveTab] = useState<MainTimelineTab>('all');
+  
+  // Multi-Filters (Section 4)
+  const [typeFilter, setTypeFilter] = useState<string>('all');
+  const [statusFilter, setStatusFilter] = useState<string>('all');
+  const [dateFilter, setDateFilter] = useState<string>('all');
+  const [topicFilter, setTopicFilter] = useState<string>('all');
+  const [skillFilter, setSkillFilter] = useState<string>('all');
+  const [organizerFilter, setOrganizerFilter] = useState<string>('all');
+  const [locationFilter, setLocationFilter] = useState<string>('all'); // all, online, in_person
+  const [relatedOppFilter, setRelatedOppFilter] = useState<string>('all'); // all, has_opp
+  const [relatedProjFilter, setRelatedProjFilter] = useState<string>('all'); // all, has_proj
+  const [sortBy, setSortBy] = useState<'recommended' | 'newest' | 'date' | 'priority'>('recommended');
   const [searchQuery, setSearchQuery] = useState('');
-  const [activeDropdownAppId, setActiveDropdownAppId] = useState<string | null>(null);
+  const [showFilterPanel, setShowFilterPanel] = useState(false);
 
-  // Modals state
-  const [isAddModalOpen, setIsAddModalOpen] = useState(false);
+  // Modals
+  const [activeDropdownAppId, setActiveDropdownAppId] = useState<string | null>(null);
+  const [isTrackNewModalOpen, setIsTrackNewModalOpen] = useState(false);
+  const [isImportModalOpen, setIsImportModalOpen] = useState(false);
   const [transitionApp, setTransitionApp] = useState<JobApplication | null>(null);
   const [testModalAppId, setTestModalAppId] = useState<string | null>(null);
   const [isTestModalOpen, setIsTestModalOpen] = useState(false);
@@ -98,90 +112,267 @@ export const ApplicationsDashboard: React.FC<ApplicationsDashboardProps> = ({
     setDeadlines(applicationStore.getAllUpcomingDeadlines());
   };
 
-  // 1. Active Applications count (non-archived)
-  const activeAppsCount = useMemo(() => {
-    return applications.filter(a => a.pipelineState !== 'archived_closed').length;
+  useEffect(() => {
+    const handleUpdate = () => reloadData();
+    window.addEventListener('career_applications_updated', handleUpdate);
+    return () => window.removeEventListener('career_applications_updated', handleUpdate);
+  }, []);
+
+  // Helper: Determine if item is Saved, Completed, or Upcoming
+  const isItemSaved = (item: JobApplication): boolean => {
+    return item.unifiedStatus === 'saved' || 
+           item.participationStatus === 'SAVED' || 
+           item.pipelineSubState === 'wishlist' || 
+           item.status === 'WISHLIST';
+  };
+
+  const isItemCompleted = (item: JobApplication): boolean => {
+    return item.unifiedStatus === 'completed' || 
+           item.unifiedStatus === 'attended' || 
+           item.participationStatus === 'COMPLETED' || 
+           item.pipelineState === 'archived_closed' || 
+           item.status === 'ACCEPTED' || 
+           item.currentStageId === 'completed' || 
+           item.currentStageId === 'winner_completed' || 
+           item.currentStageId === 'certified' ||
+           item.currentStageId === 'outcome';
+  };
+
+  const isItemUpcoming = (item: JobApplication): boolean => {
+    if (isItemSaved(item) || isItemCompleted(item)) return false;
+    return true;
+  };
+
+  // Tab counts
+  const tabCounts = useMemo(() => {
+    return {
+      all: applications.length,
+      upcoming: applications.filter(isItemUpcoming).length,
+      completed: applications.filter(isItemCompleted).length,
+      saved: applications.filter(isItemSaved).length,
+    };
   }, [applications]);
 
-  // 2. Test Assignments count (assessments from applicationStore)
-  const testAssignmentsCount = useMemo(() => {
-    const storeAssessments = applicationStore.getAllAssessments();
-    const appTestsCount = applications.reduce((total, a) => {
-      const tests = a.testAssignments ? a.testAssignments.length : 0;
-      return total + tests;
-    }, 0);
-    return Math.max(storeAssessments.length, appTestsCount);
+  // Section 3: Summary Cards Metrics
+  const upcomingCount = tabCounts.upcoming;
+  const completedCount = tabCounts.completed;
+
+  const thisMonthCount = useMemo(() => {
+    const now = new Date();
+    const currentMonth = now.getMonth();
+    const currentYear = now.getFullYear();
+
+    return applications.filter(a => {
+      const dateToCheck = a.startDate || a.deadline || a.appliedAt || a.createdAt;
+      if (!dateToCheck) return false;
+      const d = new Date(dateToCheck);
+      return d.getMonth() === currentMonth && d.getFullYear() === currentYear;
+    }).length;
   }, [applications]);
 
-  // 3. Offers & Advanced count (directly synchronized with canonical offer_negotiation pipeline stage)
-  const offersAndAdvancedCount = useMemo(() => {
-    return applications.filter(a => a.pipelineState === 'offer_negotiation').length;
+  const totalParticipationCount = applications.length;
+
+  // Filter options lists
+  const uniqueTopics = useMemo(() => {
+    const set = new Set<string>();
+    applications.forEach(a => {
+      if (a.topics) a.topics.forEach(t => set.add(t));
+      if (a.domain) set.add(a.domain);
+    });
+    return Array.from(set).filter(Boolean).sort();
   }, [applications]);
 
-  // 4. Upcoming Deadlines / Tasks count (imminent deadlines & pending tasks)
-  const urgentTasksCount = useMemo(() => {
-    if (deadlines && deadlines.length > 0) {
-      return deadlines.length;
-    }
-    return applications.filter(a => a.deadline && a.pipelineState !== 'archived_closed').length;
-  }, [applications, deadlines]);
+  const uniqueSkills = useMemo(() => {
+    const set = new Set<string>();
+    applications.forEach(a => {
+      if (a.skillIds) a.skillIds.forEach(s => set.add(s));
+    });
+    return Array.from(set).filter(Boolean).sort();
+  }, [applications]);
 
-  // Filter applications by stage and search
-  const filteredApps = useMemo(() => {
+  const uniqueOrganizers = useMemo(() => {
+    const set = new Set<string>();
+    applications.forEach(a => {
+      if (a.organization) set.add(a.organization);
+      if (a.companyName) set.add(a.companyName);
+    });
+    return Array.from(set).filter(Boolean).sort();
+  }, [applications]);
+
+  // Active filters count
+  const activeFiltersCount = useMemo(() => {
+    let count = 0;
+    if (typeFilter !== 'all') count++;
+    if (statusFilter !== 'all') count++;
+    if (dateFilter !== 'all') count++;
+    if (topicFilter !== 'all') count++;
+    if (skillFilter !== 'all') count++;
+    if (organizerFilter !== 'all') count++;
+    if (locationFilter !== 'all') count++;
+    if (relatedOppFilter !== 'all') count++;
+    if (relatedProjFilter !== 'all') count++;
+    if (searchQuery.trim()) count++;
+    return count;
+  }, [
+    typeFilter, statusFilter, dateFilter, topicFilter, skillFilter, 
+    organizerFilter, locationFilter, relatedOppFilter, relatedProjFilter, searchQuery
+  ]);
+
+  const resetAllFilters = () => {
+    setTypeFilter('all');
+    setStatusFilter('all');
+    setDateFilter('all');
+    setTopicFilter('all');
+    setSkillFilter('all');
+    setOrganizerFilter('all');
+    setLocationFilter('all');
+    setRelatedOppFilter('all');
+    setRelatedProjFilter('all');
+    setSearchQuery('');
+  };
+
+  // Main Filter & Sort Logic
+  const filteredItems = useMemo(() => {
     return applications.filter(app => {
-      const primaryState = app.pipelineState || 'applied_screening';
-      
-      if (filterStage !== 'All' && primaryState !== filterStage) {
-        return false;
+      // 1. Primary Timeline Tab Filter (All, Upcoming, Completed, Saved)
+      if (activeTab === 'upcoming' && !isItemUpcoming(app)) return false;
+      if (activeTab === 'completed' && !isItemCompleted(app)) return false;
+      if (activeTab === 'saved' && !isItemSaved(app)) return false;
+
+      // 2. Participation Type Filter
+      if (typeFilter !== 'all') {
+        const pType = app.participationType || 'career_opportunity';
+        if (pType !== typeFilter) {
+          // Check aliases
+          if (typeFilter === 'hackathon' && pType !== 'challenge_hackathon') return false;
+          else if (typeFilter === 'career_opportunity' && pType !== 'interview' && pType !== 'assessment') return false;
+          else if (pType !== typeFilter) return false;
+        }
       }
 
+      // 3. Status Filter (Unified status)
+      if (statusFilter !== 'all') {
+        const uStatus = (app.unifiedStatus || app.participationStatus || app.status || '').toLowerCase();
+        if (uStatus !== statusFilter.toLowerCase()) return false;
+      }
+
+      // 4. Date Filter
+      if (dateFilter !== 'all') {
+        const dStr = app.startDate || app.deadline || app.appliedAt || app.createdAt;
+        if (!dStr) return false;
+        const targetDate = new Date(dStr);
+        const now = new Date();
+        const diffDays = Math.round((targetDate.getTime() - now.getTime()) / 86400000);
+
+        if (dateFilter === 'today' && Math.abs(diffDays) > 1) return false;
+        if (dateFilter === 'this_week' && (diffDays < -7 || diffDays > 7)) return false;
+        if (dateFilter === 'this_month') {
+          if (targetDate.getMonth() !== now.getMonth() || targetDate.getFullYear() !== now.getFullYear()) return false;
+        }
+        if (dateFilter === 'upcoming' && diffDays < 0) return false;
+        if (dateFilter === 'past' && diffDays > 0) return false;
+      }
+
+      // 5. Topic Filter
+      if (topicFilter !== 'all') {
+        const matchesTopic = (app.topics && app.topics.some(t => t.toLowerCase() === topicFilter.toLowerCase())) ||
+                             (app.domain && app.domain.toLowerCase() === topicFilter.toLowerCase());
+        if (!matchesTopic) return false;
+      }
+
+      // 6. Skill Filter
+      if (skillFilter !== 'all') {
+        const matchesSkill = app.skillIds && app.skillIds.some(s => s.toLowerCase() === skillFilter.toLowerCase());
+        if (!matchesSkill) return false;
+      }
+
+      // 7. Organizer Filter
+      if (organizerFilter !== 'all') {
+        const org = (app.organization || app.companyName || '').toLowerCase();
+        if (org !== organizerFilter.toLowerCase()) return false;
+      }
+
+      // 8. Location / Online Filter
+      if (locationFilter !== 'all') {
+        if (locationFilter === 'online' && !app.isOnline && !app.location?.toLowerCase().includes('remote') && !app.location?.toLowerCase().includes('online')) return false;
+        if (locationFilter === 'in_person' && app.isOnline) return false;
+      }
+
+      // 9. Related Opportunity Filter
+      if (relatedOppFilter === 'has_opp') {
+        if (!app.relatedOpportunityId && !app.relatedOpportunityTitle && !app.jobOpportunityId) return false;
+      }
+
+      // 10. Related Project Filter
+      if (relatedProjFilter === 'has_proj') {
+        if (!app.relatedProjectId && !app.relatedProjectTitle && !app.hackathonData?.projectName) return false;
+      }
+
+      // 11. Search Query
       if (searchQuery.trim()) {
-        const q = searchQuery.toLowerCase();
-        const matchesCompany = app.companyName.toLowerCase().includes(q);
-        const matchesRole = app.roleTitle.toLowerCase().includes(q);
-        const matchesLocation = app.location && app.location.toLowerCase().includes(q);
+        const q = searchQuery.toLowerCase().trim();
+        const matchesTitle = app.roleTitle.toLowerCase().includes(q);
+        const matchesOrg = (app.organization || app.companyName || '').toLowerCase().includes(q);
+        const matchesDesc = (app.description || '').toLowerCase().includes(q);
+        const matchesNotes = (app.notes || '').toLowerCase().includes(q);
+        const matchesTopics = app.topics && app.topics.some(t => t.toLowerCase().includes(q));
         const matchesSkills = app.skillIds && app.skillIds.some(s => s.toLowerCase().includes(q));
-        return matchesCompany || matchesRole || matchesLocation || matchesSkills;
+        const matchesRole = (app.participationRole || '').toLowerCase().includes(q);
+        const matchesType = (app.participationType || '').toLowerCase().includes(q);
+
+        if (!matchesTitle && !matchesOrg && !matchesDesc && !matchesNotes && !matchesTopics && !matchesSkills && !matchesRole && !matchesType) {
+          return false;
+        }
       }
 
       return true;
-    });
-  }, [applications, filterStage, searchQuery]);
-
-  // Stage counts for filter pills
-  const stageStats = useMemo(() => {
-    const counts: Record<string, number> = {
-      applied_screening: 0,
-      assessment_case: 0,
-      interviews: 0,
-      offer_negotiation: 0,
-      archived_closed: 0
-    };
-    applications.forEach(a => {
-      const state = a.pipelineState || 'applied_screening';
-      if (counts[state] !== undefined) {
-        counts[state]++;
+    }).sort((a, b) => {
+      if (sortBy === 'newest') {
+        return new Date(b.createdAt || '').getTime() - new Date(a.createdAt || '').getTime();
       }
+      if (sortBy === 'date') {
+        const dateA = a.startDate || a.deadline || a.createdAt || '';
+        const dateB = b.startDate || b.deadline || b.createdAt || '';
+        return new Date(dateA).getTime() - new Date(dateB).getTime();
+      }
+      if (sortBy === 'priority') {
+        const weight: Record<string, number> = { CRITICAL: 4, HIGH: 3, MEDIUM: 2, LOW: 1 };
+        return (weight[b.priority || 'MEDIUM'] || 0) - (weight[a.priority || 'MEDIUM'] || 0);
+      }
+      // 'recommended'
+      return 0;
     });
-    return counts;
-  }, [applications]);
+  }, [
+    applications, 
+    activeTab, 
+    typeFilter, 
+    statusFilter, 
+    dateFilter, 
+    topicFilter, 
+    skillFilter, 
+    organizerFilter, 
+    locationFilter, 
+    relatedOppFilter, 
+    relatedProjFilter, 
+    sortBy, 
+    searchQuery
+  ]);
 
-  const handleStateChange = (appId: string, primary: ApplicationPrimaryState, sub?: ApplicationSubState) => {
-    applicationStore.moveApplicationToState(
-      appId,
-      primary,
-      sub,
-      `State updated from pipeline to ${primary}${sub ? ' (' + sub + ')' : ''}`
-    );
-    setActiveDropdownAppId(null);
+  // Handlers
+  const handleStateAdvance = (appId: string, nextStageId: string, nextStageName: string) => {
+    applicationStore.updateParticipationStage(appId, nextStageId, nextStageName);
+    reloadData();
+  };
+
+  const handleQuickStatusChange = (appId: string, nextStatus: UnifiedParticipationStatus, e: React.MouseEvent) => {
+    e.stopPropagation();
+    applicationStore.updateParticipationUnifiedStatus(appId, nextStatus);
     reloadData();
   };
 
   const handleDuplicate = (appId: string) => {
     const dup = applicationStore.duplicateApplication(appId);
-    if (dup) {
-      reloadData();
-    }
+    if (dup) reloadData();
   };
 
   const handleArchive = (appId: string) => {
@@ -191,258 +382,620 @@ export const ApplicationsDashboard: React.FC<ApplicationsDashboardProps> = ({
 
   const handleDelete = (id: string, e?: React.MouseEvent) => {
     if (e) e.stopPropagation();
-    if (confirm('Are you sure you want to remove this application?')) {
+    if (confirm('Are you sure you want to remove this participation record?')) {
       applicationStore.deleteApplication(id);
       reloadData();
     }
   };
 
-  const getCurrentStateLabel = (app: JobApplication): string => {
-    const match = PIPELINE_STATE_OPTIONS.find(
-      opt => opt.primary === app.pipelineState && opt.sub === app.pipelineSubState
-    );
-    if (match) return match.label;
-
-    if (app.pipelineSubState) {
-      return app.pipelineSubState.replace(/_/g, ' ');
+  // Type-specific icon renderer
+  const getTypeIcon = (type?: ParticipationType) => {
+    switch (type) {
+      case 'workshop': return <Sparkles className="w-4 h-4 text-amber-600" />;
+      case 'conference': return <Users className="w-4 h-4 text-indigo-600" />;
+      case 'meeting': return <Calendar className="w-4 h-4 text-slate-700" />;
+      case 'webinar': return <Tv className="w-4 h-4 text-teal-600" />;
+      case 'seminar': return <BookOpen className="w-4 h-4 text-cyan-600" />;
+      case 'meetup': return <Compass className="w-4 h-4 text-emerald-600" />;
+      case 'networking': return <Share2 className="w-4 h-4 text-violet-600" />;
+      case 'bootcamp': return <Award className="w-4 h-4 text-amber-700" />;
+      case 'hackathon':
+      case 'challenge_hackathon': return <Trophy className="w-4 h-4 text-rose-600" />;
+      case 'competition': return <Target className="w-4 h-4 text-orange-600" />;
+      case 'community': return <Hammer className="w-4 h-4 text-lime-700" />;
+      case 'volunteer': return <Heart className="w-4 h-4 text-pink-600" />;
+      case 'interview': return <Video className="w-4 h-4 text-blue-600" />;
+      case 'assessment': return <FileText className="w-4 h-4 text-purple-600" />;
+      default: return <Briefcase className="w-4 h-4 text-blue-600" />;
     }
-    const stage = CANONICAL_PIPELINE_STAGES.find(s => s.id === app.pipelineState);
-    return stage?.title || 'Applied';
   };
 
-  const getCurrentStateDot = (app: JobApplication): string => {
-    const match = PIPELINE_STATE_OPTIONS.find(
-      opt => opt.primary === app.pipelineState && opt.sub === app.pipelineSubState
-    );
-    if (match) return match.dotColor;
+  const getTypeLabel = (type?: ParticipationType) => {
+    if (!type) return 'Workshop';
+    if (type === 'challenge_hackathon') return 'Hackathon';
+    if (type === 'career_opportunity') return 'Career Opportunity';
+    if (type === 'builder_match') return 'Builder Match';
+    if (type === 'mentor_mentee') return 'Mentorship';
+    if (type === 'learning_program') return 'Bootcamp';
+    return type.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
+  };
 
-    switch (app.pipelineState) {
-      case 'applied_screening': return 'bg-slate-900';
-      case 'assessment_case': return 'bg-purple-500';
-      case 'interviews': return 'bg-blue-500';
-      case 'offer_negotiation': return 'bg-teal-500';
-      case 'archived_closed': return 'bg-slate-400';
-      default: return 'bg-blue-500';
+  const getStatusBadgeColor = (status?: string) => {
+    const s = (status || 'registered').toLowerCase();
+    switch (s) {
+      case 'saved': return 'text-slate-700 bg-slate-100 border-slate-300';
+      case 'invited': return 'text-purple-700 bg-purple-50 border-purple-200';
+      case 'registered': return 'text-blue-700 bg-blue-50 border-blue-200';
+      case 'confirmed': return 'text-indigo-700 bg-indigo-50 border-indigo-200';
+      case 'attended': return 'text-amber-800 bg-amber-50 border-amber-200';
+      case 'completed': return 'text-emerald-800 bg-emerald-50 border-emerald-200';
+      case 'cancelled': return 'text-rose-700 bg-rose-50 border-rose-200';
+      case 'no_show': return 'text-slate-600 bg-slate-200 border-slate-300';
+      default: return 'text-blue-700 bg-blue-50 border-blue-200';
     }
   };
 
   return (
     <div className="space-y-6">
       
-      {/* UNIFIED BANNER & CONTROL SURFACE */}
+      {/* ==================================================
+          1. HEADER & PRIMARY CTAs (Section 3)
+          ================================================== */}
       <div className="bg-white rounded-2xl border border-slate-200/90 shadow-2xs p-5 sm:p-6 space-y-4">
-        {/* ROW 1: Heading & Supporting Description (LEFT) + Primary Quick Actions (RIGHT) */}
+        
+        {/* ROW 1: Title, Subtitle, and Primary Actions */}
         <div className="flex flex-col md:flex-row md:items-start md:justify-between gap-4">
           <div className="space-y-1">
-            <h1 className="text-xl sm:text-2xl font-bold tracking-tight text-slate-900">
-              Application Pipeline &amp; Case Tracker
+            <div className="flex items-center gap-2">
+              <span className="text-[10px] font-black uppercase tracking-wider px-2 py-0.5 rounded-full bg-blue-50 text-blue-700 border border-blue-200">
+                Participation Tracker
+              </span>
+              <span className="text-slate-300">·</span>
+              <span className="text-2xs text-slate-500 font-medium">Career Activities &amp; Engagements</span>
+            </div>
+            <h1 className="text-xl sm:text-2xl font-black tracking-tight text-slate-900">
+              Participation Tracker
             </h1>
             <p className="text-xs sm:text-sm text-slate-500 font-normal max-w-2xl leading-relaxed">
-              Centralized canonical stage progression, upcoming technical case assignments, interview schedules, and integrated workspaces.
+              Track professional activities, learning experiences, events, meetings, and career-related engagements.
             </p>
           </div>
 
-          {/* Quick Actions in top-right corner */}
-          <div className="flex items-center gap-2.5 shrink-0 self-start">
+          {/* Top Actions: Secondary actions + Primary CTA */}
+          <div className="flex items-center gap-2 flex-wrap shrink-0 self-start">
+            
+            {/* Import Button (Secondary) */}
             <button
-              onClick={() => setIsDeadlinesModalOpen(true)}
-              className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg text-xs font-semibold bg-slate-50 hover:bg-slate-100 text-slate-700 border border-slate-200/80 transition-colors shadow-2xs cursor-pointer"
+              id="btn-import-participation"
+              type="button"
+              onClick={() => setIsImportModalOpen(true)}
+              className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-semibold bg-white hover:bg-slate-50 text-slate-700 border border-slate-200/90 transition-colors shadow-2xs cursor-pointer"
+              title="Import Activities & Sample Pack"
             >
-              <Calendar className="w-3.5 h-3.5 text-slate-500" />
-              <span>Upcoming Deadlines ({urgentTasksCount})</span>
+              <Upload className="w-3.5 h-3.5 text-slate-500" />
+              <span>Import</span>
             </button>
+
+            {/* Filter Toggle Button */}
             <button
-              id="btn-add-application-primary"
-              onClick={() => setIsAddModalOpen(true)}
-              className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg text-xs font-semibold bg-blue-600 hover:bg-blue-700 text-white transition-colors shadow-2xs cursor-pointer"
+              type="button"
+              onClick={() => setShowFilterPanel(!showFilterPanel)}
+              className={`flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-semibold border transition-colors shadow-2xs cursor-pointer ${
+                showFilterPanel || activeFiltersCount > 0
+                  ? 'bg-blue-50 text-blue-700 border-blue-200'
+                  : 'bg-white hover:bg-slate-50 text-slate-700 border-slate-200/90'
+              }`}
             >
-              <Plus className="w-3.5 h-3.5 text-white" />
-              <span>+ New Application</span>
+              <Filter className="w-3.5 h-3.5" />
+              <span>Filter</span>
+              {activeFiltersCount > 0 && (
+                <span className="w-4 h-4 rounded-full bg-blue-600 text-white text-[10px] flex items-center justify-center font-bold">
+                  {activeFiltersCount}
+                </span>
+              )}
+            </button>
+
+            {/* Primary CTA: + Add Participation */}
+            <button
+              id="btn-add-participation-primary"
+              type="button"
+              onClick={() => setIsTrackNewModalOpen(true)}
+              className="flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-bold bg-blue-600 hover:bg-blue-700 text-white transition-all shadow-xs cursor-pointer"
+            >
+              <Plus className="w-4 h-4 text-white stroke-[2.5]" />
+              <span>+ Add Participation</span>
             </button>
           </div>
         </div>
 
-        {/* ROW 2: Primary Tracker Mode Controls */}
-        <div className="pt-2 border-t border-slate-100 flex flex-wrap items-center justify-between gap-3">
-          <div className="inline-flex p-1 bg-slate-100/90 rounded-xl border border-slate-200/80 text-xs font-medium">
+        {/* ROW 2: Primary Tabs (Section 3: All, Upcoming, Completed, Saved) + View Switcher */}
+        <div className="pt-2 border-t border-slate-100 flex items-center justify-between gap-3 flex-wrap">
+          
+          {/* Main Tabs */}
+          <div className="flex items-center gap-1 overflow-x-auto no-scrollbar py-1">
+            
+            {/* Tab: All */}
             <button
+              type="button"
+              onClick={() => setActiveTab('all')}
+              className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer whitespace-nowrap ${
+                activeTab === 'all'
+                  ? 'bg-slate-900 text-white shadow-2xs'
+                  : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
+              }`}
+            >
+              All ({tabCounts.all})
+            </button>
+
+            {/* Tab: Upcoming */}
+            <button
+              type="button"
+              onClick={() => setActiveTab('upcoming')}
+              className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 whitespace-nowrap ${
+                activeTab === 'upcoming'
+                  ? 'bg-blue-600 text-white shadow-2xs'
+                  : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
+              }`}
+            >
+              <Clock className="w-3.5 h-3.5" />
+              <span>Upcoming ({tabCounts.upcoming})</span>
+            </button>
+
+            {/* Tab: Completed */}
+            <button
+              type="button"
+              onClick={() => setActiveTab('completed')}
+              className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 whitespace-nowrap ${
+                activeTab === 'completed'
+                  ? 'bg-emerald-600 text-white shadow-2xs'
+                  : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
+              }`}
+            >
+              <CheckCircle2 className="w-3.5 h-3.5" />
+              <span>Completed ({tabCounts.completed})</span>
+            </button>
+
+            {/* Tab: Saved */}
+            <button
+              type="button"
+              onClick={() => setActiveTab('saved')}
+              className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 whitespace-nowrap ${
+                activeTab === 'saved'
+                  ? 'bg-purple-600 text-white shadow-2xs'
+                  : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
+              }`}
+            >
+              <Bookmark className="w-3.5 h-3.5" />
+              <span>Saved ({tabCounts.saved})</span>
+            </button>
+
+          </div>
+
+          {/* View Mode Switcher: List View vs Stage Board */}
+          <div className="inline-flex p-1 bg-slate-100/90 rounded-xl border border-slate-200/80 text-xs font-medium shrink-0">
+            <button
+              type="button"
               id="view-mode-list-btn"
               onClick={() => setViewMode('list')}
-              className={`flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
                 viewMode === 'list'
                   ? 'bg-white text-slate-900 shadow-2xs border border-slate-200/60'
                   : 'text-slate-600 hover:text-slate-900 hover:bg-white/50'
               }`}
             >
-              <List className="w-4 h-4 text-blue-600" />
+              <List className="w-3.5 h-3.5 text-blue-600" />
               <span>List View</span>
             </button>
 
             <button
+              type="button"
               id="view-mode-board-btn"
               onClick={() => setViewMode('board')}
-              className={`flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
                 viewMode === 'board'
                   ? 'bg-white text-slate-900 shadow-2xs border border-slate-200/60'
                   : 'text-slate-600 hover:text-slate-900 hover:bg-white/50'
               }`}
             >
-              <Kanban className="w-4 h-4 text-purple-600" />
-              <span>Pipeline Board</span>
+              <Kanban className="w-3.5 h-3.5 text-purple-600" />
+              <span>Stage Board</span>
             </button>
           </div>
 
-          <div className="text-xs text-slate-500 font-medium hidden sm:block">
-            {viewMode === 'list'
-              ? 'Detailed chronological & stage records with contextual actions'
-              : 'Visual stage columns with drag-and-drop progression'}
-          </div>
         </div>
+
       </div>
 
-      {/* 2. Four Summary Metric Cards */}
+      {/* ==================================================
+          2. FOUR SUMMARY METRIC CARDS (Section 3)
+          ================================================== */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         
-        {/* Card 1: ACTIVE APPLICATIONS */}
-        <div className="bg-white p-4 sm:p-5 rounded-2xl border border-slate-200/90 shadow-2xs hover:border-slate-300 transition-all flex flex-col justify-between">
-          <div className="flex items-center justify-between mb-3">
-            <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500">
-              Active Applications
-            </span>
-            <span className="p-1.5 rounded-lg bg-blue-50 text-blue-600">
-              <Briefcase className="w-4 h-4" />
-            </span>
-          </div>
-          <div className="flex items-baseline justify-between">
-            <span className="text-2xl font-bold tracking-tight text-slate-900">{activeAppsCount}</span>
-            <span className="text-xs text-slate-500 font-medium">In pipeline</span>
-          </div>
-        </div>
-
-        {/* Card 2: TEST ASSIGNMENTS */}
+        {/* Card 1: UPCOMING */}
         <div 
-          onClick={() => {
-            setTestModalAppId(applications[0]?.id || null);
-            setIsTestModalOpen(true);
-          }}
-          className="bg-white p-4 sm:p-5 rounded-2xl border border-slate-200/90 shadow-2xs hover:border-slate-300 transition-all flex flex-col justify-between cursor-pointer group"
+          onClick={() => setActiveTab('upcoming')}
+          className="bg-white p-4 sm:p-5 rounded-2xl border border-slate-200/90 shadow-2xs hover:border-blue-300 transition-all flex flex-col justify-between cursor-pointer group"
         >
           <div className="flex items-center justify-between mb-3">
-            <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500 group-hover:text-slate-700 transition-colors">
-              Test Assignments
+            <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500 group-hover:text-blue-700 transition-colors">
+              Upcoming
             </span>
-            <span className="p-1.5 rounded-lg bg-purple-50 text-purple-600 group-hover:bg-purple-100 transition-colors">
-              <FileText className="w-4 h-4" />
-            </span>
-          </div>
-          <div className="flex items-baseline justify-between">
-            <span className="text-2xl font-bold tracking-tight text-slate-900">{testAssignmentsCount}</span>
-            <span className="text-xs text-slate-500 font-medium">Assignments logged</span>
-          </div>
-        </div>
-
-        {/* Card 3: OFFERS & ADVANCED */}
-        <div 
-          onClick={() => setFilterStage('offer_negotiation')}
-          className="bg-white p-4 sm:p-5 rounded-2xl border border-slate-200/90 shadow-2xs hover:border-slate-300 transition-all flex flex-col justify-between cursor-pointer group"
-        >
-          <div className="flex items-center justify-between mb-3">
-            <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500 group-hover:text-slate-700 transition-colors">
-              Offers &amp; Advanced
-            </span>
-            <span className="p-1.5 rounded-lg bg-emerald-50 text-emerald-600 group-hover:bg-emerald-100 transition-colors">
-              <Award className="w-4 h-4" />
-            </span>
-          </div>
-          <div className="flex items-baseline justify-between">
-            <span className="text-2xl font-bold tracking-tight text-slate-900">{offersAndAdvancedCount}</span>
-            <span className="text-xs text-slate-500 font-medium">Near final</span>
-          </div>
-        </div>
-
-        {/* Card 4: UPCOMING DEADLINES */}
-        <div 
-          onClick={() => setIsDeadlinesModalOpen(true)}
-          className="bg-white p-4 sm:p-5 rounded-2xl border border-slate-200/90 shadow-2xs hover:border-slate-300 transition-all flex flex-col justify-between cursor-pointer group"
-        >
-          <div className="flex items-center justify-between mb-3">
-            <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500 group-hover:text-slate-700 transition-colors">
-              Upcoming Deadlines
-            </span>
-            <span className="p-1.5 rounded-lg bg-rose-50 text-rose-600 group-hover:bg-rose-100 transition-colors">
+            <span className="p-1.5 rounded-lg bg-blue-50 text-blue-600 group-hover:bg-blue-100 transition-colors">
               <Clock className="w-4 h-4" />
             </span>
           </div>
           <div className="flex items-baseline justify-between">
-            <span className="text-2xl font-bold tracking-tight text-slate-900">{urgentTasksCount}</span>
-            <span className="text-xs text-slate-500 font-medium">Tasks pending</span>
+            <span className="text-2xl font-black tracking-tight text-slate-900">{upcomingCount}</span>
+            <span className="text-xs text-slate-500 font-medium">Scheduled activities</span>
+          </div>
+        </div>
+
+        {/* Card 2: COMPLETED */}
+        <div 
+          onClick={() => setActiveTab('completed')}
+          className="bg-white p-4 sm:p-5 rounded-2xl border border-slate-200/90 shadow-2xs hover:border-emerald-300 transition-all flex flex-col justify-between cursor-pointer group"
+        >
+          <div className="flex items-center justify-between mb-3">
+            <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500 group-hover:text-emerald-700 transition-colors">
+              Completed
+            </span>
+            <span className="p-1.5 rounded-lg bg-emerald-50 text-emerald-600 group-hover:bg-emerald-100 transition-colors">
+              <CheckCircle2 className="w-4 h-4" />
+            </span>
+          </div>
+          <div className="flex items-baseline justify-between">
+            <span className="text-2xl font-black tracking-tight text-slate-900">{completedCount}</span>
+            <span className="text-xs text-slate-500 font-medium">Attended &amp; verified</span>
+          </div>
+        </div>
+
+        {/* Card 3: THIS MONTH */}
+        <div 
+          onClick={() => {
+            setDateFilter('this_month');
+            setShowFilterPanel(true);
+          }}
+          className="bg-white p-4 sm:p-5 rounded-2xl border border-slate-200/90 shadow-2xs hover:border-amber-300 transition-all flex flex-col justify-between cursor-pointer group"
+        >
+          <div className="flex items-center justify-between mb-3">
+            <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500 group-hover:text-amber-700 transition-colors">
+              This Month
+            </span>
+            <span className="p-1.5 rounded-lg bg-amber-50 text-amber-600 group-hover:bg-amber-100 transition-colors">
+              <Calendar className="w-4 h-4" />
+            </span>
+          </div>
+          <div className="flex items-baseline justify-between">
+            <span className="text-2xl font-black tracking-tight text-slate-900">{thisMonthCount}</span>
+            <span className="text-xs text-slate-500 font-medium">Active this month</span>
+          </div>
+        </div>
+
+        {/* Card 4: TOTAL PARTICIPATION */}
+        <div 
+          onClick={() => {
+            setActiveTab('all');
+            resetAllFilters();
+          }}
+          className="bg-white p-4 sm:p-5 rounded-2xl border border-slate-200/90 shadow-2xs hover:border-purple-300 transition-all flex flex-col justify-between cursor-pointer group"
+        >
+          <div className="flex items-center justify-between mb-3">
+            <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500 group-hover:text-purple-700 transition-colors">
+              Total Participation
+            </span>
+            <span className="p-1.5 rounded-lg bg-purple-50 text-purple-600 group-hover:bg-purple-100 transition-colors">
+              <Layers className="w-4 h-4" />
+            </span>
+          </div>
+          <div className="flex items-baseline justify-between">
+            <span className="text-2xl font-black tracking-tight text-slate-900">{totalParticipationCount}</span>
+            <span className="text-xs text-slate-500 font-medium">Across all types</span>
           </div>
         </div>
 
       </div>
 
-      {/* 3. Pipeline Filter Bar & Search */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 pt-1">
+      {/* ==================================================
+          3. MULTI-FILTERS & SEARCH BAR (Section 4)
+          ================================================== */}
+      <div className="bg-white rounded-2xl border border-slate-200/90 shadow-2xs p-3.5 sm:p-4 space-y-3">
         
-        {/* Stage Filter Controls */}
-        <div className="flex items-center p-1 bg-slate-100/90 rounded-xl border border-slate-200/80 text-xs font-medium overflow-x-auto max-w-full">
-          <button
-            type="button"
-            onClick={() => setFilterStage('All')}
-            className={`px-3 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap transition-all cursor-pointer ${
-              filterStage === 'All'
-                ? 'bg-white text-slate-900 shadow-2xs border border-slate-200/60'
-                : 'text-slate-600 hover:text-slate-900 hover:bg-white/50'
-            }`}
-          >
-            All Stages · {applications.length}
-          </button>
-
-          {CANONICAL_PIPELINE_STAGES.map(s => {
-            const count = stageStats[s.id] || 0;
-            const isSelected = filterStage === s.id;
-            return (
-              <button
-                key={s.id}
+        {/* Top Search & Primary Filters */}
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
+          
+          {/* Search Input */}
+          <div className="relative flex-1 max-w-md">
+            <Search className="w-4 h-4 text-slate-400 absolute left-3 top-2.5" />
+            <input
+              type="text"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder="Search activity title, organizer, topic, skill, notes..."
+              className="w-full pl-9 pr-8 py-1.5 text-xs bg-slate-50 border border-slate-200 rounded-xl text-slate-900 placeholder:text-slate-400 focus:outline-hidden focus:ring-2 focus:ring-blue-500 focus:bg-white transition-all"
+            />
+            {searchQuery && (
+              <button 
                 type="button"
-                onClick={() => setFilterStage(s.id)}
-                className={`px-3 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap transition-all cursor-pointer ${
-                  isSelected
-                    ? 'bg-white text-slate-900 shadow-2xs border border-slate-200/60'
-                    : 'text-slate-600 hover:text-slate-900 hover:bg-white/50'
-                }`}
+                onClick={() => setSearchQuery('')}
+                className="absolute right-2.5 top-2 text-slate-400 hover:text-slate-600 p-0.5"
               >
-                {s.title} · {count}
+                <X className="w-3.5 h-3.5" />
               </button>
-            );
-          })}
+            )}
+          </div>
+
+          {/* Quick Select Filters */}
+          <div className="flex items-center gap-2 flex-wrap">
+            
+            {/* Filter 1: Participation Type */}
+            <select
+              value={typeFilter}
+              onChange={(e) => setTypeFilter(e.target.value)}
+              className="bg-slate-50 border border-slate-200 rounded-xl px-2.5 py-1.5 text-xs font-semibold text-slate-700 cursor-pointer"
+            >
+              <option value="all">Type: All</option>
+              <option value="workshop">Workshop</option>
+              <option value="conference">Conference</option>
+              <option value="meeting">Meeting</option>
+              <option value="webinar">Webinar</option>
+              <option value="seminar">Seminar</option>
+              <option value="meetup">Meetup</option>
+              <option value="networking">Networking Event</option>
+              <option value="bootcamp">Bootcamp</option>
+              <option value="hackathon">Hackathon</option>
+              <option value="competition">Competition</option>
+              <option value="community">Community Event</option>
+              <option value="volunteer">Volunteer / NGO</option>
+              <option value="interview">Interview</option>
+              <option value="assessment">Assessment / Case</option>
+              <option value="career_opportunity">Career Opportunity</option>
+              <option value="builder_match">Builder Match</option>
+              <option value="other">Other</option>
+            </select>
+
+            {/* Filter 2: Unified Status */}
+            <select
+              value={statusFilter}
+              onChange={(e) => setStatusFilter(e.target.value)}
+              className="bg-slate-50 border border-slate-200 rounded-xl px-2.5 py-1.5 text-xs font-semibold text-slate-700 cursor-pointer"
+            >
+              <option value="all">Status: All</option>
+              <option value="saved">Saved</option>
+              <option value="invited">Invited</option>
+              <option value="registered">Registered</option>
+              <option value="confirmed">Confirmed</option>
+              <option value="attended">Attended</option>
+              <option value="completed">Completed</option>
+              <option value="cancelled">Cancelled</option>
+              <option value="no_show">No-Show</option>
+            </select>
+
+            {/* Filter 3: Date */}
+            <select
+              value={dateFilter}
+              onChange={(e) => setDateFilter(e.target.value)}
+              className="bg-slate-50 border border-slate-200 rounded-xl px-2.5 py-1.5 text-xs font-semibold text-slate-700 cursor-pointer"
+            >
+              <option value="all">Date: Any Time</option>
+              <option value="today">Today</option>
+              <option value="this_week">This Week</option>
+              <option value="this_month">This Month</option>
+              <option value="upcoming">Upcoming</option>
+              <option value="past">Past / Completed</option>
+            </select>
+
+            {/* Sorter */}
+            <select
+              value={sortBy}
+              onChange={(e) => setSortBy(e.target.value as any)}
+              className="bg-slate-50 border border-slate-200 rounded-xl px-2.5 py-1.5 text-xs font-semibold text-slate-700 cursor-pointer"
+            >
+              <option value="recommended">Sort: Recommended</option>
+              <option value="date">Sort: By Date</option>
+              <option value="newest">Sort: Recently Added</option>
+              <option value="priority">Sort: Highest Priority</option>
+            </select>
+
+            {/* More Filters Toggle */}
+            <button
+              type="button"
+              onClick={() => setShowFilterPanel(!showFilterPanel)}
+              className={`p-1.5 rounded-xl border text-xs font-semibold transition-colors cursor-pointer flex items-center gap-1 ${
+                showFilterPanel || activeFiltersCount > 3
+                  ? 'bg-blue-50 text-blue-700 border-blue-200'
+                  : 'bg-slate-50 text-slate-600 border-slate-200 hover:bg-slate-100'
+              }`}
+              title="Expanded Filters"
+            >
+              <SlidersHorizontal className="w-3.5 h-3.5" />
+            </button>
+          </div>
+
         </div>
 
-        {/* Search Input */}
-        <div className="relative w-full sm:w-64 shrink-0">
-          <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
-          <input
-            type="text"
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder="Search company, role, skill..."
-            className="w-full text-xs pl-8 pr-3 py-2 bg-white border border-slate-200 rounded-xl focus:border-blue-500 focus:outline-hidden transition-colors shadow-2xs"
-          />
-        </div>
+        {/* Collapsible Expanded Filters Panel (Organizer, Topic, Skill, Location, Related Opp/Proj) */}
+        {showFilterPanel && (
+          <div className="pt-2 border-t border-slate-100 grid grid-cols-1 sm:grid-cols-2 md:grid-cols-5 gap-2.5 text-xs animate-in fade-in duration-150">
+            
+            {/* Filter 4: Organizer */}
+            <div>
+              <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block mb-1">
+                Organizer
+              </label>
+              <select
+                value={organizerFilter}
+                onChange={(e) => setOrganizerFilter(e.target.value)}
+                className="w-full bg-slate-50 border border-slate-200 rounded-xl px-2 py-1.5 text-xs text-slate-700 cursor-pointer truncate"
+              >
+                <option value="all">All Organizers ({uniqueOrganizers.length})</option>
+                {uniqueOrganizers.map(org => (
+                  <option key={org} value={org}>{org}</option>
+                ))}
+              </select>
+            </div>
+
+            {/* Filter 5: Topic */}
+            <div>
+              <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block mb-1">
+                Topic
+              </label>
+              <select
+                value={topicFilter}
+                onChange={(e) => setTopicFilter(e.target.value)}
+                className="w-full bg-slate-50 border border-slate-200 rounded-xl px-2 py-1.5 text-xs text-slate-700 cursor-pointer truncate"
+              >
+                <option value="all">All Topics ({uniqueTopics.length})</option>
+                {uniqueTopics.map(t => (
+                  <option key={t} value={t}>{t}</option>
+                ))}
+              </select>
+            </div>
+
+            {/* Filter 6: Skill */}
+            <div>
+              <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block mb-1">
+                Skill
+              </label>
+              <select
+                value={skillFilter}
+                onChange={(e) => setSkillFilter(e.target.value)}
+                className="w-full bg-slate-50 border border-slate-200 rounded-xl px-2 py-1.5 text-xs text-slate-700 cursor-pointer truncate"
+              >
+                <option value="all">All Skills ({uniqueSkills.length})</option>
+                {uniqueSkills.map(sk => (
+                  <option key={sk} value={sk}>{sk}</option>
+                ))}
+              </select>
+            </div>
+
+            {/* Filter 7: Location / Online */}
+            <div>
+              <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block mb-1">
+                Location Mode
+              </label>
+              <select
+                value={locationFilter}
+                onChange={(e) => setLocationFilter(e.target.value)}
+                className="w-full bg-slate-50 border border-slate-200 rounded-xl px-2 py-1.5 text-xs text-slate-700 cursor-pointer"
+              >
+                <option value="all">All Formats</option>
+                <option value="online">Online / Virtual</option>
+                <option value="in_person">In-Person / Onsite</option>
+              </select>
+            </div>
+
+            {/* Filter 8 & 9: Related Connections */}
+            <div>
+              <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block mb-1">
+                Career OS Links
+              </label>
+              <select
+                value={relatedOppFilter === 'has_opp' ? 'opp' : relatedProjFilter === 'has_proj' ? 'proj' : 'all'}
+                onChange={(e) => {
+                  if (e.target.value === 'opp') {
+                    setRelatedOppFilter('has_opp');
+                    setRelatedProjFilter('all');
+                  } else if (e.target.value === 'proj') {
+                    setRelatedProjFilter('has_proj');
+                    setRelatedOppFilter('all');
+                  } else {
+                    setRelatedOppFilter('all');
+                    setRelatedProjFilter('all');
+                  }
+                }}
+                className="w-full bg-slate-50 border border-slate-200 rounded-xl px-2 py-1.5 text-xs text-slate-700 cursor-pointer"
+              >
+                <option value="all">All Items</option>
+                <option value="opp">Linked to Opportunity</option>
+                <option value="proj">Linked to Project</option>
+              </select>
+            </div>
+
+          </div>
+        )}
+
+        {/* Active Filter Pills Bar */}
+        {activeFiltersCount > 0 && (
+          <div className="pt-2 border-t border-slate-100 flex items-center gap-1.5 flex-wrap text-2xs">
+            <span className="font-bold text-slate-400 uppercase tracking-wider mr-1">Active:</span>
+            {typeFilter !== 'all' && (
+              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-blue-50 text-blue-700 border border-blue-200 font-semibold">
+                Type: {typeFilter}
+                <button type="button" onClick={() => setTypeFilter('all')} className="hover:text-blue-900"><X className="w-3 h-3" /></button>
+              </span>
+            )}
+            {statusFilter !== 'all' && (
+              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-indigo-50 text-indigo-700 border border-indigo-200 font-semibold">
+                Status: {statusFilter}
+                <button type="button" onClick={() => setStatusFilter('all')} className="hover:text-indigo-900"><X className="w-3 h-3" /></button>
+              </span>
+            )}
+            {dateFilter !== 'all' && (
+              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-amber-50 text-amber-800 border border-amber-200 font-semibold">
+                Date: {dateFilter}
+                <button type="button" onClick={() => setDateFilter('all')} className="hover:text-amber-900"><X className="w-3 h-3" /></button>
+              </span>
+            )}
+            {organizerFilter !== 'all' && (
+              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-purple-50 text-purple-700 border border-purple-200 font-semibold">
+                Org: {organizerFilter}
+                <button type="button" onClick={() => setOrganizerFilter('all')} className="hover:text-purple-900"><X className="w-3 h-3" /></button>
+              </span>
+            )}
+            {topicFilter !== 'all' && (
+              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-teal-50 text-teal-700 border border-teal-200 font-semibold">
+                Topic: {topicFilter}
+                <button type="button" onClick={() => setTopicFilter('all')} className="hover:text-teal-900"><X className="w-3 h-3" /></button>
+              </span>
+            )}
+            {skillFilter !== 'all' && (
+              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-emerald-50 text-emerald-700 border border-emerald-200 font-semibold">
+                Skill: {skillFilter}
+                <button type="button" onClick={() => setSkillFilter('all')} className="hover:text-emerald-900"><X className="w-3 h-3" /></button>
+              </span>
+            )}
+            {locationFilter !== 'all' && (
+              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-slate-100 text-slate-700 border border-slate-200 font-semibold">
+                Format: {locationFilter}
+                <button type="button" onClick={() => setLocationFilter('all')} className="hover:text-slate-900"><X className="w-3 h-3" /></button>
+              </span>
+            )}
+            {searchQuery && (
+              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-slate-100 text-slate-700 border border-slate-200 font-semibold">
+                Query: "{searchQuery}"
+                <button type="button" onClick={() => setSearchQuery('')} className="hover:text-slate-900"><X className="w-3 h-3" /></button>
+              </span>
+            )}
+            <button
+              type="button"
+              onClick={resetAllFilters}
+              className="text-2xs font-bold text-red-600 hover:text-red-800 ml-auto cursor-pointer"
+            >
+              Clear All
+            </button>
+          </div>
+        )}
+
       </div>
 
-      {/* 4. Application Pipeline Primary Rows (Image 2) */}
+      {/* ==================================================
+          4. CONTENT: LIST VIEW OR BOARD VIEW
+          ================================================== */}
       {viewMode === 'board' ? (
         <PipelineBoardView
-          applications={filteredApps}
+          applications={filteredItems}
           onSelectApplication={onSelectApplication}
+          categoryTab="all"
           onOpenTransitionModal={(app) => setTransitionApp(app)}
+          onAdvanceStage={handleStateAdvance}
           onQuickAdvance={(app) => {
-            const primary = app.pipelineState || 'applied_screening';
-            const currentIndex = CANONICAL_PIPELINE_STAGES.findIndex(s => s.id === primary);
-            if (currentIndex >= 0 && currentIndex < CANONICAL_PIPELINE_STAGES.length - 1) {
-              const nextStage = CANONICAL_PIPELINE_STAGES[currentIndex + 1];
-              handleStateChange(app.id, nextStage.id, nextStage.subStates[0]?.id);
+            const pType = app.participationType || 'workshop';
+            const lifecycle = PARTICIPATION_LIFECYCLES[pType] || PARTICIPATION_LIFECYCLES.workshop;
+            const currentStageId = app.currentStageId || lifecycle.stages[0].id;
+            const idx = lifecycle.stages.findIndex(s => s.id === currentStageId);
+            if (idx >= 0 && idx < lifecycle.stages.length - 1) {
+              const nextStage = lifecycle.stages[idx + 1];
+              handleStateAdvance(app.id, nextStage.id, nextStage.label);
             }
           }}
           onAddTest={(app) => {
@@ -458,189 +1011,219 @@ export const ApplicationsDashboard: React.FC<ApplicationsDashboardProps> = ({
           onDelete={handleDelete}
         />
       ) : (
+        /* ==================================================
+           LIST VIEW (Clean, informative, fast scanning)
+           ================================================== */
         <div className="space-y-3">
-          {filteredApps.length === 0 ? (
-            <div className="bg-white rounded-3xl p-12 text-center border border-slate-200 space-y-4">
-              <Briefcase className="w-10 h-10 text-slate-300 mx-auto" />
-              <h3 className="text-base font-bold text-slate-900">No applications match current filters</h3>
-              <p className="text-xs text-slate-500 max-w-sm mx-auto">
-                Adjust search queries or clear stage filters to see opportunities.
-              </p>
-              <button
-                type="button"
-                onClick={() => {
-                  setFilterStage('All');
-                  setSearchQuery('');
-                }}
-                className="px-4 py-2 bg-slate-900 text-white text-xs font-bold rounded-xl cursor-pointer"
-              >
-                Reset Filters
-              </button>
+          {filteredItems.length === 0 ? (
+            <div className="bg-white rounded-3xl p-12 text-center border border-slate-200 space-y-4 max-w-lg mx-auto my-6">
+              <div className="w-12 h-12 rounded-2xl bg-blue-50 text-blue-600 flex items-center justify-center mx-auto shadow-2xs">
+                <AlertTriangle className="w-6 h-6" />
+              </div>
+              <div className="space-y-1">
+                <h3 className="text-base font-bold text-slate-900">No participation items found</h3>
+                <p className="text-xs text-slate-500">
+                  {activeFiltersCount > 0 
+                    ? 'No activities match your active filters. Try clearing filters or searching for another topic.'
+                    : 'Get started by adding your first participation activity or loading sample activities.'}
+                </p>
+              </div>
+              <div className="flex items-center justify-center gap-2 pt-2">
+                {activeFiltersCount > 0 ? (
+                  <button
+                    type="button"
+                    onClick={resetAllFilters}
+                    className="px-4 py-2 bg-slate-900 text-white text-xs font-bold rounded-xl cursor-pointer"
+                  >
+                    Reset Filters
+                  </button>
+                ) : (
+                  <>
+                    <button
+                      type="button"
+                      onClick={() => setIsTrackNewModalOpen(true)}
+                      className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold rounded-xl cursor-pointer shadow-xs flex items-center gap-1.5"
+                    >
+                      <Plus className="w-3.5 h-3.5" />
+                      <span>+ Add Participation</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setIsImportModalOpen(true)}
+                      className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold rounded-xl cursor-pointer"
+                    >
+                      Load Sample Pack
+                    </button>
+                  </>
+                )}
+              </div>
             </div>
           ) : (
-            filteredApps.map(item => {
-              const primaryState = item.pipelineState || 'applied_screening';
-              const stageDef = CANONICAL_PIPELINE_STAGES.find(s => s.id === primaryState);
-              const isDropdownOpen = activeDropdownAppId === item.id;
+            filteredItems.map(item => {
+              const pType = item.participationType || 'workshop';
+              const currentStatus = item.unifiedStatus || (item.participationStatus === 'COMPLETED' ? 'completed' : item.participationStatus === 'SAVED' ? 'saved' : 'registered');
+              const role = item.participationRole || 'Participant';
+              const isCompleted = isItemCompleted(item);
+              const isSaved = isItemSaved(item);
+
+              // Date formatted
+              const dateStr = item.startDate || item.deadline || item.appliedAt || item.createdAt;
+              const formattedDate = dateStr ? new Date(dateStr).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' }) : 'Upcoming';
+
+              const evidenceCount = item.evidenceItems?.length || 0;
+              const taskCount = item.followUpTasks?.length || 0;
+              const completedTaskCount = item.followUpTasks?.filter(t => t.completed).length || 0;
 
               return (
                 <div
                   key={item.id}
-                  className="bg-white rounded-2xl p-5 border border-slate-200/90 hover:border-slate-300 shadow-2xs hover:shadow-md transition-all flex flex-col md:flex-row md:items-center justify-between gap-4 relative group"
+                  onClick={() => onSelectApplication(item.id)}
+                  className={`bg-white rounded-2xl border transition-all p-4 sm:p-5 flex flex-col md:flex-row md:items-center justify-between gap-4 cursor-pointer shadow-2xs hover:shadow-xs group ${
+                    isCompleted
+                      ? 'border-emerald-200/90 bg-emerald-50/10 hover:border-emerald-400'
+                      : isSaved
+                      ? 'border-purple-200/90 bg-purple-50/10 hover:border-purple-400'
+                      : 'border-slate-200/90 hover:border-blue-400'
+                  }`}
                 >
-                  {/* Left Info Column */}
-                  <div className="flex items-start gap-4 min-w-0 flex-1">
-                    {/* Company initial avatar */}
-                    <div className="w-10 h-10 rounded-xl bg-slate-100 border border-slate-200/80 flex items-center justify-center font-black text-slate-800 text-xs shrink-0">
-                      {item.companyName.substring(0, 2).toUpperCase()}
+                  {/* Left: Type Icon + Title + Metadata */}
+                  <div className="flex items-start gap-3.5 flex-1 min-w-0">
+                    <div className="w-10 h-10 rounded-xl bg-slate-50 border border-slate-200/80 flex items-center justify-center shrink-0 mt-0.5 group-hover:scale-105 transition-transform shadow-2xs">
+                      {getTypeIcon(pType)}
                     </div>
 
-                    <div className="min-w-0 flex-1">
-                      {/* Role title & stage badges */}
-                      <div className="flex flex-wrap items-center gap-2">
-                        <h4 
-                          onClick={() => onSelectApplication(item.id)}
-                          title="Open application workspace"
-                          className="text-sm font-black text-slate-900 hover:text-blue-600 transition-colors cursor-pointer truncate"
-                        >
-                          {item.roleTitle}
-                        </h4>
-
-                        {/* Primary stage badge */}
-                        <span className={`text-[10px] font-black uppercase tracking-wider px-2 py-0.5 rounded-md ${
-                          primaryState === 'applied_screening' ? 'bg-amber-100 text-amber-900' :
-                          primaryState === 'assessment_case' ? 'bg-purple-100 text-purple-900' :
-                          primaryState === 'interviews' ? 'bg-blue-100 text-blue-900' :
-                          primaryState === 'offer_negotiation' ? 'bg-emerald-100 text-emerald-900' :
-                          'bg-slate-100 text-slate-700'
-                        }`}>
-                          {stageDef?.title.toUpperCase() || primaryState.toUpperCase()}
+                    <div className="space-y-1.5 min-w-0 flex-1">
+                      
+                      {/* Top Badges Strip: Type, Role, Status, Format */}
+                      <div className="flex flex-wrap items-center gap-1.5 text-2xs">
+                        <span className="font-extrabold text-slate-700 uppercase tracking-wider bg-slate-100 px-2 py-0.5 rounded-md">
+                          {getTypeLabel(pType)}
+                        </span>
+                        
+                        <span className="font-bold text-slate-600 bg-slate-50 border border-slate-200 px-1.5 py-0.5 rounded-md">
+                          Role: {role}
                         </span>
 
-                        {/* Sub-state pill */}
-                        {item.pipelineSubState && (
-                          <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-slate-100 text-slate-600">
-                            {item.pipelineSubState.replace(/_/g, ' ')}
+                        <span className={`px-2 py-0.5 rounded-md font-bold uppercase tracking-wider border capitalize text-[10px] ${getStatusBadgeColor(currentStatus)}`}>
+                          {currentStatus.replace(/_/g, ' ')}
+                        </span>
+
+                        {item.isOnline && (
+                          <span className="px-1.5 py-0.5 rounded-md font-medium bg-teal-50 text-teal-700 border border-teal-200">
+                            Virtual
+                          </span>
+                        )}
+
+                        {item.priority === 'CRITICAL' && (
+                          <span className="px-1.5 py-0.5 rounded-md font-bold text-rose-700 bg-rose-50 border border-rose-200">
+                            High Priority
                           </span>
                         )}
                       </div>
 
-                      {/* Meta line: Company • Location • Applied date • Due date */}
-                      <div className="flex flex-wrap items-center gap-2.5 mt-1.5 text-xs text-slate-500">
+                      {/* Main Title */}
+                      <h3 className="text-sm sm:text-base font-bold text-slate-900 group-hover:text-blue-600 transition-colors line-clamp-1">
+                        {item.roleTitle}
+                      </h3>
+
+                      {/* Subtitle / Organization, Location & Date */}
+                      <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-slate-500 font-medium">
                         <span className="font-bold text-slate-800 flex items-center gap-1">
-                          <Building2 className="w-3.5 h-3.5 text-slate-400" />
-                          {item.companyName}
+                          <Building2 className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                          {item.organization || item.companyName}
                         </span>
+
                         <span>•</span>
-                        <span>{item.location || 'Remote'}</span>
-                        <span>•</span>
-                        <span>Applied: {new Date(item.appliedAt || item.createdAt).toLocaleDateString()}</span>
-                        
-                        {item.deadline && (
+
+                        <span className="flex items-center gap-1 text-slate-600">
+                          <Calendar className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                          {formattedDate} {item.startTime ? `· ${item.startTime}` : ''}
+                        </span>
+
+                        {item.location && (
                           <>
                             <span>•</span>
-                            <span className="text-amber-700 font-bold flex items-center gap-1">
-                              <Clock className="w-3 h-3 text-amber-600" />
-                              Due {new Date(item.deadline).toLocaleDateString()}
+                            <span className="flex items-center gap-1 truncate max-w-[200px]">
+                              <MapPin className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                              {item.location}
                             </span>
                           </>
                         )}
                       </div>
 
-                      {/* Skills calibrated line */}
-                      {item.skillIds && item.skillIds.length > 0 && (
-                        <div className="mt-1 text-[11px] text-slate-400 font-medium">
-                          {item.skillIds.length} skills calibrated
-                        </div>
-                      )}
+                      {/* Highlights: Key Takeaways or Topics / Connections */}
+                      <div className="flex flex-wrap items-center gap-1.5 pt-0.5">
+                        {item.topics && item.topics.slice(0, 3).map((t, idx) => (
+                          <span key={idx} className="text-[10px] px-1.5 py-0.5 rounded bg-slate-100 text-slate-600 font-medium">
+                            #{t}
+                          </span>
+                        ))}
+
+                        {item.relatedOpportunityTitle && (
+                          <span className="text-[10px] px-1.5 py-0.5 rounded bg-blue-50 text-blue-700 border border-blue-200 font-semibold flex items-center gap-1">
+                            <Briefcase className="w-2.5 h-2.5" />
+                            <span>{item.relatedOpportunityTitle}</span>
+                          </span>
+                        )}
+
+                        {item.relatedProjectTitle && (
+                          <span className="text-[10px] px-1.5 py-0.5 rounded bg-purple-50 text-purple-700 border border-purple-200 font-semibold flex items-center gap-1">
+                            <Hammer className="w-2.5 h-2.5" />
+                            <span>{item.relatedProjectTitle}</span>
+                          </span>
+                        )}
+                      </div>
+
                     </div>
                   </div>
 
-                  {/* Right Actions: State Change Dropdown + Action Icons (NO WORKSPACE BUTTON!) */}
-                  <div className="flex items-center gap-2 self-end md:self-center shrink-0">
+                  {/* Right: Evidence Pill, Task Counter & Quick Action */}
+                  <div className="flex items-center gap-3 shrink-0 self-end md:self-center">
                     
-                    {/* Change State Dropdown / Popover */}
-                    <div className="relative">
-                      <button
-                        type="button"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          setActiveDropdownAppId(isDropdownOpen ? null : item.id);
-                        }}
-                        className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200/90 text-slate-800 text-xs font-bold rounded-full transition-all cursor-pointer flex items-center gap-1.5 border border-slate-200/80 shadow-3xs"
-                      >
-                        <span className={`w-2 h-2 rounded-full ${getCurrentStateDot(item)}`} />
-                        <span>{getCurrentStateLabel(item)}</span>
-                        <ChevronDown className="w-3.5 h-3.5 text-slate-400" />
-                      </button>
+                    {/* Evidence & Tasks Counters */}
+                    <div className="flex flex-col items-end gap-1 text-right">
+                      {evidenceCount > 0 ? (
+                        <span className="inline-flex items-center gap-1 text-2xs font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-md">
+                          <Paperclip className="w-3 h-3" />
+                          <span>{evidenceCount} Evidence</span>
+                        </span>
+                      ) : (
+                        <span className="text-[11px] text-slate-400">No evidence</span>
+                      )}
 
-                      {/* Popover Menu with Bullet Dots matching Image 2 */}
-                      {isDropdownOpen && (
-                        <>
-                          <div 
-                            className="fixed inset-0 z-20 cursor-default" 
-                            onClick={() => setActiveDropdownAppId(null)} 
-                          />
-                          <div className="absolute right-0 mt-1.5 z-30 bg-white rounded-2xl border border-slate-200 shadow-xl p-2 w-52 space-y-1 animate-in fade-in zoom-in-95 duration-150">
-                            <div className="px-2.5 py-1 text-[10px] font-black uppercase tracking-wider text-slate-400 border-b border-slate-100 mb-1">
-                              Select Pipeline State
-                            </div>
-                            {PIPELINE_STATE_OPTIONS.map((opt) => {
-                              const isSelected = item.pipelineState === opt.primary && (item.pipelineSubState === opt.sub || (!item.pipelineSubState && !opt.sub));
-                              return (
-                                <button
-                                  key={`${opt.primary}-${opt.sub || 'none'}`}
-                                  type="button"
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    handleStateChange(item.id, opt.primary, opt.sub);
-                                  }}
-                                  className={`w-full px-3 py-1.5 text-xs font-bold rounded-xl transition-colors cursor-pointer flex items-center justify-between text-left ${
-                                    isSelected 
-                                      ? 'bg-blue-50 text-blue-800 border border-blue-200/60 font-black' 
-                                      : `${opt.badgeBg}`
-                                  }`}
-                                >
-                                  <div className="flex items-center gap-2">
-                                    <span className={`w-2 h-2 rounded-full ${opt.dotColor}`} />
-                                    <span>{opt.label}</span>
-                                  </div>
-                                  {isSelected && <Check className="w-3.5 h-3.5 text-blue-600" />}
-                                </button>
-                              );
-                            })}
-                          </div>
-                        </>
+                      {taskCount > 0 && (
+                        <span className="inline-flex items-center gap-1 text-[11px] text-slate-500 font-medium">
+                          <CheckSquare className="w-3 h-3 text-slate-400" />
+                          <span>{completedTaskCount}/{taskCount} tasks</span>
+                        </span>
                       )}
                     </div>
 
-                    {/* Secondary icon buttons: Copy, Archive, Delete */}
-                    <div className="flex items-center gap-1 border-l border-slate-200 pl-2">
-                      <button
-                        type="button"
-                        onClick={() => handleDuplicate(item.id)}
-                        title="Duplicate Application"
-                        className="p-1.5 text-slate-400 hover:text-slate-800 rounded-lg hover:bg-slate-100 transition-colors cursor-pointer"
-                      >
-                        <Copy className="w-3.5 h-3.5" />
-                      </button>
+                    {/* Quick Status Advance / Action */}
+                    <div className="flex items-center gap-1.5" onClick={(e) => e.stopPropagation()}>
+                      {!isCompleted ? (
+                        <button
+                          type="button"
+                          onClick={(e) => handleQuickStatusChange(item.id, 'completed', e)}
+                          className="px-2.5 py-1.5 rounded-lg text-xs font-bold text-emerald-700 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 transition-colors cursor-pointer flex items-center gap-1"
+                          title="Mark Attended &amp; Completed"
+                        >
+                          <Check className="w-3.5 h-3.5 stroke-[2.5]" />
+                          <span className="hidden sm:inline">Complete</span>
+                        </button>
+                      ) : (
+                        <span className="p-1 rounded-full bg-emerald-100 text-emerald-700">
+                          <Check className="w-3.5 h-3.5 stroke-[2.5]" />
+                        </span>
+                      )}
 
                       <button
                         type="button"
-                        onClick={() => handleArchive(item.id)}
-                        title="Archive Application"
-                        className="p-1.5 text-slate-400 hover:text-amber-600 rounded-lg hover:bg-slate-100 transition-colors cursor-pointer"
+                        onClick={() => onSelectApplication(item.id)}
+                        className="p-1.5 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors cursor-pointer"
+                        title="View Full Participation Details"
                       >
-                        <Archive className="w-3.5 h-3.5" />
-                      </button>
-
-                      <button
-                        type="button"
-                        onClick={(e) => handleDelete(item.id, e)}
-                        title="Delete Application"
-                        className="p-1.5 text-slate-400 hover:text-rose-600 rounded-lg hover:bg-slate-100 transition-colors cursor-pointer"
-                      >
-                        <Trash2 className="w-3.5 h-3.5" />
+                        <ArrowRight className="w-4 h-4" />
                       </button>
                     </div>
 
@@ -653,105 +1236,92 @@ export const ApplicationsDashboard: React.FC<ApplicationsDashboardProps> = ({
         </div>
       )}
 
-      {/* MODALS */}
+      {/* ==================================================
+          5. MODALS & SUB-FLOWS
+          ================================================== */}
+      {/* 1. Track New Participation Modal */}
+      <TrackNewParticipationModal
+        isOpen={isTrackNewModalOpen}
+        onClose={() => setIsTrackNewModalOpen(false)}
+        onItemCreated={(created) => {
+          reloadData();
+          onSelectApplication(created.id);
+        }}
+      />
 
-      {/* 1. Add Application Modal (Triggered by Active Applications Card 1 + button) */}
-      {isAddModalOpen && (
-        <AddApplicationModal
-          isOpen={isAddModalOpen}
-          onClose={() => setIsAddModalOpen(false)}
-          onApplicationCreated={(newApp) => {
-            reloadData();
-            onSelectApplication(newApp.id);
-          }}
-        />
-      )}
+      {/* 2. Import Participation Modal */}
+      <ImportParticipationModal
+        isOpen={isImportModalOpen}
+        onClose={() => setIsImportModalOpen(false)}
+        onImportComplete={reloadData}
+      />
 
-      {/* 2. Add Test Challenge Modal (Triggered by Test Assignments Card 2 + button) */}
-      {isTestModalOpen && (
-        <AddTestAssignmentModal
-          isOpen={isTestModalOpen}
-          applications={applications}
-          preselectedAppId={testModalAppId || applications[0]?.id}
-          onClose={() => {
-            setIsTestModalOpen(false);
-            setTestModalAppId(null);
-          }}
-          onAssignmentCreated={() => reloadData()}
-        />
-      )}
-
-      {/* 3. Upcoming Deadlines Timeline Modal (Triggered by Card 4 corner calendar icon) */}
-      {isDeadlinesModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs animate-in fade-in duration-200">
-          <div className="bg-white rounded-3xl max-w-4xl w-full max-h-[85vh] overflow-y-auto border border-slate-200 shadow-2xl p-6 sm:p-7 space-y-5">
-            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
-              <div className="flex items-center gap-2.5">
-                <div className="p-2 rounded-xl bg-rose-50 text-rose-600 border border-rose-200/60">
-                  <Calendar className="w-5 h-5" />
-                </div>
-                <div>
-                  <h3 className="text-lg font-black text-slate-900">Upcoming Deadlines &amp; Tasks</h3>
-                  <p className="text-xs text-slate-500 font-medium">Prioritized timeline for take-home cases, interviews, and urgent application deadlines</p>
-                </div>
-              </div>
-
-              <button
-                type="button"
-                onClick={() => setIsDeadlinesModalOpen(false)}
-                className="p-2 rounded-xl text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-colors cursor-pointer"
-              >
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-
-            {deadlines.length === 0 ? (
-              <div className="text-center py-10 space-y-2">
-                <CheckCircle2 className="w-10 h-10 text-emerald-500 mx-auto" />
-                <h4 className="text-sm font-bold text-slate-800">No Urgent Deadlines Pending</h4>
-                <p className="text-xs text-slate-500">All applications and upcoming milestone deliverables are up to date.</p>
-              </div>
-            ) : (
-              <UpcomingDeadlinesWidget
-                deadlines={deadlines}
-                onSelectAction={(appId) => {
-                  setIsDeadlinesModalOpen(false);
-                  onSelectApplication(appId);
-                }}
-                onOpenWorkspace={(appId) => {
-                  setIsDeadlinesModalOpen(false);
-                  onSelectApplication(appId);
-                }}
-              />
-            )}
-          </div>
-        </div>
-      )}
-
-      {/* 4. Schedule Interview Modal */}
-      {isInterviewModalOpen && (
-        <ScheduleInterviewModal
-          isOpen={isInterviewModalOpen}
-          onClose={() => {
-            setIsInterviewModalOpen(false);
-            setInterviewModalAppId(null);
-          }}
-          applicationId={interviewModalAppId || applications[0]?.id || ''}
-          onCreated={() => reloadData()}
-        />
-      )}
-
-      {/* 5. Stage Transition Modal */}
+      {/* 3. Stage Transition Modal */}
+      {/* 3. Stage Transition Modal */}
       {transitionApp && (
         <StageTransitionModal
-          application={transitionApp}
           isOpen={!!transitionApp}
+          application={transitionApp}
           onClose={() => setTransitionApp(null)}
-          onTransitionCompleted={() => {
+          onTransitionComplete={() => {
             reloadData();
             setTransitionApp(null);
           }}
         />
+      )}
+
+      {/* 4. Add Test / Assessment Modal */}
+      {testModalAppId && (
+        <AddTestAssignmentModal
+          isOpen={isTestModalOpen}
+          applications={applications}
+          preselectedAppId={testModalAppId}
+          onClose={() => {
+            setIsTestModalOpen(false);
+            setTestModalAppId(null);
+          }}
+          onAssignmentCreated={reloadData}
+        />
+      )}
+
+      {/* 5. Schedule Interview Modal */}
+      {interviewModalAppId && (
+        <ScheduleInterviewModal
+          isOpen={isInterviewModalOpen}
+          applications={applications}
+          preselectedAppId={interviewModalAppId}
+          onClose={() => {
+            setIsInterviewModalOpen(false);
+            setInterviewModalAppId(null);
+          }}
+          onInterviewScheduled={reloadData}
+        />
+      )}
+
+      {/* 6. Upcoming Deadlines Widget Modal */}
+      {isDeadlinesModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs">
+          <div className="fixed inset-0" onClick={() => setIsDeadlinesModalOpen(false)} />
+          <div className="relative bg-white w-full max-w-2xl rounded-3xl p-5 shadow-2xl border border-slate-200 z-10 space-y-4 max-h-[85vh] overflow-y-auto">
+            <div className="flex items-center justify-between pb-3 border-b border-slate-100">
+              <h3 className="text-base font-bold text-slate-900">Upcoming Deadlines &amp; Milestones</h3>
+              <button 
+                type="button" 
+                onClick={() => setIsDeadlinesModalOpen(false)}
+                className="p-1 rounded-lg text-slate-400 hover:text-slate-700"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            <UpcomingDeadlinesWidget
+              deadlines={deadlines}
+              onOpenWorkspace={(appId) => {
+                setIsDeadlinesModalOpen(false);
+                onSelectApplication(appId);
+              }}
+            />
+          </div>
+        </div>
       )}
 
     </div>

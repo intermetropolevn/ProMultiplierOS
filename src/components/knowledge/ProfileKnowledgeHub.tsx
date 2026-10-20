@@ -124,7 +124,7 @@ export const ProfileKnowledgeHub: React.FC<ProfileKnowledgeHubProps> = ({
     evidenceList.forEach(e => e.linkedQuestionIds?.forEach(id => qIds.add(id)));
     stories.forEach(s => s.linkedQuestionIds?.forEach(id => qIds.add(id)));
     blueprints.forEach(b => {
-      if (b.targetQuestionId) qIds.add(b.targetQuestionId);
+      if (b.questionId) qIds.add(b.questionId);
     });
 
     return {

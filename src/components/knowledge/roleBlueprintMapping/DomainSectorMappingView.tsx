@@ -211,74 +211,65 @@ export const DomainSectorMappingView: React.FC = () => {
     };
   }, [selectedDomain]);
 
+  // Keep selectedDomain valid if targetDomains changes
+  React.useEffect(() => {
+    if (targetDomains.length > 0 && !targetDomains.includes(selectedDomain)) {
+      setSelectedDomain(targetDomains[0]);
+    }
+  }, [targetDomains, selectedDomain]);
+
   return (
     <div className="space-y-6">
       
-      {/* Domain Context Chips Bar & Quick Controls */}
-      <div className="bg-white p-4 rounded-2xl border border-slate-200/90 shadow-2xs space-y-3">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-          <div className="flex flex-wrap items-center gap-2">
-            <span className="text-2xs font-bold uppercase tracking-wider text-slate-400">
-              Active Target Domains:
-            </span>
-            {targetDomains.map(dom => {
-              const isSelected = dom === selectedDomain;
-              return (
-                <button
-                  key={dom}
-                  onClick={() => {
-                    setSelectedDomain(dom);
-                    setActiveDomain(dom);
-                  }}
-                  className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer border ${
-                    isSelected
-                      ? 'bg-blue-600 text-white border-blue-600 shadow-2xs ring-2 ring-blue-500/20'
-                      : 'bg-slate-100 text-slate-700 border-slate-200 hover:bg-slate-200/80'
-                  }`}
-                >
-                  <Building2 className="w-3.5 h-3.5" />
-                  <span>{dom}</span>
-                  {isSelected && <span className="w-1.5 h-1.5 rounded-full bg-white animate-pulse" />}
-                </button>
-              );
-            })}
-          </div>
-
-          <div className="flex items-center gap-2">
-            <button
-              onClick={() => setIsAddModalOpen(true)}
-              className="px-3 py-1.5 text-xs font-bold text-slate-700 hover:text-slate-900 bg-slate-50 hover:bg-slate-100 border border-slate-200 rounded-xl transition-colors flex items-center gap-1 cursor-pointer"
-            >
-              <Plus className="w-3.5 h-3.5 text-blue-600" />
-              <span>Add Domain Mapping</span>
-            </button>
-          </div>
-        </div>
-
-        {/* Selected Domain Meta Header */}
-        <div className="pt-2 border-t border-slate-100 flex flex-col md:flex-row md:items-center justify-between gap-3">
-          <div>
-            <div className="flex items-center gap-2">
-              <h3 className="text-base font-black text-slate-900">{selectedDomain}</h3>
-              <span className="text-2xs font-bold uppercase tracking-wider text-blue-700 bg-blue-50 px-2 py-0.5 rounded-md border border-blue-100">
+      {/* Clean Domain Architecture Header & Quick Controls */}
+      <div className="bg-white p-4 sm:p-5 rounded-2xl border border-slate-200/90 shadow-2xs">
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+          <div className="space-y-1 min-w-0">
+            <div className="flex flex-wrap items-center gap-2">
+              <h3 className="text-base sm:text-lg font-bold text-slate-900 tracking-tight">
+                {selectedDomain}
+              </h3>
+              <span className="text-2xs font-medium text-slate-500 bg-slate-100 px-2 py-0.5 rounded-md border border-slate-200/80">
                 Calibrated for {preferredRole.title}
               </span>
             </div>
-            <p className="text-xs text-slate-600 mt-0.5 max-w-3xl">
+            <p className="text-xs text-slate-600 leading-relaxed max-w-3xl">
               {currentIntel.tagline}
             </p>
           </div>
 
-          <div className="flex items-center gap-2 shrink-0">
+          <div className="flex flex-wrap items-center gap-2 shrink-0">
+            {/* Multi-Domain Architecture Switcher when multiple domains are active */}
+            {targetDomains.length > 1 && (
+              <div className="flex items-center gap-1 p-1 bg-slate-100 rounded-xl border border-slate-200/80">
+                {targetDomains.map(dom => (
+                  <button
+                    key={dom}
+                    type="button"
+                    onClick={() => setSelectedDomain(dom)}
+                    className={`px-3 py-1 rounded-lg text-xs transition-all cursor-pointer ${
+                      selectedDomain === dom
+                        ? 'bg-white text-slate-900 shadow-3xs font-bold'
+                        : 'text-slate-600 hover:text-slate-900 font-medium'
+                    }`}
+                  >
+                    {dom}
+                  </button>
+                ))}
+              </div>
+            )}
+
             <button
+              type="button"
               onClick={() => setDetailModalOpen(true)}
-              className="px-3.5 py-1.5 bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold rounded-xl transition-all shadow-2xs cursor-pointer flex items-center gap-1.5"
+              className="px-3.5 py-1.5 bg-slate-900 hover:bg-slate-800 text-white text-xs font-semibold rounded-xl transition-all shadow-2xs cursor-pointer flex items-center gap-1.5"
             >
               <Info className="w-3.5 h-3.5 text-blue-400" />
               <span>More Details</span>
             </button>
 
             <button
+              type="button"
               onClick={() => {
                 setEditingDomain(selectedDomain);
                 setCustomTagline(currentIntel.tagline);
@@ -288,20 +279,6 @@ export const DomainSectorMappingView: React.FC = () => {
             >
               <Edit3 className="w-4 h-4" />
             </button>
-
-            {targetDomains.length > 1 && (
-              <button
-                onClick={() => {
-                  if (confirm(`Remove ${selectedDomain} from your target domain mapping context?`)) {
-                    removeTargetDomain(selectedDomain);
-                  }
-                }}
-                className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors cursor-pointer"
-                title="Remove domain mapping"
-              >
-                <Trash2 className="w-4 h-4" />
-              </button>
-            )}
           </div>
         </div>
       </div>

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   User, 
   Target, 
@@ -14,7 +14,8 @@ import {
   ShieldCheck,
   Plus
 } from 'lucide-react';
-import { UserCareerProfile, RoleCategory, SectorDomain, ExperienceLevel } from '../../types';
+import { UserCareerProfile, RoleCategory, SectorDomain, ExperienceLevel, RoleBlueprint } from '../../types';
+import { RoleBlueprintService } from '../../services/roleBlueprintService';
 import { CANONICAL_DOMAINS } from '../../data/jobTaxonomies';
 
 interface ProfileHeaderProps {
@@ -31,7 +32,28 @@ export const ProfileHeader: React.FC<ProfileHeaderProps> = ({
   onOpenAIDiagnostic,
 }) => {
   const [isEditingCalibration, setIsEditingCalibration] = useState(false);
-  const [targetRole, setTargetRole] = useState(profile.targetRole || 'Software Engineering');
+  const [availableBlueprints, setAvailableBlueprints] = useState<RoleBlueprint[]>(() => 
+    RoleBlueprintService.getAllBlueprints(true)
+  );
+
+  useEffect(() => {
+    const handleRolesUpdated = () => {
+      setAvailableBlueprints(RoleBlueprintService.getAllBlueprints(true));
+    };
+    window.addEventListener('career_roles_updated', handleRolesUpdated);
+    return () => window.removeEventListener('career_roles_updated', handleRolesUpdated);
+  }, []);
+
+  const [selectedBlueprintId, setSelectedBlueprintId] = useState<string>(() => {
+    if (profile.targetRoleBlueprintId) return profile.targetRoleBlueprintId;
+    const matchTitle = availableBlueprints.find(b => b.title === profile.targetTitle);
+    if (matchTitle) return matchTitle.id;
+    const matchCat = availableBlueprints.find(b => b.category === profile.targetRole);
+    if (matchCat) return matchCat.id;
+    return 'role-product-mgr';
+  });
+
+  const [targetRole, setTargetRole] = useState(profile.targetRole || 'Product Management');
   const [targetIndustryDomains, setTargetIndustryDomains] = useState<SectorDomain[]>(() => {
     if (profile.targetIndustryDomains && profile.targetIndustryDomains.length > 0) {
       return profile.targetIndustryDomains;
@@ -39,16 +61,31 @@ export const ProfileHeader: React.FC<ProfileHeaderProps> = ({
     return profile.targetDomain ? [profile.targetDomain] : ['Enterprise SaaS', 'Fintech & Payments'];
   });
   const [targetLevel, setTargetLevel] = useState(profile.experienceLevel || 'Staff / Principal');
-  const [targetTitle, setTargetTitle] = useState(profile.targetTitle || 'Staff Platform Architect');
+  const [targetTitle, setTargetTitle] = useState(profile.targetTitle || 'Technical Product Manager');
+
+  // Keep in sync with profile updates
+  useEffect(() => {
+    if (profile.targetRoleBlueprintId) {
+      setSelectedBlueprintId(profile.targetRoleBlueprintId);
+    }
+    if (profile.targetRole) {
+      setTargetRole(profile.targetRole);
+    }
+    if (profile.targetTitle) {
+      setTargetTitle(profile.targetTitle);
+    }
+  }, [profile.targetRoleBlueprintId, profile.targetRole, profile.targetTitle]);
 
   const handleSaveCalibration = () => {
     const finalDomains = targetIndustryDomains.length > 0 ? targetIndustryDomains : ['Enterprise SaaS' as SectorDomain];
+    const bp = availableBlueprints.find(b => b.id === selectedBlueprintId);
     onUpdateProfile({
-      targetRole: targetRole as RoleCategory,
+      targetRole: (bp?.category || targetRole) as RoleCategory,
+      targetRoleBlueprintId: selectedBlueprintId,
       targetDomain: finalDomains[0],
       targetIndustryDomains: finalDomains,
       experienceLevel: targetLevel as ExperienceLevel,
-      targetTitle: targetTitle.trim() || undefined,
+      targetTitle: bp?.title || targetTitle.trim() || undefined,
     });
     setIsEditingCalibration(false);
   };
@@ -101,7 +138,7 @@ export const ProfileHeader: React.FC<ProfileHeaderProps> = ({
 
             <div className="flex flex-wrap items-center gap-2 text-2xs text-slate-500 pt-0.5">
               <span>
-                Target: <strong className="text-slate-700 font-semibold">{profile.targetRole || 'Software Engineering'}</strong>
+                Target: <strong className="text-slate-700 font-semibold">{profile.targetTitle || profile.targetRole || 'Technical Product Manager'}</strong>
               </span>
               <span className="text-slate-300">·</span>
               <span>
@@ -173,29 +210,40 @@ export const ProfileHeader: React.FC<ProfileHeaderProps> = ({
 
             <div className="space-y-3.5 text-xs">
               <div>
-                <label className="block text-slate-700 font-semibold mb-1">Specific Target Job Title</label>
+                <label className="block text-slate-700 font-semibold mb-1">Target Role</label>
+                <p className="text-2xs text-slate-500 mb-1.5">
+                  Select from verified Role Blueprints loaded across the platform.
+                </p>
+                <select
+                  value={selectedBlueprintId}
+                  onChange={(e) => {
+                    const bpId = e.target.value;
+                    setSelectedBlueprintId(bpId);
+                    const bp = availableBlueprints.find(b => b.id === bpId);
+                    if (bp) {
+                      setTargetRole(bp.category);
+                      setTargetTitle(bp.title);
+                    }
+                  }}
+                  className="w-full px-3 py-2 border border-slate-300 rounded-lg text-slate-900 font-medium focus:ring-2 focus:ring-blue-500 bg-white cursor-pointer"
+                >
+                  {availableBlueprints.map((bp) => (
+                    <option key={bp.id} value={bp.id}>
+                      {bp.title} — {bp.category}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-slate-700 font-semibold mb-1">Specific Title Override (Optional)</label>
                 <input
                   type="text"
                   value={targetTitle}
                   onChange={(e) => setTargetTitle(e.target.value)}
-                  placeholder="e.g. Staff Backend Architect, Principal Platform Engineer"
+                  placeholder="e.g. Technical Product Manager, Staff Backend Architect"
                   className="w-full px-3 py-2 border border-slate-300 rounded-lg text-slate-900 focus:ring-2 focus:ring-blue-500"
                 />
-              </div>
-
-              <div>
-                <label className="block text-slate-700 font-semibold mb-1">Target Role Category</label>
-                <select
-                  value={targetRole}
-                  onChange={(e) => setTargetRole(e.target.value)}
-                  className="w-full px-3 py-2 border border-slate-300 rounded-lg text-slate-900 font-medium focus:ring-2 focus:ring-blue-500"
-                >
-                  <option value="Software Engineering">Software Engineering</option>
-                  <option value="Product Management">Product Management</option>
-                  <option value="Engineering Management">Engineering Management</option>
-                  <option value="System Architecture">System Architecture</option>
-                  <option value="Data & AI">Data & AI</option>
-                </select>
               </div>
 
               <div>

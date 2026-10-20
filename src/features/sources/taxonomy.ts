@@ -270,10 +270,10 @@ export const SOURCE_TAXONOMY: SourceFamilyConfig[] = [
         label: 'Certificate',
         family: 'credential',
         defaultEvidenceStrength: 3,
-        description: 'Certificate of completion or skill mastery.',
+        description: 'Certificate of completion or training credential (e.g. Coursera, Udemy, Google Certificate).',
         allowedStatuses: ['in_progress', 'earned', 'expired', 'renewed'],
         metadataFields: [
-          { key: 'issuer', label: 'Issuing Organization', type: 'text', placeholder: 'e.g. Google Cloud, Scrum.org', required: true },
+          { key: 'issuer', label: 'Issuing Organization / Platform', type: 'text', placeholder: 'e.g. Coursera, DeepLearning.AI, Udemy', required: true },
           { key: 'credentialId', label: 'Credential ID', type: 'text', placeholder: 'e.g. CERT-839219' },
           { key: 'credentialUrl', label: 'Credential Verification URL', type: 'url', placeholder: 'https://...' },
           { key: 'issueDate', label: 'Issue Date', type: 'date' },
@@ -285,12 +285,42 @@ export const SOURCE_TAXONOMY: SourceFamilyConfig[] = [
         label: 'Professional Certification',
         family: 'credential',
         defaultEvidenceStrength: 3,
-        description: 'Proctored standardized exam certification (e.g. AWS, CISSP, CFA, PMP).',
+        description: 'Competency-validating professional credential through examination (e.g. AWS, PSPO, PMP, CISSP).',
         allowedStatuses: ['in_progress', 'earned', 'expired', 'renewed'],
         metadataFields: [
           { key: 'examBoard', label: 'Exam Board / Body', type: 'text', required: true },
           { key: 'licenseNumber', label: 'License / Cert Number', type: 'text' },
-          { key: 'scorePercentile', label: 'Score / Percentile', type: 'text' }
+          { key: 'scorePercentile', label: 'Score / Percentile', type: 'text' },
+          { key: 'credentialLevel', label: 'Credential Level', type: 'select', options: ['Entry', 'Foundation', 'Professional', 'Advanced', 'Expert'] }
+        ]
+      },
+      {
+        id: 'diploma',
+        label: 'Diploma',
+        family: 'credential',
+        defaultEvidenceStrength: 4,
+        description: 'Formal educational qualification awarded after completing a structured academic or professional program.',
+        allowedStatuses: ['in_progress', 'earned'],
+        metadataFields: [
+          { key: 'institution', label: 'Institution / College', type: 'text', placeholder: 'e.g. Chartered Institute of Marketing (CIM)', required: true },
+          { key: 'fieldOfStudy', label: 'Field of Study', type: 'text', placeholder: 'e.g. Business Administration, Data Science' },
+          { key: 'credentialLevel', label: 'Credential Level', type: 'select', options: ['Postgraduate', 'Graduate', 'Professional', 'Advanced'] },
+          { key: 'duration', label: 'Program Duration', type: 'text', placeholder: 'e.g. 1 year full-time' }
+        ]
+      },
+      {
+        id: 'degree',
+        label: 'Degree',
+        family: 'credential',
+        defaultEvidenceStrength: 4,
+        description: 'Formal academic qualification (Associate, Bachelor, Master, Doctorate).',
+        allowedStatuses: ['in_progress', 'earned'],
+        metadataFields: [
+          { key: 'university', label: 'University / Accredited Institution', type: 'text', placeholder: 'e.g. University of Illinois, Stanford University', required: true },
+          { key: 'qualificationType', label: 'Degree Qualification', type: 'select', options: ["Associate Degree", "Bachelor's Degree", "Master's Degree", "Doctorate"] },
+          { key: 'fieldOfStudy', label: 'Major / Field of Study', type: 'text', placeholder: 'e.g. Computer Science & Distributed Systems' },
+          { key: 'credentialLevel', label: 'Credential Level', type: 'select', options: ['Graduate', 'Postgraduate', 'Professional'] },
+          { key: 'accreditation', label: 'Accreditation Body', type: 'text', placeholder: 'e.g. ABET, AACSB, Regional Accreditor' }
         ]
       },
       {
@@ -1285,7 +1315,7 @@ export const SOURCE_TAXONOMY: SourceFamilyConfig[] = [
       },
       {
         id: 'product_case',
-        label: 'Product Case',
+        label: 'Assessment / Product Case',
         family: 'assessment',
         defaultEvidenceStrength: 6,
         description: 'Company-specific interview case analyzing growth, metrics, or new product MVP.',

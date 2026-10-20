@@ -94,7 +94,7 @@ export const StoryBankSection: React.FC<StoryBankSectionProps> = ({
   };
 
   const getBlueprintForStory = (storyId: string) => {
-    return blueprints.find(b => b.sourceStoryId === storyId);
+    return blueprints.find(b => b.storyId === storyId);
   };
 
   const renderQualityBadge = (quality: StoryEvidenceQuality) => {

@@ -39,11 +39,11 @@ export const KNOWLEDGE_PILLARS: KnowledgePillarConfig[] = [
   },
   {
     id: 'standards_certifications',
-    label: 'Standards & Certifications',
-    shortLabel: 'Standards & Certs',
-    description: 'Accredited professional certifications, industry qualifications, and verified skill assessments (Combines Credentials + Assessments).',
+    label: 'Credentials & Learning',
+    shortLabel: 'Credentials & Learning',
+    description: 'What can I learn, earn, or use as evidence of professional qualification: Certifications, Certificates, Diplomas, Degrees, Courses, Programs, Assessments, and Learning Paths.',
     iconName: 'Award',
-    sourceFamiliesIncluded: ['credential', 'assessment'],
+    sourceFamiliesIncluded: ['credential', 'assessment', 'learn'],
   },
   {
     id: 'playbooks_frameworks',
@@ -123,6 +123,7 @@ export interface OrgModelBlueprint {
     keyOwnership: string;
     frictionWarning: string;
   }[];
+  interviewSignals?: string[];
 }
 
 // =========================================================================

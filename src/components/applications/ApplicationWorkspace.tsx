@@ -44,6 +44,7 @@ import {
   ApplicationOutcome,
   CANONICAL_PIPELINE_STAGES
 } from '../../features/applications/types';
+import { RoleCategory } from '../../types';
 import { StageTransitionModal } from '../tracker/StageTransitionModal';
 import { AddTestAssignmentModal } from '../tracker/AddTestAssignmentModal';
 import { ScheduleInterviewModal } from '../tracker/ScheduleInterviewModal';
@@ -752,7 +753,7 @@ export const ApplicationWorkspace: React.FC<ApplicationWorkspaceProps> = ({
                     jobTitle: app.roleTitle,
                     company: app.companyName,
                     role: app.roleTitle,
-                    roleCategory: app.roleCategory,
+                    roleCategory: (app.roleCategory as RoleCategory) || 'Software Engineering',
                     assessmentType: app.roleCategory === 'Product Manager' ? 'GTM Challenge' :
                                     app.roleCategory === 'UX Designer' ? 'Prototype Submission' :
                                     app.roleCategory === 'SEO Specialist' ? 'Audit Report' :
@@ -1146,7 +1147,7 @@ export const ApplicationWorkspace: React.FC<ApplicationWorkspaceProps> = ({
                       jobTitle: app.roleTitle,
                       company: app.companyName,
                       role: app.roleTitle,
-                      roleCategory: app.roleCategory,
+                      roleCategory: (app.roleCategory as RoleCategory) || 'Software Engineering',
                       assessmentType: app.roleCategory === 'Product Manager' ? 'Product Case' :
                                       app.roleCategory === 'UX Designer' ? 'Design Challenge' :
                                       app.roleCategory === 'SEO Specialist' ? 'SEO Audit' :
@@ -1754,10 +1755,10 @@ export const ApplicationWorkspace: React.FC<ApplicationWorkspaceProps> = ({
             setActiveModalAssessment(null);
           }}
           assessment={activeModalAssessment}
-          onConverted={(converted) => {
+          onAssessmentUpdated={(updated) => {
             setAllJobAssessments(jobAssessmentStore.getAssessments());
-            setSelectedAssessmentId(converted.id);
-            showToast(`Assessment converted into Career OS Level 6 Evidence!`);
+            setSelectedAssessmentId(updated.id);
+            showToast(`Assessment updated in Career OS!`);
           }}
         />
       )}

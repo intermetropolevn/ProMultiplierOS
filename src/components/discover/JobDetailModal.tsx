@@ -16,8 +16,11 @@ import {
   Trash2,
   Edit3,
   AlertTriangle,
+  X,
   Archive,
-  X
+  Hammer,
+  Target,
+  CheckSquare
 } from 'lucide-react';
 import { JobListing } from '../../types';
 import { Modal } from '../common/Modal';
@@ -37,6 +40,8 @@ interface JobDetailModalProps {
   onStartPracticeForJob: (job: JobListing) => void;
   onDeleteCustomJob?: (jobId: string) => void;
   onJobUpdated?: (updatedJob: JobListing) => void;
+  onBuildMission?: (roleTitle: string, domain?: string) => void;
+  onOpenApplication?: (applicationId: string) => void;
 }
 
 export const JobDetailModal: React.FC<JobDetailModalProps> = ({
@@ -48,6 +53,8 @@ export const JobDetailModal: React.FC<JobDetailModalProps> = ({
   onStartPracticeForJob,
   onDeleteCustomJob,
   onJobUpdated,
+  onBuildMission,
+  onOpenApplication,
 }) => {
   const [currentJob, setCurrentJob] = useState<JobListing | null>(initialJob);
   const [isEvidenceMatchOpen, setIsEvidenceMatchOpen] = useState(false);
@@ -116,6 +123,33 @@ export const JobDetailModal: React.FC<JobDetailModalProps> = ({
     showToast('Job opportunity updated.');
   };
 
+  const handleTrackInParticipationTracker = () => {
+    applicationStore.createApplicationFromOpportunity({
+      jobOpportunityId: job.id,
+      roleTitle: job.title,
+      companyName: job.company,
+      location: job.location,
+      salary: job.salaryRange,
+      isOnline: job.workMode === 'Remote',
+      jobUrl: job.externalUrl,
+      domain: job.domain,
+      roleCategory: job.roleCategory,
+      priority: 'HIGH',
+      participationType: 'career_opportunity'
+    });
+    window.dispatchEvent(new CustomEvent('career_applications_updated'));
+    showToast('Tracked in Participation Tracker!');
+  };
+
+  const handleViewInTracker = (appId: string) => {
+    onClose();
+    if (onOpenApplication) {
+      onOpenApplication(appId);
+    } else {
+      window.dispatchEvent(new CustomEvent('open_participation_item', { detail: { itemId: appId } }));
+    }
+  };
+
   return (
     <>
       <Modal
@@ -175,10 +209,14 @@ export const JobDetailModal: React.FC<JobDetailModalProps> = ({
                 )}
 
                 {linkedApplication && (
-                  <span className="text-xs font-bold text-emerald-700 bg-emerald-50 border border-emerald-300 px-2.5 py-1 rounded-lg flex items-center gap-1">
+                  <button
+                    type="button"
+                    onClick={() => handleViewInTracker(linkedApplication.id)}
+                    className="text-xs font-bold text-emerald-700 bg-emerald-50 hover:bg-emerald-100 border border-emerald-300 px-2.5 py-1 rounded-lg flex items-center gap-1 cursor-pointer transition-colors"
+                  >
                     <CheckCircle2 className="w-3.5 h-3.5" />
-                    <span>Linked to Application Tracker</span>
-                  </span>
+                    <span>Tracked in Participation Tracker</span>
+                  </button>
                 )}
               </div>
 
@@ -274,6 +312,29 @@ export const JobDetailModal: React.FC<JobDetailModalProps> = ({
                 )}
               </button>
 
+              {/* Participation Tracker Action */}
+              {linkedApplication ? (
+                <button
+                  type="button"
+                  id="job-view-tracker-btn"
+                  onClick={() => handleViewInTracker(linkedApplication.id)}
+                  className="w-full sm:w-auto lg:w-48 flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl text-xs font-bold border border-emerald-300 bg-emerald-50 text-emerald-800 hover:bg-emerald-100 transition-all shadow-2xs cursor-pointer"
+                >
+                  <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
+                  <span>View in Tracker</span>
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  id="job-add-tracker-btn"
+                  onClick={handleTrackInParticipationTracker}
+                  className="w-full sm:w-auto lg:w-48 flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl text-xs font-bold border border-blue-600 bg-blue-50 text-blue-700 hover:bg-blue-100 transition-all shadow-2xs cursor-pointer"
+                >
+                  <CheckSquare className="w-3.5 h-3.5 text-blue-600" />
+                  <span>+ Add to Tracker</span>
+                </button>
+              )}
+
               {/* External Apply Button */}
               <a
                 id="job-external-link-btn"
@@ -305,6 +366,37 @@ export const JobDetailModal: React.FC<JobDetailModalProps> = ({
             {/* Main Left Column (8 of 12) */}
             <div className="lg:col-span-8 space-y-7">
               
+              {/* Role Readiness & Career Mission Builder Card */}
+              <div className="p-4 sm:p-5 rounded-2xl bg-gradient-to-r from-blue-900 to-indigo-900 text-white shadow-md flex flex-col sm:flex-row sm:items-center justify-between gap-4 border border-blue-500/30">
+                <div className="space-y-1">
+                  <div className="flex items-center gap-2">
+                    <Target className="w-4 h-4 text-blue-300" />
+                    <span className="text-[10px] font-extrabold uppercase tracking-wider text-blue-200">
+                      Career OS · Readiness Calibration
+                    </span>
+                  </div>
+                  <div className="text-sm font-bold text-white">
+                    You are currently <strong className="text-emerald-300">76% ready</strong> for this role.
+                  </div>
+                  <p className="text-2xs text-blue-200">
+                    Build a targeted Career Mission to close key capability gaps, practice interview drills, and prove outcomes.
+                  </p>
+                </div>
+
+                <button
+                  type="button"
+                  id="job-build-mission-btn"
+                  onClick={() => {
+                    onClose();
+                    if (onBuildMission) onBuildMission(job.title, job.domain);
+                  }}
+                  className="px-4 py-2.5 rounded-xl bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-slate-900 font-extrabold text-xs transition-all shadow-md flex items-center justify-center gap-1.5 shrink-0 cursor-pointer"
+                >
+                  <Target className="w-4 h-4" />
+                  <span>Build a Mission</span>
+                </button>
+              </div>
+
               {/* Role Overview */}
               <div className="bg-slate-50/70 p-5 rounded-2xl border border-slate-200/80">
                 <h3 className="text-xs font-bold uppercase tracking-wider text-slate-500 mb-2.5 flex items-center gap-2">
@@ -490,6 +582,37 @@ export const JobDetailModal: React.FC<JobDetailModalProps> = ({
                   </div>
                 </div>
               </div>
+
+              {/* Related Builder Match Challenges (Requirement 14) */}
+              <div className="p-5 rounded-2xl bg-gradient-to-br from-amber-50/80 to-orange-50/40 border border-amber-200/90 space-y-3">
+                <div className="flex items-center justify-between">
+                  <h4 className="text-xs font-bold uppercase tracking-wider text-amber-950 flex items-center gap-1.5">
+                    <Hammer className="w-3.5 h-3.5 text-amber-600" />
+                    <span>Related Builds &amp; Challenges</span>
+                  </h4>
+                  <span className="text-[10px] font-bold text-amber-800 bg-amber-100 px-1.5 py-0.5 rounded">Builder Match</span>
+                </div>
+                <p className="text-xs text-slate-600 leading-relaxed">
+                  Real problem briefs solved by builders in this role. Build a working prototype to create verifiable career evidence for this application.
+                </p>
+                <div className="p-3 bg-white rounded-xl border border-amber-200/70 space-y-1 shadow-3xs">
+                  <span className="text-[9px] font-bold text-slate-400 uppercase tracking-wider">Matched Build Opportunity</span>
+                  <p className="text-xs font-bold text-slate-900">Increase B2B SaaS Activation Velocity</p>
+                  <p className="text-2xs text-slate-500">2–4 weeks · Remote · Team of 2–4 · 94% Match</p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    onClose();
+                    window.dispatchEvent(new CustomEvent('career_navigate_tab', { detail: 'builder_match' }));
+                  }}
+                  className="w-full py-2 px-3 bg-amber-600 hover:bg-amber-700 text-white rounded-xl text-xs font-bold transition flex items-center justify-center gap-1.5 cursor-pointer shadow-3xs active:scale-95"
+                >
+                  <Sparkles className="w-3.5 h-3.5" />
+                  <span>Explore in Builder Match</span>
+                </button>
+              </div>
+
             </div>
 
           </div>

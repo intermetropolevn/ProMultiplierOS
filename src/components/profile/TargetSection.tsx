@@ -40,10 +40,10 @@ export const TargetSection: React.FC<TargetSectionProps> = ({
         <div className="p-3 bg-slate-50/70 border border-slate-200/70 rounded-xl space-y-1">
           <span className="text-2xs font-bold uppercase tracking-wider text-slate-400">Target Role</span>
           <div className="text-xs font-bold text-slate-900 line-clamp-1">
-            {profile.targetRole || 'Software Engineering'}
+            {profile.targetTitle || profile.targetRole || 'Technical Product Manager'}
           </div>
           <p className="text-2xs text-slate-500">
-            {profile.targetTitle || 'Staff Platform Architect'}
+            {profile.targetRole || 'Product Management'}
           </p>
         </div>
 

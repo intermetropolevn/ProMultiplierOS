@@ -91,22 +91,13 @@ const RoleBlueprintMappingContent: React.FC<RoleBlueprintMappingWorkspaceProps> 
 
       {/* Unified Preferred Role Context Strip (Requirements 2, 4-10) */}
       <PreferredRoleContextStrip
-        onInspectSpec={() => setInspectModalRole(preferredRole)}
-        onStartPractice={() => {
-          if (onStartPracticeRole) {
-            onStartPracticeRole(preferredRole);
-          }
-        }}
+        onInspectRoleSpec={(role) => setInspectModalRole(role)}
       />
 
       {/* Tab Content Panels */}
       <div className="animate-in fade-in duration-150">
         {activeTab === 'domain_sector_mapping' && (
-          <DomainSectorMappingView
-            selectedRoleBlueprint={preferredRole}
-            onStartPracticeRole={onStartPracticeRole}
-            onStartPracticeDomain={onStartPracticeDomain}
-          />
+          <DomainSectorMappingView />
         )}
 
         {activeTab === 'org_models_fit' && (

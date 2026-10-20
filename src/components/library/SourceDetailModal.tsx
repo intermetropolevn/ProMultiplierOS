@@ -32,8 +32,12 @@ import {
   Calendar,
   Building,
   User,
-  ArrowRight
+  ArrowRight,
+  CheckSquare,
+  CheckCircle2
 } from 'lucide-react';
+import { applicationStore } from '../../features/applications/services/applicationStore';
+import { ParticipationType } from '../../features/applications/types';
 
 interface SourceDetailModalProps {
   source: NormalizedSource;
@@ -69,6 +73,45 @@ export const SourceDetailModal: React.FC<SourceDetailModalProps> = ({
     const updated = { ...currentSource, status: newStatus };
     setCurrentSource(updated);
     onUpdate(updated);
+  };
+
+  const applications = applicationStore.getApplications();
+  const linkedItem = applications.find(a => 
+    a.roleTitle.toLowerCase() === currentSource.title.toLowerCase() ||
+    (currentSource.url && a.jobUrl === currentSource.url)
+  );
+
+  const handleTrackCredentialOrProgram = () => {
+    const isCred = (currentSource.sourceFamily as string) === 'credential_qualification' || 
+      ['certification', 'certificate', 'diploma', 'degree'].includes(currentSource.sourceType);
+    const pType: ParticipationType = isCred ? 'credential' : 'learning_program';
+
+    applicationStore.createApplicationFromOpportunity({
+      roleTitle: currentSource.title,
+      companyName: currentSource.provider || currentSource.organization || 'Accredited Institution',
+      organization: currentSource.provider || currentSource.organization,
+      jobUrl: currentSource.url,
+      domain: (currentSource as any).domainCategory || currentSource.domains?.[0] || 'Professional Qualification',
+      priority: 'HIGH',
+      participationType: pType,
+      credentialProgramData: {
+        providerName: currentSource.provider || currentSource.organization || 'Provider',
+        credentialType: isCred ? 'certificate' : 'bootcamp',
+        credentialUrl: currentSource.url,
+        milestones: [
+          { title: 'Enrollment & Prerequisites', completed: true },
+          { title: 'Core Modules & Practical Labs', completed: false },
+          { title: 'Capstone Assessment / Exam', completed: false }
+        ]
+      }
+    });
+
+    window.dispatchEvent(new CustomEvent('career_applications_updated'));
+  };
+
+  const handleViewInTracker = (itemId: string) => {
+    onClose();
+    window.dispatchEvent(new CustomEvent('open_participation_item', { detail: { itemId } }));
   };
 
   const confirmInferredSkill = (skill: string) => {
@@ -161,7 +204,9 @@ export const SourceDetailModal: React.FC<SourceDetailModalProps> = ({
               </span>
               <span className="text-xs text-slate-400">•</span>
               <span className="text-xs font-bold text-slate-600">
-                {typeConfig?.type.label || currentSource.sourceType}
+                {currentSource.id === 'ass-grab-product-ops-case' || currentSource.sourceType === 'product_case'
+                  ? 'Assessment / Product Case'
+                  : typeConfig?.type.label || currentSource.sourceType}
               </span>
 
               {/* Status Pill */}
@@ -223,6 +268,26 @@ export const SourceDetailModal: React.FC<SourceDetailModalProps> = ({
           </div>
 
           <div className="flex items-center gap-2">
+            {linkedItem ? (
+              <button
+                type="button"
+                onClick={() => handleViewInTracker(linkedItem.id)}
+                className="px-3 py-1.5 rounded-xl text-xs font-bold border border-emerald-300 bg-emerald-50 text-emerald-800 hover:bg-emerald-100 transition-colors flex items-center gap-1.5 cursor-pointer shadow-3xs"
+              >
+                <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
+                <span>View in Participation Tracker</span>
+              </button>
+            ) : (
+              <button
+                type="button"
+                onClick={handleTrackCredentialOrProgram}
+                className="px-3 py-1.5 rounded-xl text-xs font-bold border border-blue-600 bg-blue-50 text-blue-700 hover:bg-blue-100 transition-colors flex items-center gap-1.5 cursor-pointer shadow-3xs"
+              >
+                <CheckSquare className="w-3.5 h-3.5 text-blue-600" />
+                <span>+ Track {(currentSource.sourceFamily as string) === 'credential_qualification' ? 'Credential' : 'Program'}</span>
+              </button>
+            )}
+
             <button
               onClick={onClose}
               className="p-2 rounded-xl text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition-colors cursor-pointer"

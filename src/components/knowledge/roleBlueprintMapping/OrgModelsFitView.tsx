@@ -492,7 +492,10 @@ export const OrgModelsFitView: React.FC = () => {
                   <span>Probing Questions for Hiring Managers</span>
                 </div>
                 <div className="space-y-2">
-                  {currentModel.interviewSignals.map((sig, i) => (
+                  {(currentModel.interviewSignals || [
+                    "How are cross-team technical decisions arbitrated when squads disagree?",
+                    "What percentage of time is allocated to technical debt versus product velocity?"
+                  ]).map((sig, i) => (
                     <div key={i} className="text-xs text-slate-700 leading-relaxed flex items-start gap-2">
                       <span className="w-1.5 h-1.5 rounded-full bg-indigo-500 mt-1.5 shrink-0" />
                       <span>"{sig}"</span>

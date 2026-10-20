@@ -18,8 +18,10 @@ const STORAGE_KEYS = {
 };
 
 const DEFAULT_PROFILE: UserCareerProfile = {
-  targetRole: 'Software Engineering',
-  targetRoleBlueprintId: 'role-staff-swe',
+  name: 'Alex Chen',
+  targetRole: 'Product Management',
+  targetRoleBlueprintId: 'role-product-mgr',
+  targetTitle: 'Technical Product Manager',
   targetDomain: 'Enterprise SaaS',
   targetIndustryDomains: ['Enterprise SaaS', 'Fintech & Payments'],
   targetLevel: 'Senior',
@@ -183,9 +185,14 @@ export const StorageService = {
           domains = ['Enterprise SaaS', 'Fintech & Payments'];
         }
       }
+      let roleBpId = parsed.targetRoleBlueprintId;
+      if (!roleBpId || roleBpId === 'role-staff-swe') {
+        roleBpId = 'role-product-mgr';
+      }
       return {
         ...DEFAULT_PROFILE,
         ...parsed,
+        targetRoleBlueprintId: roleBpId,
         targetIndustryDomains: domains,
         targetDomain: parsed.targetDomain || domains[0] || 'Enterprise SaaS'
       };

@@ -136,7 +136,58 @@ export interface NormalizedSource {
   // Type-Specific Metadata bag
   metadata: Record<string, any>;
 
-  // Unified Knowledge Library Metadata
+  // Unified Knowledge Library Model (Sections 1-6)
+  assetType?: KnowledgeAssetType;
+  knowledgeType?: KnowledgeType;
+  knowledgeTypes?: KnowledgeType[];
+  accessModel?: KnowledgeAccessModel;
+  affiliateUrl?: string;
+  price?: string;
+  hasFullText?: boolean;
+  hasReader?: boolean;
+  readerContent?: {
+    chapters?: { title: string; content: string }[];
+    summary?: string;
+  };
+  publisher?: string;
+  externalUrl?: string;
+  createdBy?: string;
+  importedFrom?: string;
+  importMethod?: string;
+  lastSyncedAt?: string;
+  verificationStatus?: 'verified' | 'unverified' | 'community';
+  relatedRoles?: string[];
+  relatedRoleBlueprintIds?: string[];
+  relevanceScore?: number; // 0 - 100
+  recommendedFor?: string[];
+  skillGapsAddressed?: string[];
+  rating?: number | string;
+  duration?: string;
+  courseLevel?: 'Beginner' | 'Intermediate' | 'Advanced' | 'All Levels';
+  certificateAvailable?: boolean;
+
+  // Credentials & Learning Metadata
+  credentialLevel?: CredentialLevel;
+  learningLevel?: 'Beginner' | 'Intermediate' | 'Advanced' | 'Executive' | 'All Levels';
+  deliveryFormat?: 'Online' | 'Hybrid' | 'In-Person' | 'Self-Paced' | 'Live Cohort';
+  examRequired?: boolean;
+  validityPeriod?: string;
+  renewalRequirements?: string;
+  institution?: string;
+  qualificationType?: string;
+  fieldOfStudy?: string;
+  accreditation?: string;
+  learningPathSequence?: Array<{
+    stepNumber: number;
+    title: string;
+    assetType: 'Course' | 'Book' | 'Certification' | 'Certificate' | 'Framework' | 'Project' | 'Assessment';
+    sourceId?: string;
+    duration?: string;
+    isCompleted?: boolean;
+    provider?: string;
+  }>;
+
+  // Additional taxonomy tags
   industry?: string;
   functionArea?: string;
   roleCategory?: string;
@@ -144,6 +195,70 @@ export interface NormalizedSource {
   seniorityLevel?: string;
   technologyStack?: string[];
 }
+
+export type CredentialLevel = 
+  | 'Entry' 
+  | 'Foundation' 
+  | 'Professional' 
+  | 'Advanced' 
+  | 'Expert' 
+  | 'Graduate' 
+  | 'Postgraduate';
+
+export type KnowledgeAccessModel = 
+  | 'owned' 
+  | 'imported' 
+  | 'external' 
+  | 'affiliate' 
+  | 'free' 
+  | 'paid' 
+  | 'subscription';
+
+export type KnowledgeAssetType = 
+  | 'Certification'
+  | 'Certificate'
+  | 'Diploma'
+  | 'Degree'
+  | 'Course'
+  | 'Professional Program'
+  | 'Assessment'
+  | 'Learning Path'
+  | 'Book'
+  | 'eBook'
+  | 'Framework'
+  | 'Playbook'
+  | 'SOP'
+  | 'Operating Model'
+  | 'Template'
+  | 'Checklist'
+  | 'Best Practice'
+  | 'Implementation Guide'
+  | 'Industry Report'
+  | 'Market Research'
+  | 'Research Paper'
+  | 'Article / Publication'
+  | 'Company Report'
+  | 'Internal Document'
+  | 'Reference Material'
+  | 'Professional Standard'
+  | string;
+
+export type KnowledgeType = 
+  | 'Professional Credential'
+  | 'Training Completion'
+  | 'Formal Education'
+  | 'Structured Learning'
+  | 'Applied Assessment'
+  | 'Learning'
+  | 'Executive Education'
+  | 'Domain Knowledge'
+  | 'Methodology'
+  | 'Framework'
+  | 'Practice'
+  | 'Reference'
+  | 'Standard'
+  | 'Tool / Platform'
+  | string;
 
 export interface SkillEvidenceItem {
   sourceId: string;

@@ -17,8 +17,10 @@ import { AdminDataManagementHub } from './AdminDataManagementHub';
 import { CareerIntelligenceDashboard } from '../intelligence/observability/CareerIntelligenceDashboard';
 import { CapabilityActivationInspector } from '../intelligence/activation/CapabilityActivationInspector';
 import { CapabilityLedgerAdminView } from './CapabilityLedgerAdminView';
+import { AdminOpportunitiesView } from './AdminOpportunitiesView';
+import { Trophy } from 'lucide-react';
 
-export type PlatformAdminTab = 'admin' | 'intelligence' | 'trigger_engine' | 'capability_ledger';
+export type PlatformAdminTab = 'admin' | 'opportunities' | 'intelligence' | 'trigger_engine' | 'capability_ledger';
 
 interface PlatformAdminWorkspaceProps {
   initialTab?: PlatformAdminTab;
@@ -86,6 +88,19 @@ export const PlatformAdminWorkspace: React.FC<PlatformAdminWorkspaceProps> = ({
 
           <button
             type="button"
+            onClick={() => setActiveTab('opportunities')}
+            className={`px-4 py-2 rounded-xl text-xs sm:text-sm font-bold transition-all cursor-pointer flex items-center gap-2 ${
+              activeTab === 'opportunities'
+                ? 'bg-indigo-600 text-white shadow-xs'
+                : 'text-slate-300 hover:text-white hover:bg-slate-800'
+            }`}
+          >
+            <Trophy className="w-4 h-4" />
+            <span>Opportunities &amp; Campaigns</span>
+          </button>
+
+          <button
+            type="button"
             onClick={() => setActiveTab('intelligence')}
             className={`px-4 py-2 rounded-xl text-xs sm:text-sm font-bold transition-all cursor-pointer flex items-center gap-2 ${
               activeTab === 'intelligence'
@@ -133,6 +148,12 @@ export const PlatformAdminWorkspace: React.FC<PlatformAdminWorkspaceProps> = ({
         {activeTab === 'admin' && (
           <div className="animate-in fade-in duration-150">
             <AdminDataManagementHub />
+          </div>
+        )}
+
+        {activeTab === 'opportunities' && (
+          <div className="animate-in fade-in duration-150">
+            <AdminOpportunitiesView />
           </div>
         )}
 

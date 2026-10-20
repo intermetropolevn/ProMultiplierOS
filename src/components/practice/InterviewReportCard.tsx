@@ -20,6 +20,7 @@ interface InterviewReportCardProps {
   onRetake: () => void;
   onGoToTracker: () => void;
   onGoToDiscover: () => void;
+  onGetFeedback?: (sessionData: { title: string; content: string; capability: string; score: number }) => void;
 }
 
 export const InterviewReportCard: React.FC<InterviewReportCardProps> = ({
@@ -27,6 +28,7 @@ export const InterviewReportCard: React.FC<InterviewReportCardProps> = ({
   onRetake,
   onGoToTracker,
   onGoToDiscover,
+  onGetFeedback,
 }) => {
   const [copied, setCopied] = useState(false);
 
@@ -117,6 +119,44 @@ export const InterviewReportCard: React.FC<InterviewReportCardProps> = ({
             </p>
           </div>
         </div>
+
+        {/* Expert Feedback Callout (Requirement 2) */}
+        {onGetFeedback && (
+          <div className="p-4 rounded-2xl bg-gradient-to-r from-blue-900 via-indigo-900 to-slate-900 text-white flex flex-col sm:flex-row sm:items-center justify-between gap-4 border border-blue-500/30 shadow-md">
+            <div className="space-y-1">
+              <div className="flex items-center gap-2">
+                <Sparkles className="w-4 h-4 text-amber-400" />
+                <span className="text-[10px] font-extrabold uppercase tracking-wider text-amber-300">
+                  Practitioner Feedback Available
+                </span>
+              </div>
+              <div className="text-sm font-bold text-white">
+                Your work is ready for review.
+              </div>
+              <p className="text-2xs text-blue-200">
+                Get an experienced practitioner or domain reviewer to evaluate your strategic trade-offs before saving to evidence.
+              </p>
+            </div>
+
+            <button
+              type="button"
+              id="btn-report-get-feedback"
+              onClick={() => {
+                const firstResp = session.responses[0];
+                onGetFeedback({
+                  title: `Practice Interview: ${session.config.roleCategory} (${session.config.level})`,
+                  content: firstResp ? `[Question]: ${firstResp.question.question}\n\n[Candidate Answer]:\n${firstResp.candidateAnswer}` : 'Practice interview session output',
+                  capability: session.config.interviewType || 'Product Strategy',
+                  score: session.overallScore
+                });
+              }}
+              className="px-5 py-2.5 rounded-xl bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-slate-900 font-black text-xs transition-all shadow-md flex items-center justify-center gap-2 shrink-0 cursor-pointer"
+            >
+              <Sparkles className="w-4 h-4 fill-slate-900" />
+              <span>Get Feedback</span>
+            </button>
+          </div>
+        )}
 
         {/* Action Buttons */}
         <div className="flex flex-wrap items-center justify-between gap-3 pt-2">

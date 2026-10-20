@@ -1,11 +1,14 @@
 import React, { useState } from 'react';
-import { Briefcase, Compass, Sparkles, Plus } from 'lucide-react';
+import { Briefcase, Compass, Sparkles, Plus, Trophy } from 'lucide-react';
 import { JobListing, RoleBlueprint } from '../../types';
 import { JobsExplorer } from './JobsExplorer';
 import { RolesExplorer } from './RolesExplorer';
 import { JobDetailModal } from './JobDetailModal';
 import { RoleDetailModal } from '../prepare/RoleDetailModal';
 import { AddJobModal } from './AddJobModal';
+import { CreateRoleBlueprintModal } from './CreateRoleBlueprintModal';
+import { OpportunitiesExplorer } from '../opportunities/OpportunitiesExplorer';
+import { CreateOpportunityModal } from '../opportunities/CreateOpportunityModal';
 import { JobService } from '../../services/jobService';
 
 interface DiscoverHubProps {
@@ -15,6 +18,8 @@ interface DiscoverHubProps {
   onStartPracticeForJob: (job: JobListing) => void;
   onSelectRole: (role: RoleBlueprint) => void;
   onStartPracticeForRole: (role: RoleBlueprint) => void;
+  onStartMission?: (roleTitle: string, domain?: string) => void;
+  onOpenApplication?: (applicationId: string) => void;
 }
 
 export const DiscoverHub: React.FC<DiscoverHubProps> = ({
@@ -24,11 +29,17 @@ export const DiscoverHub: React.FC<DiscoverHubProps> = ({
   onStartPracticeForJob,
   onSelectRole,
   onStartPracticeForRole,
+  onStartMission,
+  onOpenApplication,
 }) => {
-  const [subView, setSubView] = useState<'jobs' | 'roles'>('jobs');
+  const [subView, setSubView] = useState<'jobs' | 'opportunities' | 'roles'>('jobs');
   const [activeJobModal, setActiveJobModal] = useState<JobListing | null>(null);
   const [activeRoleModal, setActiveRoleModal] = useState<RoleBlueprint | null>(null);
   const [isAddJobOpen, setIsAddJobOpen] = useState(false);
+  const [isAddOpportunityOpen, setIsAddOpportunityOpen] = useState(false);
+  const [isCreateBlueprintOpen, setIsCreateBlueprintOpen] = useState(false);
+  const [roleToEdit, setRoleToEdit] = useState<RoleBlueprint | null>(null);
+  const [roleToDuplicate, setRoleToDuplicate] = useState<RoleBlueprint | null>(null);
 
   const handleOpenJob = (job: JobListing) => {
     setActiveJobModal(job);
@@ -51,20 +62,48 @@ export const DiscoverHub: React.FC<DiscoverHubProps> = ({
               Job Opportunities &amp; Market Discovery
             </h1>
             <p className="text-xs sm:text-sm text-slate-500 font-normal max-w-2xl leading-relaxed">
-              Filter verified tier-1 tech roles, explore architectural requirements, and launch targeted interview preparation.
+              Filter verified tech roles, discover high-impact hackathons &amp; venture grants, explore architectural requirements, and launch targeted interview preparation.
             </p>
           </div>
 
-          {/* Quick Actions in top-right corner */}
+          {/* Contextual Primary Action in top-right corner */}
           <div className="flex items-center gap-2.5 shrink-0 self-start">
-            <button
-              id="btn-discover-add-job"
-              onClick={() => setIsAddJobOpen(true)}
-              className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg text-xs font-semibold bg-blue-600 hover:bg-blue-700 text-white transition-colors shadow-2xs cursor-pointer"
-            >
-              <Plus className="w-3.5 h-3.5 text-white" />
-              <span>+ Add Opportunity</span>
-            </button>
+            {subView === 'jobs' && (
+              <button
+                id="btn-discover-add-job"
+                onClick={() => setIsAddJobOpen(true)}
+                className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg text-xs font-semibold bg-blue-600 hover:bg-blue-700 text-white transition-colors shadow-2xs cursor-pointer"
+              >
+                <Plus className="w-3.5 h-3.5 text-white" />
+                <span>+ Add Opportunity</span>
+              </button>
+            )}
+
+            {subView === 'opportunities' && (
+              <button
+                id="btn-discover-add-ecosystem-opp"
+                onClick={() => setIsAddOpportunityOpen(true)}
+                className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg text-xs font-semibold bg-blue-600 hover:bg-blue-700 text-white transition-colors shadow-2xs cursor-pointer"
+              >
+                <Plus className="w-3.5 h-3.5 text-white" />
+                <span>+ Create Opportunity</span>
+              </button>
+            )}
+
+            {subView === 'roles' && (
+              <button
+                id="btn-discover-create-blueprint"
+                onClick={() => {
+                  setRoleToEdit(null);
+                  setRoleToDuplicate(null);
+                  setIsCreateBlueprintOpen(true);
+                }}
+                className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg text-xs font-semibold bg-blue-600 hover:bg-blue-700 text-white transition-colors shadow-2xs cursor-pointer"
+              >
+                <Plus className="w-3.5 h-3.5 text-white" />
+                <span>+ Create Role Blueprint</span>
+              </button>
+            )}
           </div>
         </div>
 
@@ -74,7 +113,7 @@ export const DiscoverHub: React.FC<DiscoverHubProps> = ({
             <button
               id="subview-jobs-btn"
               onClick={() => setSubView('jobs')}
-              className={`flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
+              className={`flex items-center gap-2 px-3.5 sm:px-4 py-2 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
                 subView === 'jobs'
                   ? 'bg-white text-slate-900 shadow-2xs border border-slate-200/60'
                   : 'text-slate-600 hover:text-slate-900 hover:bg-white/50'
@@ -85,9 +124,25 @@ export const DiscoverHub: React.FC<DiscoverHubProps> = ({
             </button>
 
             <button
+              id="subview-opportunities-btn"
+              onClick={() => setSubView('opportunities')}
+              className={`flex items-center gap-2 px-3.5 sm:px-4 py-2 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
+                subView === 'opportunities'
+                  ? 'bg-white text-slate-900 shadow-2xs border border-slate-200/60'
+                  : 'text-slate-600 hover:text-slate-900 hover:bg-white/50'
+              }`}
+            >
+              <Sparkles className="w-4 h-4 text-amber-500" />
+              <span>Career Programs &amp; Signals</span>
+              <span className="hidden sm:inline-block text-[10px] font-bold px-1.5 py-0.2 rounded bg-amber-100 text-amber-800">
+                New Layer
+              </span>
+            </button>
+
+            <button
               id="subview-roles-btn"
               onClick={() => setSubView('roles')}
-              className={`flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
+              className={`flex items-center gap-2 px-3.5 sm:px-4 py-2 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
                 subView === 'roles'
                   ? 'bg-white text-slate-900 shadow-2xs border border-slate-200/60'
                   : 'text-slate-600 hover:text-slate-900 hover:bg-white/50'
@@ -99,25 +154,46 @@ export const DiscoverHub: React.FC<DiscoverHubProps> = ({
           </div>
 
           <div className="text-xs text-slate-500 font-medium hidden sm:block">
-            {subView === 'jobs'
-              ? 'Cross-platform indexed roles with real external postings'
-              : 'Comprehensive career progression & competency frameworks'}
+            {subView === 'jobs' && 'Cross-platform indexed roles with real external postings'}
+            {subView === 'opportunities' && 'Challenges, hackathons, venture grants, partner deals & company signals'}
+            {subView === 'roles' && 'Comprehensive career progression & competency frameworks'}
           </div>
         </div>
       </div>
 
       {/* Main Content */}
-      {subView === 'jobs' ? (
+      {subView === 'jobs' && (
         <JobsExplorer
           onSelectJob={handleOpenJob}
           onToggleSave={onToggleSaveJob}
           isJobSaved={isJobSaved}
           onStartPracticeForJob={onStartPracticeForJob}
+          onOpenApplication={onOpenApplication}
         />
-      ) : (
+      )}
+
+      {subView === 'opportunities' && (
+        <OpportunitiesExplorer
+          onOpenCreateModal={() => setIsAddOpportunityOpen(true)}
+          onBuildMission={onStartMission}
+        />
+      )}
+
+      {subView === 'roles' && (
         <RolesExplorer
           onSelectRole={handleOpenRole}
           onPracticeRole={onStartPracticeForRole}
+          onStartMission={onStartMission ? (role) => onStartMission(role.title, role.category) : undefined}
+          onEditRole={(role) => {
+            setRoleToEdit(role);
+            setRoleToDuplicate(null);
+            setIsCreateBlueprintOpen(true);
+          }}
+          onDuplicateRole={(role) => {
+            setRoleToEdit(null);
+            setRoleToDuplicate(role);
+            setIsCreateBlueprintOpen(true);
+          }}
         />
       )}
 
@@ -129,6 +205,8 @@ export const DiscoverHub: React.FC<DiscoverHubProps> = ({
         onToggleSave={onToggleSaveJob}
         isSaved={activeJobModal ? isJobSaved(activeJobModal.id) : false}
         onStartPracticeForJob={onStartPracticeForJob}
+        onBuildMission={onStartMission}
+        onOpenApplication={onOpenApplication}
         onDeleteCustomJob={(jobId) => {
           JobService.deleteJob(jobId);
           setActiveJobModal(null);
@@ -148,10 +226,31 @@ export const DiscoverHub: React.FC<DiscoverHubProps> = ({
       <AddJobModal
         isOpen={isAddJobOpen}
         onClose={() => setIsAddJobOpen(false)}
-        onJobAdded={(newJob) => {
+        onJobAdded={() => {
           setIsAddJobOpen(false);
-          // Broadcast update
           window.dispatchEvent(new CustomEvent('career_jobs_updated'));
+        }}
+      />
+
+      <CreateOpportunityModal
+        isOpen={isAddOpportunityOpen}
+        onClose={() => setIsAddOpportunityOpen(false)}
+      />
+
+      <CreateRoleBlueprintModal
+        isOpen={isCreateBlueprintOpen}
+        onClose={() => {
+          setIsCreateBlueprintOpen(false);
+          setRoleToEdit(null);
+          setRoleToDuplicate(null);
+        }}
+        initialRoleToEdit={roleToEdit}
+        initialDuplicateFromRole={roleToDuplicate}
+        onBlueprintCreated={(blueprint) => {
+          setIsCreateBlueprintOpen(false);
+          setRoleToEdit(null);
+          setRoleToDuplicate(null);
+          setActiveRoleModal(blueprint);
         }}
       />
     </div>

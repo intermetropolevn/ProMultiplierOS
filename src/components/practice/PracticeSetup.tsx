@@ -48,7 +48,7 @@ export const PracticeSetup: React.FC<PracticeSetupProps> = ({
   const [interviewMode, setInterviewMode] = useState<'mock' | 'live_intelligence'>(
     initialConfig?.interviewMode || 'mock'
   );
-  const [mockExperienceType, setMockExperienceType] = useState<'realtime_ai' | 'classic'>(
+  const [mockExperienceType, setMockExperienceType] = useState<'realtime_ai' | 'classic' | 'timed_assignment'>(
     initialConfig?.mockExperienceType || 'realtime_ai'
   );
   const [questionSet, setQuestionSet] = useState<QuestionSetId>(
