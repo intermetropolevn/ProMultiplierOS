@@ -1,8 +1,12 @@
-import React, { useState } from 'react';
-import { X, Plus, Trash2, Check, Sparkles, AlertCircle } from 'lucide-react';
+import React, { useState, useRef } from 'react';
+import { X, Plus, Trash2, Check, Sparkles, AlertCircle, Lock } from 'lucide-react';
 import { EvidenceItem, EvidenceCategory } from '../../features/knowledge/types';
 import { QUESTIONS_DATA } from '../../data/questionsData';
 import { KnowledgeInfoPopover } from './KnowledgeInfoPopover';
+import { AccessCreationBanner } from '../access/AccessCreationBanner';
+import { ProgressiveCreationSection } from '../access/ProgressiveCreationSection';
+import { DemoQuotaGate } from '../access/DemoQuotaGate';
+import { useAccessControl } from '../../services/accessControlService';
 
 interface EvidenceModalProps {
   isOpen: boolean;
@@ -33,10 +37,13 @@ export const EvidenceModal: React.FC<EvidenceModalProps> = ({
   initialItem
 }) => {
   const isEditing = !!initialItem;
+  const { capabilities, canCreate, openContextualPrompt } = useAccessControl();
+  const isSubmittingRef = useRef(false);
 
   const [title, setTitle] = useState(initialItem?.title || '');
   const [shortSummary, setShortSummary] = useState(initialItem?.shortSummary || '');
   const [category, setCategory] = useState<EvidenceCategory>(initialItem?.category || 'Projects');
+  const [projectStatus, setProjectStatus] = useState('Active / Verified');
   const [context, setContext] = useState(initialItem?.context || '');
   const [myRole, setMyRole] = useState(initialItem?.myRole || '');
   const [actions, setActions] = useState(initialItem?.actions || '');
@@ -56,7 +63,16 @@ export const EvidenceModal: React.FC<EvidenceModalProps> = ({
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+    if (isSubmittingRef.current) return;
+    if (!capabilities.canCreate) {
+      openContextualPrompt();
+      return;
+    }
+    if (!isEditing && !canCreate('projects')) {
+      return;
+    }
     if (!title.trim()) return;
+    isSubmittingRef.current = true;
 
     const metrics = metricsText
       .split('\n')
@@ -143,54 +159,76 @@ export const EvidenceModal: React.FC<EvidenceModalProps> = ({
         </div>
 
         {/* Form Body */}
+        <DemoQuotaGate workflowKey="projects" isEditing={isEditing} onViewExistingItems={onClose}>
         <form onSubmit={handleSubmit} className="overflow-y-auto p-6 space-y-6 flex-1 text-sm">
-          
-          {/* Title & Category */}
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-            <div className="sm:col-span-2 space-y-1.5">
-              <label className="block text-xs font-bold text-slate-800 uppercase tracking-wider">
-                Title <span className="text-rose-500">*</span>
-              </label>
-              <input
-                type="text"
-                required
-                value={title}
-                onChange={e => setTitle(e.target.value)}
-                placeholder="e.g. CRM Migration & Real-Time Sync"
-                className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 focus:outline-hidden focus:ring-2 focus:ring-blue-500 text-slate-900 placeholder:text-slate-400 font-semibold"
-              />
+          <AccessCreationBanner workflowKey="projects" workflowLabel="Projects" />
+
+          {/* BASIC SECTION: Project Name, Project Type, Description, Status */}
+          <div className="space-y-4">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+              <div className="space-y-1.5">
+                <label className="block text-xs font-bold text-slate-800 uppercase tracking-wider">
+                  Project Name <span className="text-rose-500">*</span>
+                </label>
+                <input
+                  type="text"
+                  required
+                  value={title}
+                  onChange={e => setTitle(e.target.value)}
+                  placeholder="e.g. CRM Migration & Real-Time Sync"
+                  className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 focus:outline-hidden focus:ring-2 focus:ring-blue-500 text-slate-900 placeholder:text-slate-400 font-semibold"
+                />
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="block text-xs font-bold text-slate-800 uppercase tracking-wider">
+                  Project Type
+                </label>
+                <select
+                  value={category}
+                  onChange={e => setCategory(e.target.value as EvidenceCategory)}
+                  className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 focus:outline-hidden focus:ring-2 focus:ring-blue-500 text-slate-900 bg-white font-medium cursor-pointer"
+                >
+                  {CATEGORIES.map(c => (
+                    <option key={c} value={c}>{c}</option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="block text-xs font-bold text-slate-800 uppercase tracking-wider">
+                  Status
+                </label>
+                <select
+                  value={projectStatus}
+                  onChange={e => setProjectStatus(e.target.value)}
+                  className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 focus:outline-hidden focus:ring-2 focus:ring-blue-500 text-slate-900 bg-white font-medium cursor-pointer"
+                >
+                  <option value="Active / Verified">Active / Verified</option>
+                  <option value="Shipped / Production">Shipped / Production</option>
+                  <option value="In Review">In Review</option>
+                  <option value="Archived">Archived</option>
+                </select>
+              </div>
             </div>
 
+            {/* Description / Short Summary */}
             <div className="space-y-1.5">
               <label className="block text-xs font-bold text-slate-800 uppercase tracking-wider">
-                Category
+                Description
               </label>
-              <select
-                value={category}
-                onChange={e => setCategory(e.target.value as EvidenceCategory)}
-                className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 focus:outline-hidden focus:ring-2 focus:ring-blue-500 text-slate-900 bg-white font-medium cursor-pointer"
-              >
-                {CATEGORIES.map(c => (
-                  <option key={c} value={c}>{c}</option>
-                ))}
-              </select>
+              <textarea
+                rows={2}
+                value={shortSummary}
+                onChange={e => setShortSummary(e.target.value)}
+                placeholder="High-level summary of the project architecture, scope, and outcome"
+                className="w-full px-3.5 py-2 rounded-xl border border-slate-300 focus:outline-hidden focus:ring-2 focus:ring-blue-500 text-slate-900 placeholder:text-slate-400"
+              />
             </div>
           </div>
 
-          {/* Short Summary */}
-          <div className="space-y-1.5">
-            <label className="block text-xs font-bold text-slate-800 uppercase tracking-wider">
-              Short Summary
-            </label>
-            <input
-              type="text"
-              value={shortSummary}
-              onChange={e => setShortSummary(e.target.value)}
-              placeholder="High-level 1-line distillation of the achievement and impact"
-              className="w-full px-3.5 py-2 rounded-xl border border-slate-300 focus:outline-hidden focus:ring-2 focus:ring-blue-500 text-slate-900 placeholder:text-slate-400"
-            />
-          </div>
-
+          {/* ADVANCED SECTION: Capability Mapping, Evidence Model, Outcome Metrics, Role Alignment, Intelligence Tags */}
+          <ProgressiveCreationSection workflowKey="projects">
           {/* Context & My Role */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div className="space-y-1.5">
@@ -453,6 +491,7 @@ export const EvidenceModal: React.FC<EvidenceModalProps> = ({
               })}
             </div>
           </div>
+          </ProgressiveCreationSection>
 
           {/* Footer Buttons */}
           <div className="pt-4 border-t border-slate-200 flex items-center justify-end gap-3">
@@ -463,14 +502,26 @@ export const EvidenceModal: React.FC<EvidenceModalProps> = ({
             >
               Cancel
             </button>
-            <button
-              type="submit"
-              className="px-5 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold shadow-xs cursor-pointer"
-            >
-              {isEditing ? 'Save Changes' : 'Add to Evidence Library'}
-            </button>
+            {!capabilities.canCreate ? (
+              <button
+                type="button"
+                onClick={() => openContextualPrompt()}
+                className="px-5 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold shadow-xs cursor-pointer inline-flex items-center gap-1.5"
+              >
+                <Lock className="w-3.5 h-3.5" />
+                <span>Unlock in Demo</span>
+              </button>
+            ) : (
+              <button
+                type="submit"
+                className="px-5 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold shadow-xs cursor-pointer"
+              >
+                {isEditing ? 'Save Changes' : 'Add to Evidence Library'}
+              </button>
+            )}
           </div>
         </form>
+        </DemoQuotaGate>
 
       </div>
     </div>

@@ -15,6 +15,9 @@ import {
 } from 'lucide-react';
 import { evidenceIntelligenceStore } from '../../features/evidenceIntelligence/services/evidenceIntelligenceStore';
 import { EvidenceItem, WorkInitiative } from '../../features/evidenceIntelligence/types';
+import { useAccessControl } from '../../services/accessControlService';
+import { IntelligenceAccessBanner } from '../access/IntelligenceAccessBanner';
+import { IntelligenceModeBadge } from '../access/CareerOSIntelligenceGate';
 
 import { EvidenceInboxView } from './EvidenceInboxView';
 import { EvidenceTimelineView } from './EvidenceTimelineView';
@@ -43,6 +46,7 @@ export const EvidenceIntelligenceWorkspace: React.FC<EvidenceIntelligenceWorkspa
   initialSubTab = 'inbox',
   onNavigateToRoleIntelligence
 }) => {
+  const { accessLevel, capabilities: accessCaps, recordMeaningfulInteraction } = useAccessControl();
   const [activeSubTab, setActiveSubTab] = useState<EvidenceSubTab>(initialSubTab);
   
   // Data from store
@@ -68,12 +72,14 @@ export const EvidenceIntelligenceWorkspace: React.FC<EvidenceIntelligenceWorkspa
     return unsubscribe;
   }, []);
 
-  const pendingInboxCount = inboxItems.length;
+  const isFullAccess = accessLevel === 'FULL_ACCESS';
+  const visibleEvidenceCount = isFullAccess ? timelineEvidence.length : Math.min(timelineEvidence.length, 3);
+  const pendingInboxCount = isFullAccess ? inboxItems.length : Math.min(inboxItems.length, 2);
   const confirmedCount = timelineEvidence.filter(e => e.validationStatus === 'Confirmed' || e.validationStatus === 'Validated').length;
 
   const tabs: { id: EvidenceSubTab; label: string; icon: React.FC<{ className?: string }>; badge?: number }[] = [
     { id: 'inbox', label: 'Evidence Inbox', icon: Inbox, badge: pendingInboxCount > 0 ? pendingInboxCount : undefined },
-    { id: 'timeline', label: 'Evidence Timeline', icon: Clock, badge: confirmedCount },
+    { id: 'timeline', label: 'Evidence Timeline', icon: Clock, badge: isFullAccess ? confirmedCount : Math.min(confirmedCount, 3) },
     { id: 'initiatives', label: 'Work & Initiatives', icon: Layers },
     { id: 'capabilities', label: 'Capability Evidence', icon: Compass },
     { id: 'graph', label: 'Evidence Graph', icon: GitBranch },
@@ -82,6 +88,12 @@ export const EvidenceIntelligenceWorkspace: React.FC<EvidenceIntelligenceWorkspa
 
   return (
     <div className="space-y-6">
+      {/* Subtle Intelligence Access Tier Banner */}
+      <IntelligenceAccessBanner
+        featureName="Evidence Intelligence & Proof Graph"
+        capability="evidence_intelligence"
+      />
+
       {/* Top Banner / Breadcrumb & Action bar */}
       <div className="bg-slate-900 text-white rounded-2xl p-6 sm:p-7 shadow-sm border border-slate-800">
         <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-5">
@@ -89,6 +101,10 @@ export const EvidenceIntelligenceWorkspace: React.FC<EvidenceIntelligenceWorkspa
             <div className="flex items-center gap-2 flex-wrap">
               <span className="text-[10px] font-black uppercase tracking-wider px-2.5 py-0.5 rounded bg-blue-500/20 text-blue-300 border border-blue-500/30">
                 Career Intelligence Platform
+              </span>
+              <IntelligenceModeBadge capability="evidence_intelligence" />
+              <span className="text-[10px] font-bold px-2.5 py-0.5 rounded-full bg-blue-500/20 text-blue-200 border border-blue-400/30">
+                {visibleEvidenceCount} {isFullAccess ? 'evidence signals' : 'curated sample signals'} · {accessCaps.tierBadgeLabel}
               </span>
               <span className="text-slate-500">·</span>
               <span className="text-xs text-slate-300 font-semibold flex items-center gap-1.5">
@@ -119,7 +135,10 @@ export const EvidenceIntelligenceWorkspace: React.FC<EvidenceIntelligenceWorkspa
 
             <button
               type="button"
-              onClick={() => setIsAddEvidenceModalOpen(true)}
+              onClick={() => {
+                recordMeaningfulInteraction('protected_action');
+                setIsAddEvidenceModalOpen(true);
+              }}
               className="px-4 py-2.5 bg-blue-600 hover:bg-blue-500 text-white rounded-xl text-xs font-bold transition-all shadow-xs flex items-center gap-2 cursor-pointer"
             >
               <Plus className="w-4 h-4" />
@@ -146,22 +165,22 @@ export const EvidenceIntelligenceWorkspace: React.FC<EvidenceIntelligenceWorkspa
             <div className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Triage Inbox</div>
             <div className="flex items-baseline gap-2 mt-1">
               <span className="text-xl font-black text-white">{pendingInboxCount}</span>
-              <span className="text-xs text-amber-400 font-medium">pending confirmation</span>
+              <span className="text-xs text-amber-400 font-medium">{isFullAccess ? 'pending confirmation' : 'sample candidates'}</span>
             </div>
           </div>
 
           <div className="bg-slate-800/60 rounded-xl p-3 border border-slate-700/50">
             <div className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Validated Signals</div>
             <div className="flex items-baseline gap-2 mt-1">
-              <span className="text-xl font-black text-emerald-400">{confirmedCount}</span>
-              <span className="text-xs text-slate-400">confirmed items</span>
+              <span className="text-xl font-black text-emerald-400">{isFullAccess ? confirmedCount : Math.min(confirmedCount, 3)}</span>
+              <span className="text-xs text-slate-400">{isFullAccess ? 'confirmed items' : 'curated examples'}</span>
             </div>
           </div>
 
           <div className="bg-slate-800/60 rounded-xl p-3 border border-slate-700/50">
             <div className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Work Initiatives</div>
             <div className="flex items-baseline gap-2 mt-1">
-              <span className="text-xl font-black text-white">{initiatives.length}</span>
+              <span className="text-xl font-black text-white">{isFullAccess ? initiatives.length : Math.min(initiatives.length, 2)}</span>
               <span className="text-xs text-blue-400">coherent clusters</span>
             </div>
           </div>
@@ -185,7 +204,10 @@ export const EvidenceIntelligenceWorkspace: React.FC<EvidenceIntelligenceWorkspa
             <button
               key={tab.id}
               type="button"
-              onClick={() => setActiveSubTab(tab.id)}
+              onClick={() => {
+                recordMeaningfulInteraction('navigation');
+                setActiveSubTab(tab.id);
+              }}
               className={`flex items-center gap-2 px-3.5 py-2 rounded-lg text-xs font-bold transition-all shrink-0 cursor-pointer ${
                 isActive
                   ? 'bg-slate-900 text-white shadow-xs'

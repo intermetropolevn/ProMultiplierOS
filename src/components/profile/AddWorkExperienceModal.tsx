@@ -1,6 +1,10 @@
-import React, { useState, useEffect } from 'react';
-import { X, Building2, Briefcase, Calendar, MapPin, Award, CheckCircle2, Sparkles, Plus, Trash2 } from 'lucide-react';
+import React, { useState, useEffect, useRef } from 'react';
+import { X, Building2, Briefcase, Calendar, MapPin, Award, CheckCircle2, Sparkles, Plus, Trash2, Lock } from 'lucide-react';
 import { WorkExperienceService, WorkExperienceRecord } from '../../services/workExperienceService';
+import { AccessCreationBanner } from '../access/AccessCreationBanner';
+import { ProgressiveCreationSection } from '../access/ProgressiveCreationSection';
+import { DemoQuotaGate } from '../access/DemoQuotaGate';
+import { useAccessControl } from '../../services/accessControlService';
 
 interface AddWorkExperienceModalProps {
   isOpen: boolean;
@@ -18,6 +22,8 @@ export const AddWorkExperienceModal: React.FC<AddWorkExperienceModalProps> = ({
   initialRecord
 }) => {
   const isEditMode = !!initialRecord;
+  const { capabilities, canCreate, openContextualPrompt } = useAccessControl();
+  const isSubmittingRef = useRef(false);
 
   const [company, setCompany] = useState('');
   const [role, setRole] = useState('');
@@ -45,6 +51,7 @@ export const AddWorkExperienceModal: React.FC<AddWorkExperienceModalProps> = ({
   ]);
 
   useEffect(() => {
+    isSubmittingRef.current = false;
     if (initialRecord) {
       setCompany(initialRecord.company || '');
       setRole(initialRecord.role || '');
@@ -111,7 +118,16 @@ export const AddWorkExperienceModal: React.FC<AddWorkExperienceModalProps> = ({
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+    if (isSubmittingRef.current) return;
+    if (!capabilities.canCreate) {
+      openContextualPrompt();
+      return;
+    }
+    if (!isEditMode && !canCreate('work_experiences')) {
+      return;
+    }
     if (!company.trim() || !role.trim()) return;
+    isSubmittingRef.current = true;
 
     if (isEditMode && initialRecord) {
       const updated = WorkExperienceService.updateWorkExperience(initialRecord.id, {
@@ -181,79 +197,93 @@ export const AddWorkExperienceModal: React.FC<AddWorkExperienceModalProps> = ({
         </div>
 
         {/* Modal Body */}
+        <DemoQuotaGate workflowKey="work_experiences" isEditing={isEditMode} onViewExistingItems={onClose}>
         <form onSubmit={handleSubmit} className="p-6 overflow-y-auto space-y-5 flex-1 text-xs">
-          
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <div>
-              <label className="block text-slate-700 font-semibold mb-1">Company / Organization *</label>
-              <div className="relative">
-                <Building2 className="w-4 h-4 text-slate-400 absolute left-3 top-2.5" />
-                <input
-                  type="text"
-                  required
-                  placeholder="e.g. Stripe, Robinhood, Ramp"
-                  value={company}
-                  onChange={(e) => setCompany(e.target.value)}
-                  className="w-full pl-9 pr-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-slate-900"
-                />
+          <AccessCreationBanner workflowKey="work_experiences" workflowLabel="Work Experiences" />
+
+          {/* BASIC SECTION: Company, Role, Dates, Short Description */}
+          <div className="space-y-4">
+            <div className="flex items-center justify-between">
+              <span className="text-[11px] font-bold uppercase tracking-wider text-slate-500">
+                Basic Work Experience Fields
+              </span>
+              <span className="text-[11px] text-slate-400">
+                Company · Role · Dates · Short Description
+              </span>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+              <div>
+                <label className="block text-slate-700 font-semibold mb-1">Company *</label>
+                <div className="relative">
+                  <Building2 className="w-4 h-4 text-slate-400 absolute left-3 top-2.5" />
+                  <input
+                    type="text"
+                    required
+                    placeholder="e.g. Stripe, Robinhood, Ramp"
+                    value={company}
+                    onChange={(e) => setCompany(e.target.value)}
+                    className="w-full pl-9 pr-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-slate-900"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-slate-700 font-semibold mb-1">Role *</label>
+                <div className="relative">
+                  <Briefcase className="w-4 h-4 text-slate-400 absolute left-3 top-2.5" />
+                  <input
+                    type="text"
+                    required
+                    placeholder="e.g. Lead Platform Engineer"
+                    value={role}
+                    onChange={(e) => setRole(e.target.value)}
+                    className="w-full pl-9 pr-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-slate-900"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-slate-700 font-semibold mb-1">Dates</label>
+                <div className="relative">
+                  <Calendar className="w-4 h-4 text-slate-400 absolute left-3 top-2.5" />
+                  <input
+                    type="text"
+                    placeholder="e.g. 2023 — Present"
+                    value={dates}
+                    onChange={(e) => setDates(e.target.value)}
+                    className="w-full pl-9 pr-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-slate-900"
+                  />
+                </div>
               </div>
             </div>
 
             <div>
-              <label className="block text-slate-700 font-semibold mb-1">Role / Title *</label>
-              <div className="relative">
-                <Briefcase className="w-4 h-4 text-slate-400 absolute left-3 top-2.5" />
-                <input
-                  type="text"
-                  required
-                  placeholder="e.g. Lead Platform Engineer"
-                  value={role}
-                  onChange={(e) => setRole(e.target.value)}
-                  className="w-full pl-9 pr-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-slate-900"
-                />
-              </div>
+              <label className="block text-slate-700 font-semibold mb-1">Short Description</label>
+              <textarea
+                rows={2}
+                placeholder="High-level mandate, team mission, and system scale (e.g. Core payment platform processing $40M daily volume)..."
+                value={scope}
+                onChange={(e) => setScope(e.target.value)}
+                className="w-full p-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-slate-900"
+              />
             </div>
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <div>
-              <label className="block text-slate-700 font-semibold mb-1">Timeline / Dates</label>
-              <div className="relative">
-                <Calendar className="w-4 h-4 text-slate-400 absolute left-3 top-2.5" />
-                <input
-                  type="text"
-                  placeholder="e.g. 2023 — Present or 2021 — 2023"
-                  value={dates}
-                  onChange={(e) => setDates(e.target.value)}
-                  className="w-full pl-9 pr-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-slate-900"
-                />
-              </div>
-            </div>
-
-            <div>
-              <label className="block text-slate-700 font-semibold mb-1">Location / Work Mode</label>
-              <div className="relative">
-                <MapPin className="w-4 h-4 text-slate-400 absolute left-3 top-2.5" />
-                <input
-                  type="text"
-                  placeholder="e.g. San Francisco, CA (Remote)"
-                  value={location}
-                  onChange={(e) => setLocation(e.target.value)}
-                  className="w-full pl-9 pr-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-slate-900"
-                />
-              </div>
-            </div>
-          </div>
-
+          {/* ADVANCED SECTION: Capability Mapping, Responsibility Architecture, Outcome Metrics, Role Alignment, Evidence Attribution */}
+          <ProgressiveCreationSection workflowKey="work_experiences">
           <div>
-            <label className="block text-slate-700 font-semibold mb-1">Scope & Context Summary</label>
-            <textarea
-              rows={2}
-              placeholder="High-level mandate, team mission, and system scale (e.g. Core payment platform processing $40M daily volume)..."
-              value={scope}
-              onChange={(e) => setScope(e.target.value)}
-              className="w-full p-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-slate-900"
-            />
+            <label className="block text-slate-700 font-semibold mb-1">Location / Work Mode</label>
+            <div className="relative">
+              <MapPin className="w-4 h-4 text-slate-400 absolute left-3 top-2.5" />
+              <input
+                type="text"
+                placeholder="e.g. San Francisco, CA (Remote)"
+                value={location}
+                onChange={(e) => setLocation(e.target.value)}
+                className="w-full pl-9 pr-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-slate-900"
+              />
+            </div>
           </div>
 
           {/* Key Responsibilities */}
@@ -370,6 +400,7 @@ export const AddWorkExperienceModal: React.FC<AddWorkExperienceModalProps> = ({
               This experience will be indexed into your canonical career ledger and linked to relevant interview questions and stories for live practice.
             </p>
           </div>
+          </ProgressiveCreationSection>
 
           {/* Actions */}
           <div className="flex items-center justify-end gap-3 pt-4 border-t border-slate-100">
@@ -380,14 +411,26 @@ export const AddWorkExperienceModal: React.FC<AddWorkExperienceModalProps> = ({
             >
               Cancel
             </button>
-            <button
-              type="submit"
-              className="px-5 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-bold shadow-xs transition-colors flex items-center gap-1.5"
-            >
-              <CheckCircle2 className="w-4 h-4" /> {isEditMode ? 'Save Changes' : 'Save Work Experience'}
-            </button>
+            {!capabilities.canCreate ? (
+              <button
+                type="button"
+                onClick={() => openContextualPrompt()}
+                className="px-5 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-bold shadow-xs transition-colors flex items-center gap-1.5 cursor-pointer"
+              >
+                <Lock className="w-3.5 h-3.5" />
+                <span>Unlock in Demo</span>
+              </button>
+            ) : (
+              <button
+                type="submit"
+                className="px-5 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-bold shadow-xs transition-colors flex items-center gap-1.5"
+              >
+                <CheckCircle2 className="w-4 h-4" /> {isEditMode ? 'Save Changes' : 'Save Work Experience'}
+              </button>
+            )}
           </div>
         </form>
+        </DemoQuotaGate>
       </div>
     </div>
   );

@@ -74,71 +74,71 @@ export const PlatformHelpModal: React.FC<PlatformHelpModalProps> = ({
           {/* Section 2: Level 1 Primary Navigation */}
           <div className="space-y-3">
             <h4 className="font-black uppercase tracking-wider text-slate-900 text-[11px]">
-              Level 1 — Primary User Functions
+              Level 1 — Six Primary Workspace Modules
             </h4>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
               <div className="p-3 rounded-xl border border-slate-200 bg-white space-y-1">
                 <div className="flex items-center gap-1.5 font-bold text-slate-900">
-                  <Compass className="w-3.5 h-3.5 text-blue-600" />
-                  <span>Discovery</span>
-                </div>
-                <p className="text-[11px] text-slate-500">
-                  Search tier-1 job openings with deep company engineering profiles.
-                </p>
-              </div>
-
-              <div className="p-3 rounded-xl border border-slate-200 bg-white space-y-1">
-                <div className="flex items-center gap-1.5 font-bold text-slate-900">
                   <User className="w-3.5 h-3.5 text-emerald-600" />
-                  <span>My Profile (Prepare + Profile)</span>
+                  <span>My Profile</span>
                 </div>
                 <p className="text-[11px] text-slate-500">
-                  Unified identity, Skill Evidence Graph, Target Preferences, Checklist, and Knowledge Layers.
+                  Unified dashboard with Active Career Mission, Your Pins &amp; Assistant, Readiness Confidence Signal, and Background / Projects / Q&amp;A Blueprints.
                 </p>
               </div>
 
               <div className="p-3 rounded-xl border border-slate-200 bg-white space-y-1">
                 <div className="flex items-center gap-1.5 font-bold text-slate-900">
-                  <BookOpen className="w-3.5 h-3.5 text-amber-600" />
-                  <span>Knowledge System</span>
+                  <Compass className="w-3.5 h-3.5 text-blue-600" />
+                  <span>Job Opportunity</span>
                 </div>
                 <p className="text-[11px] text-slate-500">
-                  Auditable repository of books, credentials, deliverables, and validated skill points.
+                  Search tier-1 job openings with deep company engineering profiles and capability alignment.
                 </p>
               </div>
 
               <div className="p-3 rounded-xl border border-slate-200 bg-white space-y-1">
                 <div className="flex items-center gap-1.5 font-bold text-slate-900">
                   <Kanban className="w-3.5 h-3.5 text-purple-600" />
-                  <span>Application Tracker</span>
+                  <span>Participation Tracker</span>
                 </div>
                 <p className="text-[11px] text-slate-500">
-                  Manage interview pipelines, active take-home cases, and simulation history.
+                  Manage interview pipelines, active work participation, take-home cases, and simulation history.
+                </p>
+              </div>
+
+              <div className="p-3 rounded-xl border border-slate-200 bg-white space-y-1">
+                <div className="flex items-center gap-1.5 font-bold text-slate-900">
+                  <BookOpen className="w-3.5 h-3.5 text-amber-600" />
+                  <span>Builder Match, Knowledge System &amp; Business English</span>
+                </div>
+                <p className="text-[11px] text-slate-500">
+                  Collaborate on high-signal builds, explore Role &amp; Evidence Intelligence, and calibrate executive workplace communication.
                 </p>
               </div>
             </div>
           </div>
 
-          {/* Section 3: Practice Action Group */}
-          <div className="space-y-2 p-3.5 rounded-2xl bg-slate-50 border border-slate-200/80">
-            <div className="flex items-center gap-2 font-bold text-slate-900">
-              <Radio className="w-4 h-4 text-blue-600" />
-              <span>Practice Action Group</span>
-            </div>
-            <p className="text-[11px] text-slate-600 leading-relaxed">
-              Located in the dashboard header: **Live Interview** (Primary action for real-time voice & rubric evaluation), plus secondary actions **Mock Interview** and **Biz English Session**.
-            </p>
-          </div>
-
-          {/* Section 4: Left Workspace Column */}
+          {/* Section 3: Canonical Mission, Pins & Expert Feedback */}
           <div className="space-y-2 p-3.5 rounded-2xl bg-slate-50 border border-slate-200/80">
             <div className="flex items-center gap-2 font-bold text-slate-900">
               <Pin className="w-4 h-4 text-amber-600" />
-              <span>Your Pins & Persistent AI Chat</span>
+              <span>Canonical Mission, Your Pins &amp; Contextual Assistant</span>
             </div>
             <p className="text-[11px] text-slate-600 leading-relaxed">
-              The persistent left column keeps your active tasks, notes, and grounded AI assistant always within reach. It automatically minimizes during live interview simulation so you stay focused.
+              Manage your active career goal through the top **Active Career Mission → Mission Control** banner. Directly beneath it, expand **Your Pins** to manage pinned tasks/notes or switch to the grounded **Assistant**. Request AI + human calibration anytime from **Readiness Confidence Signal → Get Expert Feedback**.
+            </p>
+          </div>
+
+          {/* Section 4: Live Interview & Search */}
+          <div className="space-y-2 p-3.5 rounded-2xl bg-slate-50 border border-slate-200/80">
+            <div className="flex items-center gap-2 font-bold text-slate-900">
+              <Radio className="w-4 h-4 text-blue-600" />
+              <span>Global Search &amp; Live Interview</span>
+            </div>
+            <p className="text-[11px] text-slate-600 leading-relaxed">
+              Use **Search (⌘K)** in the header to jump to any role, domain, case, or blueprint, or click **Live Interview** to launch real-time voice and rubric evaluation.
             </p>
           </div>
 

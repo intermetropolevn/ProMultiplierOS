@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { 
   User, 
   Target, 
@@ -17,7 +17,9 @@ import {
   Globe,
   FolderKanban,
   ArrowRight,
-  Building2
+  Building2,
+  ChevronDown,
+  Check
 } from 'lucide-react';
 import { UserCareerProfile, SavedJobApplication, RoleBlueprint, InterviewQuestion } from '../../types';
 import { ProfileHeader } from './ProfileHeader';
@@ -30,7 +32,6 @@ import { ProjectsStorybanksWorkspace } from './projects/ProjectsStorybanksWorksp
 import { QuestionAnswerBlueprintsView } from './QuestionAnswerBlueprintsView';
 import { RecentActivitiesView } from './RecentActivitiesView';
 import { BusinessEnglishProfileSection } from './BusinessEnglishProfileSection';
-import { AIDashboardWorkspace } from './AIDashboardWorkspace';
 import { StructuredAnswerBlueprint } from '../../features/knowledge/types';
 import { PersistentPins } from '../workspace/PersistentPins';
 
@@ -38,6 +39,7 @@ export type ProfileViewTab = 'background_capacity' | 'projects_storybanks' | 'qa
 
 interface MyProfileDashboardProps {
   profile: UserCareerProfile;
+  activeMission?: import('../../types').CareerMission | null;
   onUpdateProfile: (updates: Partial<UserCareerProfile>) => void;
   savedJobs: SavedJobApplication[];
   bookmarkedQuestionIds: string[];
@@ -51,12 +53,14 @@ interface MyProfileDashboardProps {
   onNavigateToBusinessEnglish?: (tab?: string) => void;
   onOpenMissionControl?: () => void;
   onOpenCreateMission?: () => void;
+  onExecuteMissionStep?: (step: import('../../types').GrowthLoopStep) => void;
   onGetExpertFeedback?: (context?: any) => void;
   initialTab?: ProfileViewTab;
 }
 
 export const MyProfileDashboard: React.FC<MyProfileDashboardProps> = ({
   profile,
+  activeMission,
   onUpdateProfile,
   savedJobs,
   bookmarkedQuestionIds,
@@ -70,10 +74,94 @@ export const MyProfileDashboard: React.FC<MyProfileDashboardProps> = ({
   onNavigateToBusinessEnglish,
   onOpenMissionControl,
   onOpenCreateMission,
+  onExecuteMissionStep,
   onGetExpertFeedback,
-  initialTab = 'qa_blueprints',
+  initialTab = 'background_capacity',
 }) => {
   const [activeTab, setActiveTab] = useState<ProfileViewTab>(initialTab);
+  const [isMoreOpen, setIsMoreOpen] = useState(false);
+  const moreDropdownRef = useRef<HTMLDivElement>(null);
+
+  // Close More dropdown on click outside or Escape key
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (moreDropdownRef.current && !moreDropdownRef.current.contains(e.target as Node)) {
+        setIsMoreOpen(false);
+      }
+    };
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        setIsMoreOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    document.addEventListener('keydown', handleKeyDown);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+      document.removeEventListener('keydown', handleKeyDown);
+    };
+  }, []);
+
+  // Primary 3 Core Profile Tabs (always visible, never inside a scrolling carousel)
+  const primaryProfileTabs: {
+    id: ProfileViewTab;
+    domId: string;
+    label: string;
+    icon: React.FC<{ className?: string }>;
+    activeIconColor: string;
+  }[] = [
+    {
+      id: 'background_capacity',
+      domId: 'tab-profile-background-capacity',
+      label: 'Background & Capacity',
+      icon: FileText,
+      activeIconColor: 'text-blue-600'
+    },
+    {
+      id: 'projects_storybanks',
+      domId: 'tab-profile-projects-storybanks',
+      label: 'Projects & Story',
+      icon: FolderKanban,
+      activeIconColor: 'text-blue-600'
+    },
+    {
+      id: 'qa_blueprints',
+      domId: 'tab-profile-qa-blueprints',
+      label: 'Q&A Blueprints',
+      icon: BookOpen,
+      activeIconColor: 'text-purple-600'
+    }
+  ];
+
+  // Secondary Profile Tabs housed inside the "More" dropdown
+  const moreProfileTabs: {
+    id: ProfileViewTab;
+    domId: string;
+    label: string;
+    description: string;
+    icon: React.FC<{ className?: string }>;
+    activeIconColor: string;
+  }[] = [
+    {
+      id: 'recent_activities',
+      domId: 'tab-profile-recent-activities',
+      label: 'Recent Activities',
+      description: 'Practice timeline, simulations, and workspace history',
+      icon: Activity,
+      activeIconColor: 'text-slate-800'
+    },
+    {
+      id: 'business_english',
+      domId: 'tab-profile-business-english',
+      label: 'Business English',
+      description: 'Executive communication & domain vocabulary calibration',
+      icon: Globe,
+      activeIconColor: 'text-indigo-600'
+    }
+  ];
+
+  const activeMoreTab = moreProfileTabs.find(t => t.id === activeTab);
+  const isMoreActive = Boolean(activeMoreTab);
 
   // Convert blueprint to InterviewQuestion and start practice
   const handleStartPracticeBlueprint = (blueprint: StructuredAnswerBlueprint) => {
@@ -125,11 +213,16 @@ export const MyProfileDashboard: React.FC<MyProfileDashboardProps> = ({
   return (
     <div className="space-y-6 animate-in fade-in duration-150">
       
-      {/* 1. PERSONAL QUICK-ACCESS WORKSPACE: YOUR PINS (Starts Expanded -> Auto-Collapses to subtle horizontal bar) */}
+      {/* 1. CANONICAL YOUR PINS & CONTEXTUAL ASSISTANT WORKSPACE (Directly beneath Active Career Mission) */}
       <PersistentPins
         variant="dashboard-strip"
         savedJobs={savedJobs}
-        autoCollapseDelayMs={4500}
+        profile={profile}
+        activeMission={activeMission}
+        onStartLiveInterview={onStartLiveInterview}
+        onStartMockPractice={onStartMockPractice}
+        onOpenMissionControl={onOpenMissionControl}
+        onExecuteMissionStep={onExecuteMissionStep}
       />
 
       {/* 2. PROFILE HEADER & CAREER CALIBRATION SNAPSHOT */}
@@ -138,7 +231,7 @@ export const MyProfileDashboard: React.FC<MyProfileDashboardProps> = ({
         onUpdateProfile={onUpdateProfile}
         onOpenLivePractice={onStartLiveInterview}
         onOpenAIDiagnostic={() => {
-          document.getElementById('ai-workspace-block')?.scrollIntoView({ behavior: 'smooth' });
+          window.dispatchEvent(new CustomEvent('career_open_pins_assistant'));
         }}
       />
 
@@ -258,9 +351,9 @@ export const MyProfileDashboard: React.FC<MyProfileDashboardProps> = ({
       </div>
 
       {/* 4. CAREER ACTIVITY & SUBSTANTIVE WORKSPACE (Full Width Flexible Block) */}
-      <div className="bg-white rounded-2xl border border-slate-200/90 shadow-2xs p-5 sm:p-6 space-y-5">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-100 pb-4">
-          <div>
+      <div className="bg-white rounded-2xl border border-slate-200/90 shadow-2xs p-4 sm:p-5 xl:p-6 space-y-5">
+        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3 border-b border-slate-100 pb-4">
+          <div className="min-w-0">
             <h3 className="text-base font-bold text-slate-900 tracking-tight">
               Career Activity, Projects &amp; Answer Blueprints
             </h3>
@@ -269,80 +362,149 @@ export const MyProfileDashboard: React.FC<MyProfileDashboardProps> = ({
             </p>
           </div>
 
-          {/* Segmented workspace navigation */}
-          <div className="inline-flex p-1 bg-slate-100/90 rounded-xl border border-slate-200/80 text-xs font-medium overflow-x-auto max-w-full">
-            
-            {/* Tab 1: Question & Answer Blueprints */}
-            <button
-              id="tab-profile-qa-blueprints"
-              onClick={() => setActiveTab('qa_blueprints')}
-              className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all flex items-center gap-1.5 whitespace-nowrap cursor-pointer ${
-                activeTab === 'qa_blueprints'
-                  ? 'bg-white text-slate-900 shadow-2xs border border-slate-200/60'
-                  : 'text-slate-600 hover:text-slate-900 hover:bg-white/50'
-              }`}
-            >
-              <BookOpen className={`w-3.5 h-3.5 ${activeTab === 'qa_blueprints' ? 'text-purple-600' : 'text-slate-500'}`} />
-              <span>Q&amp;A Blueprints</span>
-            </button>
+          {/* Structured Secondary Profile Navigation:
+              3 Primary Visible Tabs (Background & Capacity | Projects & Story | Q&A Blueprints) + More ▾ Dropdown.
+              Never uses a horizontal scrolling carousel. Adapts smoothly across 14", 16", and 23" viewports. */}
+          <nav
+            aria-label="My Profile Secondary Workspace Navigation"
+            className="flex flex-wrap sm:flex-nowrap items-stretch gap-1 xl:gap-1.5 2xl:gap-2 p-1 bg-slate-100/90 rounded-xl border border-slate-200/80 text-xs font-medium shrink-0"
+          >
+            {primaryProfileTabs.map(tab => {
+              const Icon = tab.icon;
+              const isActive = activeTab === tab.id;
 
-            {/* Tab 2: Projects & Storybanks */}
-            <button
-              id="tab-profile-projects-storybanks"
-              onClick={() => setActiveTab('projects_storybanks')}
-              className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all flex items-center gap-1.5 whitespace-nowrap cursor-pointer ${
-                activeTab === 'projects_storybanks'
-                  ? 'bg-white text-slate-900 shadow-2xs border border-slate-200/60'
-                  : 'text-slate-600 hover:text-slate-900 hover:bg-white/50'
-              }`}
-            >
-              <FolderKanban className={`w-3.5 h-3.5 ${activeTab === 'projects_storybanks' ? 'text-blue-600' : 'text-slate-500'}`} />
-              <span>Projects &amp; Storybanks</span>
-            </button>
+              return (
+                <button
+                  key={tab.id}
+                  id={tab.domId}
+                  type="button"
+                  onClick={() => {
+                    setActiveTab(tab.id);
+                    setIsMoreOpen(false);
+                  }}
+                  aria-current={isActive ? 'page' : undefined}
+                  className={`px-2.5 xl:px-3 2xl:px-3.5 py-1.5 min-h-[36px] rounded-lg font-semibold transition-all flex items-center gap-1.5 xl:gap-2 cursor-pointer text-left focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-blue-500 ${
+                    isActive
+                      ? 'bg-white text-slate-900 shadow-2xs border border-slate-200/70'
+                      : 'text-slate-600 hover:text-slate-900 hover:bg-white/60 border border-transparent'
+                  }`}
+                >
+                  <Icon
+                    className={`w-3.5 h-3.5 xl:w-4 xl:h-4 shrink-0 ${
+                      isActive ? tab.activeIconColor : 'text-slate-500'
+                    }`}
+                  />
+                  <span className="text-[11.5px] xl:text-xs leading-[1.15] tracking-tight whitespace-normal [text-wrap:balance] sm:whitespace-nowrap">
+                    {tab.label}
+                  </span>
+                </button>
+              );
+            })}
 
-            {/* Tab 3: Recent Activities */}
-            <button
-              id="tab-profile-recent-activities"
-              onClick={() => setActiveTab('recent_activities')}
-              className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all flex items-center gap-1.5 whitespace-nowrap cursor-pointer ${
-                activeTab === 'recent_activities'
-                  ? 'bg-white text-slate-900 shadow-2xs border border-slate-200/60'
-                  : 'text-slate-600 hover:text-slate-900 hover:bg-white/50'
-              }`}
-            >
-              <Activity className={`w-3.5 h-3.5 ${activeTab === 'recent_activities' ? 'text-slate-800' : 'text-slate-500'}`} />
-              <span>Recent Activities</span>
-            </button>
+            {/* "More ▾" Dropdown for Remaining Secondary Profile Sections */}
+            <div className="relative flex items-stretch" ref={moreDropdownRef}>
+              <button
+                id="tab-profile-more-dropdown"
+                type="button"
+                onClick={() => setIsMoreOpen(prev => !prev)}
+                aria-expanded={isMoreOpen}
+                aria-haspopup="menu"
+                className={`px-2.5 xl:px-3 2xl:px-3.5 py-1.5 min-h-[36px] rounded-lg font-semibold transition-all flex items-center gap-1.5 cursor-pointer focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-blue-500 ${
+                  isMoreActive
+                    ? 'bg-white text-slate-900 shadow-2xs border border-slate-200/70'
+                    : isMoreOpen
+                    ? 'bg-white/80 text-slate-900 border border-slate-200/60'
+                    : 'text-slate-600 hover:text-slate-900 hover:bg-white/60 border border-transparent'
+                }`}
+              >
+                {activeMoreTab ? (
+                  <activeMoreTab.icon className={`w-3.5 h-3.5 xl:w-4 xl:h-4 shrink-0 ${activeMoreTab.activeIconColor}`} />
+                ) : null}
+                <span className="text-[11.5px] xl:text-xs leading-[1.15] whitespace-nowrap">
+                  More
+                </span>
+                {isMoreActive && (
+                  <>
+                    <span className="hidden xl:inline text-[11px] font-bold text-blue-600 whitespace-nowrap">
+                      · {activeMoreTab?.label}
+                    </span>
+                    <span
+                      className="w-1.5 h-1.5 rounded-full bg-blue-600 shrink-0"
+                      aria-label={`Active section: ${activeMoreTab?.label}`}
+                    />
+                  </>
+                )}
+                <ChevronDown
+                  className={`w-3.5 h-3.5 text-slate-400 transition-transform duration-150 shrink-0 ${
+                    isMoreOpen ? 'rotate-180 text-slate-700' : ''
+                  }`}
+                />
+              </button>
 
-            {/* Tab 4: Background & Capacity */}
-            <button
-              id="tab-profile-background-capacity"
-              onClick={() => setActiveTab('background_capacity')}
-              className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all flex items-center gap-1.5 whitespace-nowrap cursor-pointer ${
-                activeTab === 'background_capacity'
-                  ? 'bg-white text-slate-900 shadow-2xs border border-slate-200/60'
-                  : 'text-slate-600 hover:text-slate-900 hover:bg-white/50'
-              }`}
-            >
-              <FileText className={`w-3.5 h-3.5 ${activeTab === 'background_capacity' ? 'text-blue-600' : 'text-slate-500'}`} />
-              <span>Background &amp; Capacity</span>
-            </button>
+              {isMoreOpen && (
+                <div
+                  role="menu"
+                  aria-label="More Profile Sections"
+                  className="absolute right-0 top-full mt-1.5 w-64 bg-white rounded-2xl border border-slate-200/90 shadow-xl py-2 z-30 animate-in fade-in zoom-in-95 duration-150"
+                >
+                  <div className="px-3.5 py-1.5 border-b border-slate-100">
+                    <span className="text-[10px] font-extrabold uppercase tracking-wider text-slate-400">
+                      More Profile Sections
+                    </span>
+                  </div>
 
-            {/* Tab 5: Business English & Vocabulary */}
-            <button
-              id="tab-profile-business-english"
-              onClick={() => setActiveTab('business_english')}
-              className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all flex items-center gap-1.5 whitespace-nowrap cursor-pointer ${
-                activeTab === 'business_english'
-                  ? 'bg-white text-slate-900 shadow-2xs border border-slate-200/60'
-                  : 'text-slate-600 hover:text-slate-900 hover:bg-white/50'
-              }`}
-            >
-              <Globe className={`w-3.5 h-3.5 ${activeTab === 'business_english' ? 'text-indigo-600' : 'text-slate-500'}`} />
-              <span>Business English</span>
-            </button>
+                  <div className="p-1.5 space-y-1">
+                    {moreProfileTabs.map(item => {
+                      const ItemIcon = item.icon;
+                      const isItemSelected = activeTab === item.id;
 
-          </div>
+                      return (
+                        <button
+                          key={item.id}
+                          id={item.domId}
+                          role="menuitem"
+                          type="button"
+                          onClick={() => {
+                            setActiveTab(item.id);
+                            setIsMoreOpen(false);
+                          }}
+                          className={`w-full text-left px-3 py-2 rounded-xl transition-all flex items-start gap-2.5 cursor-pointer focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-blue-500 ${
+                            isItemSelected
+                              ? 'bg-blue-50/80 text-slate-900 border border-blue-200/80 shadow-3xs'
+                              : 'text-slate-700 hover:bg-slate-50 border border-transparent'
+                          }`}
+                        >
+                          <div
+                            className={`w-7 h-7 rounded-lg flex items-center justify-center shrink-0 mt-0.5 ${
+                              isItemSelected
+                                ? 'bg-blue-600 text-white'
+                                : 'bg-slate-100 text-slate-500'
+                            }`}
+                          >
+                            <ItemIcon className="w-3.5 h-3.5" />
+                          </div>
+
+                          <div className="min-w-0 flex-1">
+                            <div className="flex items-center justify-between gap-1.5">
+                              <span className={`text-xs ${isItemSelected ? 'font-bold text-slate-900' : 'font-semibold text-slate-800'}`}>
+                                {item.label}
+                              </span>
+                              {isItemSelected && (
+                                <Check className="w-3.5 h-3.5 text-blue-600 shrink-0" />
+                              )}
+                            </div>
+                            <p className="text-[11px] text-slate-500 leading-snug mt-0.5">
+                              {item.description}
+                            </p>
+                          </div>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+            </div>
+          </nav>
         </div>
 
         {/* Active Substantive Workspace Viewer */}
@@ -391,15 +553,6 @@ export const MyProfileDashboard: React.FC<MyProfileDashboardProps> = ({
             </div>
           )}
         </div>
-      </div>
-
-      {/* 5. CONTEXTUAL AI WORKSPACE & CAREER INTELLIGENCE */}
-      <div id="ai-workspace-block">
-        <AIDashboardWorkspace
-          profile={profile}
-          onStartPracticeQuestion={onStartPracticeQuestion}
-          onNavigateToTab={(tab) => setActiveTab(tab as any)}
-        />
       </div>
 
     </div>

@@ -1,9 +1,13 @@
-import React, { useState, useMemo, useEffect } from 'react';
-import { X, Briefcase, Building2, Globe, FileText, Sparkles, AlertCircle, Search, ChevronLeft, ChevronRight, Check } from 'lucide-react';
+import React, { useState, useMemo, useEffect, useRef } from 'react';
+import { X, Briefcase, Building2, Globe, FileText, Sparkles, AlertCircle, Search, ChevronLeft, ChevronRight, Check, Lock } from 'lucide-react';
 import { JobApplication, JobApplicationStatus, mapLegacyStatusToPipelineState } from '../../features/applications/types';
 import { applicationStore } from '../../features/applications/services/applicationStore';
 import { JobService } from '../../services/jobService';
 import { JobListing } from '../../types';
+import { AccessCreationBanner } from '../access/AccessCreationBanner';
+import { ProgressiveCreationSection } from '../access/ProgressiveCreationSection';
+import { DemoQuotaGate } from '../access/DemoQuotaGate';
+import { useAccessControl } from '../../services/accessControlService';
 
 interface AddApplicationModalProps {
   isOpen: boolean;
@@ -16,7 +20,10 @@ export const AddApplicationModal: React.FC<AddApplicationModalProps> = ({
   onClose,
   onApplicationCreated
 }) => {
+  const { capabilities, canCreate, openAccessModal } = useAccessControl();
+  const [accessError, setAccessError] = useState<string | null>(null);
   const [activeMode, setActiveMode] = useState<'existing' | 'manual'>('existing');
+  const isSubmittingRef = useRef(false);
   
   // Available jobs from JobService
   const [allJobs, setAllJobs] = useState<JobListing[]>(() => JobService.getAllJobs());
@@ -94,8 +101,11 @@ export const AddApplicationModal: React.FC<AddApplicationModalProps> = ({
   if (!isOpen) return null;
 
   const handleCreateFromExisting = () => {
+    if (isSubmittingRef.current) return;
+    if (!canCreate('participation')) return;
     const job = allJobs.find(j => j.id === selectedJobId) || allJobs[0];
     if (!job) return;
+    isSubmittingRef.current = true;
 
     const { primary, sub } = mapLegacyStatusToPipelineState('APPLIED');
     const newApp: JobApplication = {
@@ -158,8 +168,11 @@ export const AddApplicationModal: React.FC<AddApplicationModalProps> = ({
   };
 
   const handleCreateManual = () => {
+    if (isSubmittingRef.current || isExtracting) return;
+    if (!canCreate('participation')) return;
     if (!companyName.trim() || !roleTitle.trim()) return;
 
+    isSubmittingRef.current = true;
     setIsExtracting(true);
 
     setTimeout(() => {
@@ -262,7 +275,16 @@ export const AddApplicationModal: React.FC<AddApplicationModalProps> = ({
         </div>
 
         {/* Mode Selector */}
-        <div className="p-5 space-y-4">
+        <DemoQuotaGate workflowKey="participation" isEditing={false} onViewExistingItems={onClose}>
+        <div className="p-5 space-y-4 max-h-[75vh] overflow-y-auto">
+          <AccessCreationBanner workflowKey="participation" workflowLabel="applications" />
+
+          {accessError && (
+            <div className="p-3 rounded-xl bg-rose-50 border border-rose-200 text-rose-700 text-xs font-medium">
+              {accessError}
+            </div>
+          )}
+
           <div className="grid grid-cols-2 gap-2 p-1 bg-slate-100 rounded-xl">
             <button
               onClick={() => setActiveMode('existing')}
@@ -476,7 +498,11 @@ export const AddApplicationModal: React.FC<AddApplicationModalProps> = ({
                   </select>
                 </div>
               </div>
+            </div>
+          )}
 
+          <ProgressiveCreationSection workflowKey="participation">
+            {activeMode === 'manual' && (
               <div>
                 <label className="block text-xs font-bold text-slate-700 mb-1">Job Description & Requirements</label>
                 <textarea
@@ -487,15 +513,15 @@ export const AddApplicationModal: React.FC<AddApplicationModalProps> = ({
                   className="w-full text-xs border border-slate-200 rounded-xl p-3 focus:border-blue-500 focus:outline-hidden leading-relaxed"
                 />
               </div>
-            </div>
-          )}
+            )}
 
-          <div className="p-3 rounded-xl bg-blue-50/60 border border-blue-100 flex items-start gap-2.5 text-xs text-blue-800">
-            <Sparkles className="w-4 h-4 text-blue-600 shrink-0 mt-0.5" />
-            <div>
-              <span className="font-bold">Automated Career OS Extraction:</span> When created, the platform will preserve an immutable job snapshot and map required skills to existing Career OS knowledge, industry intelligence, and practice frameworks.
+            <div className="p-3 rounded-xl bg-blue-50/60 border border-blue-100 flex items-start gap-2.5 text-xs text-blue-800">
+              <Sparkles className="w-4 h-4 text-blue-600 shrink-0 mt-0.5" />
+              <div>
+                <span className="font-bold">Automated Career OS Extraction:</span> When created, the platform will preserve an immutable job snapshot and map required skills to existing Career OS knowledge, industry intelligence, and practice frameworks.
+              </div>
             </div>
-          </div>
+          </ProgressiveCreationSection>
         </div>
 
         {/* Footer */}
@@ -506,21 +532,33 @@ export const AddApplicationModal: React.FC<AddApplicationModalProps> = ({
           >
             Cancel
           </button>
-          <button
-            onClick={activeMode === 'existing' ? handleCreateFromExisting : handleCreateManual}
-            disabled={isExtracting || (activeMode === 'manual' && (!companyName.trim() || !roleTitle.trim()))}
-            className="px-5 py-2 text-xs font-bold text-white bg-blue-600 hover:bg-blue-700 rounded-xl transition-colors shadow-xs disabled:opacity-50 cursor-pointer flex items-center gap-1.5"
-          >
-            {isExtracting ? (
-              <>
-                <div className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                <span>Extracting Requirements...</span>
-              </>
-            ) : (
-              <span>Add and Follow up This Application</span>
-            )}
-          </button>
+          {!capabilities.canCreate ? (
+            <button
+              type="button"
+              onClick={() => openAccessModal('DEMO')}
+              className="px-5 py-2 text-xs font-bold text-white bg-indigo-600 hover:bg-indigo-700 rounded-xl transition-colors shadow-xs cursor-pointer flex items-center gap-1.5"
+            >
+              <Lock className="w-3.5 h-3.5" />
+              <span>Unlock in Demo</span>
+            </button>
+          ) : (
+            <button
+              onClick={activeMode === 'existing' ? handleCreateFromExisting : handleCreateManual}
+              disabled={isExtracting || (activeMode === 'manual' && (!companyName.trim() || !roleTitle.trim()))}
+              className="px-5 py-2 text-xs font-bold text-white bg-blue-600 hover:bg-blue-700 rounded-xl transition-colors shadow-xs disabled:opacity-50 cursor-pointer flex items-center gap-1.5"
+            >
+              {isExtracting ? (
+                <>
+                  <div className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                  <span>Extracting Requirements...</span>
+                </>
+              ) : (
+                <span>Add and Follow up This Application</span>
+              )}
+            </button>
+          )}
         </div>
+        </DemoQuotaGate>
 
       </div>
     </div>

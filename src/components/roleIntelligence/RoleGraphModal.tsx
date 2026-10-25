@@ -13,6 +13,8 @@ import {
 } from 'lucide-react';
 import { RoleIntelligenceItem, RoleGraphData } from '../../features/roleIntelligence/types';
 import { ROLE_GRAPH_DATA } from '../../features/roleIntelligence/data/rolesIntelligenceData';
+import { useAccessControl } from '../../services/accessControlService';
+import { CareerOSIntelligenceGate, IntelligenceModeBadge } from '../access/CareerOSIntelligenceGate';
 
 interface RoleGraphModalProps {
   isOpen: boolean;
@@ -24,13 +26,17 @@ interface RoleGraphModalProps {
 export const RoleGraphModal: React.FC<RoleGraphModalProps> = ({
   isOpen,
   onClose,
-  activeRole,
   onSelectRole
 }) => {
+  const { getIntelligenceAccess, consumeDemoIntelligenceSignal } = useAccessControl();
   const [selectedNodeId, setSelectedNodeId] = useState<string>('role-sr-pm');
   const [activeGroupFilter, setActiveGroupFilter] = useState<string>('all');
+  const [gateModalOpen, setGateModalOpen] = useState(false);
 
   if (!isOpen) return null;
+
+  const roleMapAccess = getIntelligenceAccess('ai_role_mapping');
+  const isFull = roleMapAccess.isFull;
 
   const graphData: RoleGraphData = ROLE_GRAPH_DATA;
 
@@ -44,15 +50,18 @@ export const RoleGraphModal: React.FC<RoleGraphModalProps> = ({
     { id: 'opportunity', label: 'Live Opportunities' }
   ];
 
-  const filteredNodes = activeGroupFilter === 'all' 
+  const allFilteredNodes = activeGroupFilter === 'all' 
     ? graphData.nodes 
     : graphData.nodes.filter(n => n.group === activeGroupFilter);
 
-  const selectedNode = graphData.nodes.find(n => n.id === selectedNodeId) || graphData.nodes[1];
+  const filteredNodes = isFull ? allFilteredNodes : allFilteredNodes.slice(0, 5);
 
-  const connectedLinks = graphData.links.filter(
-    l => l.source === selectedNodeId || l.target === selectedNodeId
+  const selectedNode = filteredNodes.find(n => n.id === selectedNodeId) || filteredNodes[0] || graphData.nodes[1];
+
+  const allConnectedLinks = graphData.links.filter(
+    l => l.source === selectedNode.id || l.target === selectedNode.id
   );
+  const connectedLinks = isFull ? allConnectedLinks : allConnectedLinks.slice(0, 2);
 
   const getNodeColor = (type: string) => {
     switch (type) {
@@ -80,12 +89,11 @@ export const RoleGraphModal: React.FC<RoleGraphModalProps> = ({
               <GitBranch className="w-5 h-5" />
             </div>
             <div>
-              <div className="flex items-center gap-2 text-[11px] text-slate-500">
-                <span>Underlying Career Architecture Graph</span>
+              <div className="flex items-center gap-2 text-[11px] text-slate-500 flex-wrap">
+                <span>Role Architecture Topology</span>
+                <IntelligenceModeBadge capability="ai_role_mapping" />
                 <span>·</span>
-                <span className="text-purple-700 font-bold">{graphData.nodes.length} Nodes</span>
-                <span>·</span>
-                <span className="font-mono text-slate-700">{graphData.links.length} Relations</span>
+                <span className="text-purple-700 font-bold">{filteredNodes.length} {isFull ? 'Nodes' : 'Sample Nodes'}</span>
               </div>
               <h2 className="text-base sm:text-lg font-black text-slate-900 tracking-tight">
                 Role Intelligence Knowledge Graph
@@ -132,12 +140,21 @@ export const RoleGraphModal: React.FC<RoleGraphModalProps> = ({
             {/* Structured Cluster Display */}
             <div className="flex flex-wrap gap-2.5 pt-2">
               {filteredNodes.map(node => {
-                const isSelected = selectedNodeId === node.id;
+                const isSelected = selectedNode.id === node.id;
                 return (
                   <button
                     key={node.id}
                     type="button"
-                    onClick={() => setSelectedNodeId(node.id)}
+                    onClick={() => {
+                      if (roleMapAccess.isDemo) {
+                        const ok = consumeDemoIntelligenceSignal('ai_role_mapping', node.id);
+                        if (!ok) {
+                          setGateModalOpen(true);
+                          return;
+                        }
+                      }
+                      setSelectedNodeId(node.id);
+                    }}
                     className={`px-3.5 py-2 rounded-xl text-xs font-bold border transition-all cursor-pointer flex items-center gap-2 ${
                       isSelected
                         ? 'ring-2 ring-blue-500 shadow-xs scale-105'
@@ -155,6 +172,17 @@ export const RoleGraphModal: React.FC<RoleGraphModalProps> = ({
               })}
             </div>
 
+            {!isFull && (
+              <div className="pt-3">
+                <CareerOSIntelligenceGate
+                  capability="ai_role_mapping"
+                  title="CareerOS Intelligence — Role Mapping & Mobility Graph"
+                  description="Turn career activity into structured evidence, capabilities and readiness signals. Unlock the complete cross-domain role transferability topology and live career progression graph."
+                  sampleCountLabel={`Showing ${filteredNodes.length} curated sample nodes`}
+                />
+              </div>
+            )}
+
             {/* Tree Structure Visualizer for Active Role */}
             <div className="mt-6 pt-4 border-t border-slate-200 space-y-3">
               <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500 block">
@@ -166,14 +194,11 @@ export const RoleGraphModal: React.FC<RoleGraphModalProps> = ({
                 <div className="pl-4 text-slate-500">│</div>
                 <div className="pl-4 text-slate-600">├── <strong className="text-slate-800">Skills &amp; Competencies</strong></div>
                 <div className="pl-8 text-slate-500">├── Product Strategy &amp; Roadmapping</div>
-                <div className="pl-8 text-slate-500">├── Quantitative Telemetry (SQL / Amplitude)</div>
-                <div className="pl-8 text-slate-500">├── Continuous Discovery &amp; Trees</div>
-                <div className="pl-8 text-slate-500">└── Unit Economics &amp; Pricing</div>
+                <div className="pl-8 text-slate-500">└── Quantitative Telemetry (SQL / Amplitude)</div>
                 <div className="pl-4 text-slate-500">│</div>
                 <div className="pl-4 text-slate-600">├── <strong className="text-purple-700">Adjacent Ecosystem Mobility</strong></div>
-                <div className="pl-8 text-purple-600">├── Product Operations Manager (88% Transferability)</div>
-                <div className="pl-8 text-purple-600">├── Technical Product Manager (86% Transferability)</div>
-                <div className="pl-8 text-purple-600">└── Business Operations Manager (74% Transferability)</div>
+                <div className="pl-8 text-purple-600">├── Product Operations Manager (High Transferability)</div>
+                <div className="pl-8 text-purple-600">└── Technical Product Manager (High Transferability)</div>
                 <div className="pl-4 text-slate-500">│</div>
                 <div className="pl-4 text-slate-600">└── <strong className="text-emerald-700">Next Progression Roles</strong></div>
                 <div className="pl-8 text-emerald-600">├── Staff / Principal PM (IC Track P5/P6)</div>
@@ -203,7 +228,7 @@ export const RoleGraphModal: React.FC<RoleGraphModalProps> = ({
 
                 <div className="space-y-2 text-xs">
                   {connectedLinks.map((link, idx) => {
-                    const otherNodeId = link.source === selectedNodeId ? link.target : link.source;
+                    const otherNodeId = link.source === selectedNode.id ? link.target : link.source;
                     const otherNode = graphData.nodes.find(n => n.id === otherNodeId);
                     return (
                       <div
@@ -212,10 +237,10 @@ export const RoleGraphModal: React.FC<RoleGraphModalProps> = ({
                       >
                         <div className="space-y-0.5">
                           <span className="text-[10px] font-bold uppercase tracking-wider text-blue-700 block font-mono">
-                            {link.relationship.replace(/_/g, ' ')} {link.label ? `(${link.label})` : ''}
+                            {link.relationship.replace(/_/g, ' ')}
                           </span>
                           <span className="font-bold text-slate-900 text-xs">
-                            {otherNode?.label || otherNodeId}
+                            {otherNode?.label || 'Connected Node'}
                           </span>
                         </div>
 
@@ -279,6 +304,14 @@ export const RoleGraphModal: React.FC<RoleGraphModalProps> = ({
         </div>
 
       </div>
+
+      {gateModalOpen && (
+        <CareerOSIntelligenceGate
+          capability="ai_role_mapping"
+          variant="modal"
+          onClose={() => setGateModalOpen(false)}
+        />
+      )}
     </div>
   );
 };

@@ -1,6 +1,6 @@
 {
   "name": "Career Interview OS",
   "description": "Comprehensive career operating system and intelligence engine transforming learning, experience, projects, and credentials into structured career proof, knowledge graphs, and role evidence matching.",
-  "requestFramePermissions": ["microphone"],
+  "requestFramePermissions": [],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
 }

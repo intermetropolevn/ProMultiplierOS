@@ -19,6 +19,8 @@ import { SystemEvidenceDrawer } from './SystemEvidenceDrawer';
 import { AdjustAssessmentModal } from './AdjustAssessmentModal';
 import { WhyAssessmentModal } from './WhyAssessmentModal';
 import { SelfSystemOthersComparison } from './SelfSystemOthersComparison';
+import { useAccessControl } from '../../services/accessControlService';
+import { CareerOSIntelligenceGate, IntelligenceModeBadge } from '../access/CareerOSIntelligenceGate';
 import { 
   Sliders, 
   Award, 
@@ -72,8 +74,8 @@ const getEnrichedDimension = (dim: CareerOSDimensionScore, role: RoleIntelligenc
         evidenceCoverage: 'Strong',
         assessmentConfidence: 'High',
         confidenceReason: 'Verified across 14 API specifications, schema design reviews, and engineering ADRs.',
-        systemEvidenceWeight: 76,
-        humanSignalWeight: 24,
+        systemEvidenceWeight: 70,
+        humanSignalWeight: 30,
         systemEvidenceScore: 4.2,
         humanSignalScore: 4.0,
         selfAssessmentScore: 4.0,
@@ -101,8 +103,8 @@ const getEnrichedDimension = (dim: CareerOSDimensionScore, role: RoleIntelligenc
         evidenceCoverage: 'Strong',
         assessmentConfidence: 'High',
         confidenceReason: 'Substantial telemetry and cohort retention models linked to business metrics.',
-        systemEvidenceWeight: 72,
-        humanSignalWeight: 28,
+        systemEvidenceWeight: 70,
+        humanSignalWeight: 30,
         systemEvidenceScore: 4.0,
         humanSignalScore: 3.8,
         selfAssessmentScore: 4.0,
@@ -129,8 +131,8 @@ const getEnrichedDimension = (dim: CareerOSDimensionScore, role: RoleIntelligenc
         evidenceCoverage: 'Strong',
         assessmentConfidence: 'High',
         confidenceReason: 'Documented post-mortems and multi-layered algorithmic workflow designs.',
-        systemEvidenceWeight: 80,
-        humanSignalWeight: 20,
+        systemEvidenceWeight: 70,
+        humanSignalWeight: 30,
         systemEvidenceScore: 4.2,
         humanSignalScore: 4.1,
         selfAssessmentScore: 4.0,
@@ -157,8 +159,8 @@ const getEnrichedDimension = (dim: CareerOSDimensionScore, role: RoleIntelligenc
         evidenceCoverage: 'Strong',
         assessmentConfidence: 'High',
         confidenceReason: 'Decision rights logged on 6 pivotal roadmap forks without leadership rollback.',
-        systemEvidenceWeight: 74,
-        humanSignalWeight: 26,
+        systemEvidenceWeight: 70,
+        humanSignalWeight: 30,
         systemEvidenceScore: 4.0,
         humanSignalScore: 4.0,
         selfAssessmentScore: 4.0,
@@ -185,8 +187,8 @@ const getEnrichedDimension = (dim: CareerOSDimensionScore, role: RoleIntelligenc
         evidenceCoverage: 'Strong',
         assessmentConfidence: 'High',
         confidenceReason: 'Telemetry shows +34% activation lift and 4.7/5 customer satisfaction on new surface.',
-        systemEvidenceWeight: 85,
-        humanSignalWeight: 15,
+        systemEvidenceWeight: 70,
+        humanSignalWeight: 30,
         systemEvidenceScore: 4.4,
         humanSignalScore: 4.2,
         selfAssessmentScore: 4.5,
@@ -213,8 +215,8 @@ const getEnrichedDimension = (dim: CareerOSDimensionScore, role: RoleIntelligenc
         evidenceCoverage: 'Moderate',
         assessmentConfidence: 'Medium',
         confidenceReason: 'Multiple business outcomes detected, but attribution to user is partially shared with Growth and Sales.',
-        systemEvidenceWeight: 68,
-        humanSignalWeight: 32,
+        systemEvidenceWeight: 70,
+        humanSignalWeight: 30,
         systemEvidenceScore: 3.8,
         humanSignalScore: 3.7,
         selfAssessmentScore: 4.0,
@@ -241,8 +243,8 @@ const getEnrichedDimension = (dim: CareerOSDimensionScore, role: RoleIntelligenc
         evidenceCoverage: 'Moderate',
         assessmentConfidence: 'Medium',
         confidenceReason: 'Manages squad sprint operating rhythm; multi-squad cadence managed via Program Lead.',
-        systemEvidenceWeight: 65,
-        humanSignalWeight: 35,
+        systemEvidenceWeight: 70,
+        humanSignalWeight: 30,
         systemEvidenceScore: 3.4,
         humanSignalScore: 3.6,
         selfAssessmentScore: 3.5,
@@ -269,8 +271,8 @@ const getEnrichedDimension = (dim: CareerOSDimensionScore, role: RoleIntelligenc
         evidenceCoverage: 'Strong',
         assessmentConfidence: 'High',
         confidenceReason: 'Regular alignment with VP of Eng, Legal counsel, and GTM leads on high-friction topics.',
-        systemEvidenceWeight: 60,
-        humanSignalWeight: 40,
+        systemEvidenceWeight: 70,
+        humanSignalWeight: 30,
         systemEvidenceScore: 4.0,
         humanSignalScore: 4.1,
         selfAssessmentScore: 4.0,
@@ -297,8 +299,8 @@ const getEnrichedDimension = (dim: CareerOSDimensionScore, role: RoleIntelligenc
         evidenceCoverage: 'Moderate',
         assessmentConfidence: 'Medium',
         confidenceReason: 'Authored 12-month vision doc for domain; company-wide strategic bets owned by Director.',
-        systemEvidenceWeight: 62,
-        humanSignalWeight: 38,
+        systemEvidenceWeight: 70,
+        humanSignalWeight: 30,
         systemEvidenceScore: 3.7,
         humanSignalScore: 3.9,
         selfAssessmentScore: 4.0,
@@ -325,8 +327,8 @@ const getEnrichedDimension = (dim: CareerOSDimensionScore, role: RoleIntelligenc
         evidenceCoverage: role.track === 'management' ? 'Moderate' : 'Limited',
         assessmentConfidence: 'Medium',
         confidenceReason: 'CareerOS observes strong cross-functional squad leadership, but has insufficient evidence of direct people management or performance appraisal ownership.',
-        systemEvidenceWeight: 55,
-        humanSignalWeight: 45,
+        systemEvidenceWeight: 70,
+        humanSignalWeight: 30,
         systemEvidenceScore: 3.2,
         humanSignalScore: 3.5,
         selfAssessmentScore: 3.5,
@@ -383,6 +385,7 @@ export const RoleEvaluationWorkspace: React.FC<RoleEvaluationWorkspaceProps> = (
   onNavigateToFrameworks,
   onNavigateToEvidenceIntelligence
 }) => {
+  const { recordMeaningfulInteraction, getIntelligenceAccess, consumeDemoIntelligenceSignal } = useAccessControl();
   const [selectedFrameworkId, setSelectedFrameworkId] = useState<ReferenceFrameworkId>('careeros_native');
   const [highlightDimensionKey, setHighlightDimensionKey] = useState<string>('functional_technical_knowledge');
   const [selectedTrack, setSelectedTrack] = useState<CareerOSTrack>(role.track || 'ic');
@@ -393,9 +396,13 @@ export const RoleEvaluationWorkspace: React.FC<RoleEvaluationWorkspaceProps> = (
   const [isAdjustAssessmentOpen, setIsAdjustAssessmentOpen] = useState(false);
   const [isWhyAssessmentOpen, setIsWhyAssessmentOpen] = useState(false);
   const [drawerDimension, setDrawerDimension] = useState<CareerOSDimensionScore | null>(null);
+  const [gateModalOpen, setGateModalOpen] = useState(false);
 
   // Local overrides map
   const [localOverrides, setLocalOverrides] = useState<{ [key: string]: Partial<CareerOSDimensionScore> }>({});
+
+  const evalAccess = getIntelligenceAccess('advanced_role_evaluation');
+  const isFull = evalAccess.isFull;
 
   const selectedFramework = FRAMEWORK_METADATA_LIST.find(f => f.id === selectedFrameworkId) || FRAMEWORK_METADATA_LIST[0];
   const refEval = role.referenceEvaluations.find(re => re.frameworkId === selectedFrameworkId);
@@ -407,7 +414,10 @@ export const RoleEvaluationWorkspace: React.FC<RoleEvaluationWorkspaceProps> = (
     return override ? { ...base, ...override } : base;
   });
 
-  const selectedDimension = enrichedDimensions.find(d => d.key === highlightDimensionKey) || enrichedDimensions[0];
+  // Only send curated sample dimensions to DOM for Guest/Demo
+  const visibleDimensions = isFull ? enrichedDimensions : enrichedDimensions.slice(0, 3);
+
+  const selectedDimension = visibleDimensions.find(d => d.key === highlightDimensionKey) || visibleDimensions[0];
 
   // Assessment summary stats
   const assessmentSummary: RoleAssessmentSummaryData = {
@@ -415,8 +425,8 @@ export const RoleEvaluationWorkspace: React.FC<RoleEvaluationWorkspaceProps> = (
     currentLevelCode: role.levelMapping.levelCode || 'P4',
     targetLevel: 'Staff / Group Product Specialist',
     targetLevelCode: 'P5 / Staff',
-    systemEvidencePercentage: 71,
-    humanContextPercentage: 29,
+    systemEvidencePercentage: 70,
+    humanContextPercentage: 30,
     evidenceCoveragePercentage: 84,
     assessmentConfidence: 'High',
     lastAssessedDate: '18 Oct 2026',
@@ -484,16 +494,41 @@ export const RoleEvaluationWorkspace: React.FC<RoleEvaluationWorkspaceProps> = (
 
   // Handlers for drawer actions
   const handleOpenSystemEvidence = (dim: CareerOSDimensionScore) => {
+    if (evalAccess.isDemo) {
+      const ok = consumeDemoIntelligenceSignal('advanced_role_evaluation', `ev-${dim.key}`);
+      if (!ok) {
+        setGateModalOpen(true);
+        return;
+      }
+    }
+    recordMeaningfulInteraction('detail_open');
     setDrawerDimension(dim);
     setIsSystemEvidenceOpen(true);
   };
 
   const handleOpenHumanContext = (dim: CareerOSDimensionScore) => {
+    if (evalAccess.isGuest) {
+      recordMeaningfulInteraction('protected_action');
+      setGateModalOpen(true);
+      return;
+    }
+    if (evalAccess.isDemo) {
+      const ok = consumeDemoIntelligenceSignal('advanced_role_evaluation', `ctx-${dim.key}`);
+      if (!ok) {
+        setGateModalOpen(true);
+        return;
+      }
+    }
     setDrawerDimension(dim);
     setIsHumanContextOpen(true);
   };
 
   const handleOpenAdjustAssessment = (dim: CareerOSDimensionScore) => {
+    if (!isFull) {
+      recordMeaningfulInteraction('protected_action');
+      setGateModalOpen(true);
+      return;
+    }
     setDrawerDimension(dim);
     setIsAdjustAssessmentOpen(true);
   };
@@ -513,7 +548,7 @@ export const RoleEvaluationWorkspace: React.FC<RoleEvaluationWorkspaceProps> = (
         humanSignalsList: newSignals,
         contextChips: chips,
         additionalContext: addlText,
-        humanSignalWeight: 35, // dynamically calibrated
+        humanSignalWeight: 35,
         systemEvidenceWeight: 65,
         validationStatus: 'Confirmed'
       }
@@ -562,6 +597,7 @@ export const RoleEvaluationWorkspace: React.FC<RoleEvaluationWorkspaceProps> = (
               <span className="text-[10px] font-black uppercase tracking-wider px-2 py-0.5 rounded bg-blue-500/20 text-blue-300 border border-blue-500/30">
                 Role Assessment
               </span>
+              <IntelligenceModeBadge capability="advanced_role_evaluation" />
               <span className="text-slate-500">·</span>
               <span className="text-xs text-slate-300 font-semibold flex items-center gap-1.5">
                 <BrainCircuit className="w-3.5 h-3.5 text-amber-400" />
@@ -572,14 +608,17 @@ export const RoleEvaluationWorkspace: React.FC<RoleEvaluationWorkspaceProps> = (
               Evidence-Backed Role Assessment Summary
             </h2>
             <p className="text-xs sm:text-sm text-slate-300 max-w-3xl leading-relaxed">
-              CareerOS estimates capability levels by combining observed work artifacts (70%) with qualitative human signals and environmental context (30%).
+              CareerOS estimates capability levels by combining observed work artifacts with qualitative human signals and environmental context.
             </p>
           </div>
 
           <div className="flex items-center gap-2 shrink-0 self-start lg:self-center">
             <button
               type="button"
-              onClick={() => setIsWhyAssessmentOpen(true)}
+              onClick={() => {
+                recordMeaningfulInteraction('detail_open');
+                setIsWhyAssessmentOpen(true);
+              }}
               className="px-4 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold transition-all shadow-xs flex items-center gap-2 cursor-pointer"
             >
               <Sparkles className="w-4 h-4 text-amber-300" />
@@ -602,17 +641,21 @@ export const RoleEvaluationWorkspace: React.FC<RoleEvaluationWorkspaceProps> = (
 
           <div className="p-3 bg-slate-800/60 rounded-xl border border-slate-700/60">
             <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block">System Evidence</span>
-            <span className="font-black text-emerald-400 text-sm mt-0.5 block">{assessmentSummary.systemEvidencePercentage}%</span>
+            <span className="font-black text-emerald-400 text-sm mt-0.5 block">
+              Primary Driver
+            </span>
           </div>
 
           <div className="p-3 bg-slate-800/60 rounded-xl border border-slate-700/60">
             <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block">Human / Context</span>
-            <span className="font-black text-amber-300 text-sm mt-0.5 block">{assessmentSummary.humanContextPercentage}%</span>
+            <span className="font-black text-amber-300 text-sm mt-0.5 block">
+              Calibrated Signal
+            </span>
           </div>
 
           <div className="p-3 bg-slate-800/60 rounded-xl border border-slate-700/60">
             <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block">Evidence Coverage</span>
-            <span className="font-black text-white text-sm mt-0.5 block">{assessmentSummary.evidenceCoveragePercentage}%</span>
+            <span className="font-black text-white text-sm mt-0.5 block">Strong</span>
           </div>
 
           <div className="p-3 bg-slate-800/60 rounded-xl border border-slate-700/60">
@@ -817,9 +860,9 @@ export const RoleEvaluationWorkspace: React.FC<RoleEvaluationWorkspaceProps> = (
                 </span>
               </div>
 
-              {/* 10 Dimension Cards */}
+              {/* Dimension Cards */}
               <div className="space-y-4">
-                {enrichedDimensions.map((dim) => {
+                {visibleDimensions.map((dim) => {
                   const isSelected = highlightDimensionKey === dim.key;
                   const isInsufficient = dim.observedLevelLabel?.includes('Insufficient');
 
@@ -856,26 +899,26 @@ export const RoleEvaluationWorkspace: React.FC<RoleEvaluationWorkspaceProps> = (
                         </div>
                       </div>
 
-                      {/* Evidence Split Bar (System ~70% | Human ~30%) */}
+                      {/* Evidence Split Bar */}
                       <div className="space-y-1">
                         <div className="flex items-center justify-between text-[11px] font-semibold text-slate-600">
                           <span className="flex items-center gap-1 text-emerald-700">
                             <ShieldCheck className="w-3.5 h-3.5 text-emerald-600" />
-                            <span>System Evidence: {dim.systemEvidenceWeight || 70}%</span>
+                            <span>System Evidence: Primary Driver</span>
                           </span>
                           <span className="flex items-center gap-1 text-amber-700">
                             <Users className="w-3.5 h-3.5 text-amber-600" />
-                            <span>Human &amp; Context: {dim.humanSignalWeight || 30}%</span>
+                            <span>Human &amp; Context: Calibrated</span>
                           </span>
                         </div>
                         <div className="h-1.5 w-full bg-slate-200 rounded-full overflow-hidden flex">
                           <div 
                             className="bg-emerald-500 h-full transition-all" 
-                            style={{ width: `${dim.systemEvidenceWeight || 70}%` }}
+                            style={{ width: '70%' }}
                           />
                           <div 
                             className="bg-amber-400 h-full transition-all" 
-                            style={{ width: `${dim.humanSignalWeight || 30}%` }}
+                            style={{ width: '30%' }}
                           />
                         </div>
                       </div>
@@ -964,6 +1007,15 @@ export const RoleEvaluationWorkspace: React.FC<RoleEvaluationWorkspaceProps> = (
                 })}
               </div>
 
+              {!isFull && (
+                <CareerOSIntelligenceGate
+                  capability="advanced_role_evaluation"
+                  title="CareerOS Intelligence — Advanced Role Evaluation"
+                  description="Turn career activity into structured evidence, capabilities and readiness signals. Unlock all 10 capability evaluation dimensions, multi-framework leveling calibration, and stakeholder signal concordance."
+                  sampleCountLabel={`Showing ${visibleDimensions.length} of ${enrichedDimensions.length} capability dimensions`}
+                />
+              )}
+
             </div>
 
             {/* RIGHT 5 COLS: Multidimensional Radar with 4-Way Toggles & Active Dimension Inspector */}
@@ -990,7 +1042,7 @@ export const RoleEvaluationWorkspace: React.FC<RoleEvaluationWorkspaceProps> = (
                     <span className="w-2 h-2 rounded-full bg-blue-600" />
                     <span>Current Synthesized Assessment</span>
                   </span>
-                  <span className="font-mono text-slate-700">10 Dimensions</span>
+                  <span className="font-mono text-slate-700">{isFull ? '10 Dimensions' : '3 Sample Dimensions'}</span>
                 </div>
               </div>
 
@@ -1067,7 +1119,7 @@ export const RoleEvaluationWorkspace: React.FC<RoleEvaluationWorkspaceProps> = (
               5. SELF / SYSTEM / OTHERS COMPARISON (Section 12)
               ================================================== */}
           <SelfSystemOthersComparison
-            dimensions={enrichedDimensions}
+            dimensions={visibleDimensions}
             highlightKey={highlightDimensionKey}
             onSelectDimension={(key) => setHighlightDimensionKey(key)}
           />
@@ -1099,7 +1151,7 @@ export const RoleEvaluationWorkspace: React.FC<RoleEvaluationWorkspaceProps> = (
             </div>
 
             <div className="divide-y divide-slate-100 text-xs">
-              {enrichedDimensions.map((dim) => {
+              {visibleDimensions.map((dim) => {
                 const currentScore = dim.score || 4;
                 const targetScore = dim.targetRoleScore || 5;
 
@@ -1128,6 +1180,14 @@ export const RoleEvaluationWorkspace: React.FC<RoleEvaluationWorkspaceProps> = (
                 );
               })}
             </div>
+
+            {!isFull && (
+              <CareerOSIntelligenceGate
+                capability="readiness_intelligence"
+                variant="compact"
+                sampleCountLabel={`Showing ${visibleDimensions.length} of ${enrichedDimensions.length} mobility delta bridges`}
+              />
+            )}
           </div>
 
           {/* ==================================================
@@ -1156,7 +1216,7 @@ export const RoleEvaluationWorkspace: React.FC<RoleEvaluationWorkspaceProps> = (
                 <div className="text-sm font-black text-slate-900">P4 — Senior</div>
                 <div className="text-[11px] text-slate-600 space-y-0.5 font-mono">
                   <div>Confidence: <strong>High</strong></div>
-                  <div>Coverage: <strong>84%</strong> (10 dimensions)</div>
+                  <div>Coverage: <strong>Strong</strong> (10 dimensions)</div>
                 </div>
                 <p className="text-[11px] text-slate-600 pt-1 border-t border-blue-200/60">
                   Validated API Gateway &amp; Onboarding Revamp launches.
@@ -1171,7 +1231,7 @@ export const RoleEvaluationWorkspace: React.FC<RoleEvaluationWorkspaceProps> = (
                 <div className="text-sm font-black text-slate-900">P4 — Senior</div>
                 <div className="text-[11px] text-slate-600 space-y-0.5 font-mono">
                   <div>Confidence: <strong>Moderate</strong></div>
-                  <div>Coverage: <strong>72%</strong> (8 dimensions)</div>
+                  <div>Coverage: <strong>Moderate</strong> (8 dimensions)</div>
                 </div>
                 <p className="text-[11px] text-slate-600 pt-1 border-t border-slate-200">
                   First detection of cross-functional trade-off ownership.
@@ -1186,7 +1246,7 @@ export const RoleEvaluationWorkspace: React.FC<RoleEvaluationWorkspaceProps> = (
                 <div className="text-sm font-black text-slate-900">P3 — Advanced / Mid</div>
                 <div className="text-[11px] text-slate-600 space-y-0.5 font-mono">
                   <div>Confidence: <strong>Moderate</strong></div>
-                  <div>Coverage: <strong>58%</strong> (Baseline)</div>
+                  <div>Coverage: <strong>Baseline</strong></div>
                 </div>
                 <p className="text-[11px] text-slate-600 pt-1 border-t border-slate-200">
                   Initial workspace baseline from Jira and Notion ingestion.
@@ -1234,16 +1294,16 @@ export const RoleEvaluationWorkspace: React.FC<RoleEvaluationWorkspaceProps> = (
                   <thead>
                     <tr className="border-b border-slate-200 text-slate-500 text-[10px] uppercase font-bold tracking-wider">
                       <th className="py-2.5 px-3">Dimension</th>
-                      <th className="py-2.5 px-3">Weight / Scope</th>
+                      <th className="py-2.5 px-3">Scope</th>
                       <th className="py-2.5 px-3">Assigned Factor</th>
                       <th className="py-2.5 px-3">Interpretation &amp; Rationale</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100">
-                    {refEval.dimensions.map((dim, idx) => (
+                    {(isFull ? refEval.dimensions : refEval.dimensions.slice(0, 2)).map((dim, idx) => (
                       <tr key={idx} className="hover:bg-slate-50/80 transition-colors">
                         <td className="py-3 px-3 font-bold text-slate-900">{dim.name}</td>
-                        <td className="py-3 px-3 text-slate-600 font-mono text-[11px]">{dim.weightOrScope}</td>
+                        <td className="py-3 px-3 text-slate-600 font-mono text-[11px]">Core Factor</td>
                         <td className="py-3 px-3 font-semibold text-blue-700 font-mono text-[11px]">{dim.scoreOrBand}</td>
                         <td className="py-3 px-3 text-slate-600 max-w-md">{dim.interpretation}</td>
                       </tr>
@@ -1251,6 +1311,14 @@ export const RoleEvaluationWorkspace: React.FC<RoleEvaluationWorkspaceProps> = (
                   </tbody>
                 </table>
               </div>
+
+              {!isFull && (
+                <CareerOSIntelligenceGate
+                  capability="advanced_role_evaluation"
+                  variant="compact"
+                  sampleCountLabel={`Showing 2 of ${refEval.dimensions.length} reference framework factors`}
+                />
+              )}
 
               <div className="p-4 bg-slate-50 rounded-xl border border-slate-200/70 space-y-1.5 text-xs text-slate-600">
                 <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500 block">Methodology Alignment Notes</span>
@@ -1322,6 +1390,14 @@ export const RoleEvaluationWorkspace: React.FC<RoleEvaluationWorkspaceProps> = (
         summary={assessmentSummary}
         onNavigateToTarget={onNavigateToLeveling}
       />
+
+      {gateModalOpen && (
+        <CareerOSIntelligenceGate
+          capability="advanced_role_evaluation"
+          variant="modal"
+          onClose={() => setGateModalOpen(false)}
+        />
+      )}
 
     </div>
   );

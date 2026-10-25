@@ -14,6 +14,8 @@ import {
   Sparkles
 } from 'lucide-react';
 import { evidenceIntelligenceStore } from '../../features/evidenceIntelligence/services/evidenceIntelligenceStore';
+import { useAccessControl } from '../../services/accessControlService';
+import { CareerOSIntelligenceGate, IntelligenceModeBadge } from '../access/CareerOSIntelligenceGate';
 
 interface CareerEvidenceProfileModalProps {
   isOpen: boolean;
@@ -26,8 +28,10 @@ export const CareerEvidenceProfileModal: React.FC<CareerEvidenceProfileModalProp
   onClose,
   onNavigateToInitiative
 }) => {
+  const { accessLevel } = useAccessControl();
   if (!isOpen) return null;
 
+  const isFullAccess = accessLevel === 'FULL_ACCESS';
   const roleReadiness = evidenceIntelligenceStore.getRoleReadiness();
   const capabilities = evidenceIntelligenceStore.getCapabilities();
   const initiatives = evidenceIntelligenceStore.getInitiatives();
@@ -35,6 +39,11 @@ export const CareerEvidenceProfileModal: React.FC<CareerEvidenceProfileModalProp
 
   const validatedCaps = capabilities.filter(c => c.evidenceStrength === 'Strong');
   const emergingCaps = capabilities.filter(c => c.observedProficiency === 'Emerging' || c.evidenceStrength === 'Limited' || c.evidenceStrength === 'Insufficient');
+
+  const visibleValidatedCaps = isFullAccess ? validatedCaps.slice(0, 5) : validatedCaps.slice(0, 2);
+  const visibleEmergingCaps = isFullAccess ? emergingCaps : emergingCaps.slice(0, 1);
+  const visibleInitiatives = isFullAccess ? initiatives : initiatives.slice(0, 2);
+  const visibleMobilityRoles = isFullAccess ? roleReadiness.adjacentMobilityRoles : roleReadiness.adjacentMobilityRoles.slice(0, 2);
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-slate-900/60 backdrop-blur-xs animate-in fade-in duration-150">
@@ -49,10 +58,11 @@ export const CareerEvidenceProfileModal: React.FC<CareerEvidenceProfileModalProp
         {/* Header */}
         <div className="px-6 py-5 border-b border-slate-100 flex items-start justify-between bg-gradient-to-r from-blue-50/60 via-indigo-50/40 to-white">
           <div className="space-y-1 pr-6">
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 flex-wrap">
               <span className="text-[10px] font-black uppercase tracking-wider px-2 py-0.5 rounded bg-blue-600 text-white shadow-3xs">
                 Career Evidence Profile
               </span>
+              <IntelligenceModeBadge capability="readiness_intelligence" />
               <span className="text-slate-300">·</span>
               <span className="text-xs text-slate-500 font-medium">Evidence-Backed Foundation</span>
             </div>
@@ -76,7 +86,7 @@ export const CareerEvidenceProfileModal: React.FC<CareerEvidenceProfileModalProp
         {/* Scrollable Content */}
         <div className="flex-1 overflow-y-auto p-6 space-y-6 text-xs">
           
-          {/* Target Role Readiness Hero (Section 14) */}
+          {/* Target Role Readiness Hero */}
           <div className="bg-gradient-to-br from-slate-900 to-slate-800 text-white rounded-2xl p-5 sm:p-6 space-y-4 shadow-sm">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
               <div>
@@ -102,7 +112,7 @@ export const CareerEvidenceProfileModal: React.FC<CareerEvidenceProfileModalProp
                   Strong Evidence Capabilities
                 </span>
                 <ul className="space-y-1 text-slate-200">
-                  {roleReadiness.strongEvidenceCapabilities.map((c, i) => (
+                  {(isFullAccess ? roleReadiness.strongEvidenceCapabilities : roleReadiness.strongEvidenceCapabilities.slice(0, 2)).map((c, i) => (
                     <li key={i} className="flex items-start gap-1.5">
                       <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400 shrink-0 mt-0.5" />
                       <span>{c}</span>
@@ -116,7 +126,7 @@ export const CareerEvidenceProfileModal: React.FC<CareerEvidenceProfileModalProp
                   Identified Evidence &amp; Experience Gaps
                 </span>
                 <ul className="space-y-1.5 text-slate-200">
-                  {roleReadiness.evidenceGaps.map((gap, i) => (
+                  {(isFullAccess ? roleReadiness.evidenceGaps : roleReadiness.evidenceGaps.slice(0, 1)).map((gap, i) => (
                     <li key={i} className="bg-slate-800/80 p-2.5 rounded-lg border border-slate-700 space-y-1">
                       <div className="flex items-center justify-between">
                         <span className="font-bold text-white">{gap.capabilityName}</span>
@@ -138,11 +148,11 @@ export const CareerEvidenceProfileModal: React.FC<CareerEvidenceProfileModalProp
           {/* Signature Shipped Initiatives */}
           <div className="space-y-3">
             <span className="text-xs font-bold text-slate-900 uppercase tracking-wider block">
-              Signature Shipped Initiatives ({initiatives.length})
+              Signature Shipped Initiatives ({visibleInitiatives.length})
             </span>
 
             <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-              {initiatives.map(init => (
+              {visibleInitiatives.map(init => (
                 <div key={init.id} className="p-4 bg-slate-50/80 rounded-xl border border-slate-200 space-y-2">
                   <span className="text-[10px] font-bold px-1.5 py-0.2 rounded bg-blue-100 text-blue-800 uppercase tracking-wider">
                     {init.userRole}
@@ -168,7 +178,7 @@ export const CareerEvidenceProfileModal: React.FC<CareerEvidenceProfileModalProp
             <div className="p-4 bg-white rounded-xl border border-slate-200 space-y-3">
               <div className="flex items-center justify-between">
                 <span className="text-xs font-bold text-slate-900 uppercase tracking-wider">
-                  Validated Core Capabilities ({validatedCaps.length})
+                  Validated Core Capabilities ({visibleValidatedCaps.length})
                 </span>
                 <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200">
                   Strong Proof
@@ -176,7 +186,7 @@ export const CareerEvidenceProfileModal: React.FC<CareerEvidenceProfileModalProp
               </div>
 
               <div className="space-y-2">
-                {validatedCaps.slice(0, 5).map(cap => (
+                {visibleValidatedCaps.map(cap => (
                   <div key={cap.id} className="p-2.5 bg-slate-50 rounded-lg border border-slate-200/70 flex items-center justify-between">
                     <div>
                       <span className="font-bold text-slate-900 block">{cap.name}</span>
@@ -202,7 +212,7 @@ export const CareerEvidenceProfileModal: React.FC<CareerEvidenceProfileModalProp
               </div>
 
               <div className="space-y-2">
-                {emergingCaps.map(cap => (
+                {visibleEmergingCaps.map(cap => (
                   <div key={cap.id} className="p-2.5 bg-slate-50 rounded-lg border border-slate-200/70 space-y-1">
                     <div className="flex items-center justify-between">
                       <span className="font-bold text-slate-900">{cap.name}</span>
@@ -222,7 +232,7 @@ export const CareerEvidenceProfileModal: React.FC<CareerEvidenceProfileModalProp
 
           </div>
 
-          {/* Career Mobility Adjacent Transitions (Section 20) */}
+          {/* Career Mobility Adjacent Transitions */}
           <div className="p-4 bg-slate-50/70 rounded-xl border border-slate-200 space-y-3">
             <div className="flex items-center justify-between">
               <div>
@@ -235,12 +245,12 @@ export const CareerEvidenceProfileModal: React.FC<CareerEvidenceProfileModalProp
             </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
-              {roleReadiness.adjacentMobilityRoles.map(adj => (
+              {visibleMobilityRoles.map(adj => (
                 <div key={adj.roleId} className="p-3 bg-white rounded-xl border border-slate-200 shadow-3xs space-y-1.5">
                   <span className="font-bold text-slate-900 text-xs block truncate">{adj.title}</span>
                   <div className="flex items-center justify-between text-[11px]">
-                    <span className="text-slate-500">Overlap:</span>
-                    <strong className="text-blue-700">{adj.overlapPercentage}%</strong>
+                    <span className="text-slate-500">Alignment:</span>
+                    <strong className="text-blue-700">{isFullAccess ? `${adj.overlapPercentage}%` : 'High Overlap'}</strong>
                   </div>
                   <div className="flex items-center justify-between text-[11px]">
                     <span className="text-slate-500">Difficulty:</span>
@@ -254,12 +264,22 @@ export const CareerEvidenceProfileModal: React.FC<CareerEvidenceProfileModalProp
             </div>
           </div>
 
+          {!isFullAccess && (
+            <CareerOSIntelligenceGate
+              capability="readiness_intelligence"
+              variant="inline"
+              sampleCountLabel="Sample Readiness Summary · Full Readiness & Adjacent Mobility Intelligence unlocks in CareerOS"
+            />
+          )}
+
         </div>
 
         {/* Footer */}
         <div className="px-6 py-4 border-t border-slate-100 flex items-center justify-between bg-slate-50/60">
           <span className="text-xs text-slate-500">
-            Backed by {confirmedEvidence.length} verified evidence records and {initiatives.length} initiatives.
+            {isFullAccess
+              ? `Backed by ${confirmedEvidence.length} verified evidence records and ${initiatives.length} initiatives.`
+              : 'Sample Readiness Preview · Full Evidence Profile available in Full Access.'}
           </span>
           <button
             type="button"

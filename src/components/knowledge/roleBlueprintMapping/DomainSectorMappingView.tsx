@@ -241,7 +241,11 @@ export const DomainSectorMappingView: React.FC = () => {
           <div className="flex flex-wrap items-center gap-2 shrink-0">
             {/* Multi-Domain Architecture Switcher when multiple domains are active */}
             {targetDomains.length > 1 && (
-              <div className="flex items-center gap-1 p-1 bg-slate-100 rounded-xl border border-slate-200/80">
+              <div className="flex items-center gap-2 flex-wrap">
+                <span className="text-2xs font-bold px-2 py-0.5 rounded-full bg-blue-50 text-blue-700 border border-blue-200 shrink-0">
+                  3 Featured Beta Domains
+                </span>
+                <div className="flex items-center gap-1 p-1 bg-slate-100 rounded-xl border border-slate-200/80">
                 {targetDomains.map(dom => (
                   <button
                     key={dom}
@@ -257,6 +261,7 @@ export const DomainSectorMappingView: React.FC = () => {
                   </button>
                 ))}
               </div>
+            </div>
             )}
 
             <button

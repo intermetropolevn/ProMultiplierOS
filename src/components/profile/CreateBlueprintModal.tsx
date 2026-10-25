@@ -1,9 +1,13 @@
-import React, { useState, useEffect } from 'react';
-import { X, CheckCircle2, BookOpen, Layers, Target, Plus, Trash2 } from 'lucide-react';
+import React, { useState, useEffect, useRef } from 'react';
+import { X, CheckCircle2, BookOpen, Layers, Target, Plus, Trash2, Lock } from 'lucide-react';
 import { BlueprintFramework, StructuredAnswerBlueprint } from '../../features/knowledge/types';
 import { KnowledgeStorageService } from '../../features/knowledge/services/knowledgeStorageService';
 import { ActivityService } from '../../services/activityService';
 import { BlueprintRichTextEditor } from '../common/BlueprintRichTextEditor';
+import { AccessCreationBanner } from '../access/AccessCreationBanner';
+import { ProgressiveCreationSection } from '../access/ProgressiveCreationSection';
+import { DemoQuotaGate } from '../access/DemoQuotaGate';
+import { useAccessControl } from '../../services/accessControlService';
 
 interface CreateBlueprintModalProps {
   isOpen?: boolean;
@@ -23,12 +27,16 @@ export const CreateBlueprintModal: React.FC<CreateBlueprintModalProps> = ({
   defaultDomain = 'Fintech & Payments',
 }) => {
   const isEditing = Boolean(initialBlueprint);
+  const { capabilities, canCreate, openContextualPrompt } = useAccessControl();
+  const isSubmittingRef = useRef(false);
 
   if (!isOpen) return null;
 
-  // Core metadata
+  // Core metadata (Basic Fields: Question, Role, Category, Difficulty)
   const [title, setTitle] = useState('');
   const [questionText, setQuestionText] = useState('');
+  const [category, setCategory] = useState('System Architecture & Tradeoffs');
+  const [difficulty, setDifficulty] = useState('Senior');
   // 1A: Default Structure Framework is Custom Structure ('Custom')
   const [framework, setFramework] = useState<BlueprintFramework>('Custom');
   const [targetRole, setTargetRole] = useState(defaultRole);
@@ -57,8 +65,9 @@ export const CreateBlueprintModal: React.FC<CreateBlueprintModalProps> = ({
   // Populate/reset on open or initialBlueprint change
   useEffect(() => {
     if (!isOpen) return;
+    isSubmittingRef.current = false;
 
-    if (initialBlueprint) {
+    if (initialBlueprint && capabilities.canViewIntelligence) {
       setTitle(initialBlueprint.title || '');
       setQuestionText(initialBlueprint.questionText || '');
       setFramework(initialBlueprint.framework || 'Custom');
@@ -82,6 +91,8 @@ export const CreateBlueprintModal: React.FC<CreateBlueprintModalProps> = ({
       // Clean reset for new creation
       setTitle('');
       setQuestionText('');
+      setCategory('System Architecture & Tradeoffs');
+      setDifficulty('Senior');
       setFramework('Custom'); // Default: Custom Structure
       setTargetRole(defaultRole);
       setTargetJob('');
@@ -98,7 +109,7 @@ export const CreateBlueprintModal: React.FC<CreateBlueprintModalProps> = ({
       setImpact(['']);
       setMetrics(['']);
     }
-  }, [isOpen, initialBlueprint, defaultRole]);
+  }, [isOpen, initialBlueprint, defaultRole, capabilities.canViewIntelligence]);
 
   if (!isOpen) return null;
 
@@ -116,7 +127,17 @@ export const CreateBlueprintModal: React.FC<CreateBlueprintModalProps> = ({
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!title.trim() || !questionText.trim()) return;
+    if (isSubmittingRef.current) return;
+    if (!capabilities.canCreate) {
+      openContextualPrompt();
+      return;
+    }
+    if (!isEditing && !canCreate('blueprints')) {
+      return;
+    }
+    const resolvedTitle = title.trim() || questionText.trim().slice(0, 60) || 'Q&A Blueprint';
+    if (!questionText.trim()) return;
+    isSubmittingRef.current = true;
 
     const filteredActions = actions.map(a => a.trim()).filter(Boolean);
     const filteredResults = results.map(r => r.trim()).filter(Boolean);
@@ -155,11 +176,11 @@ export const CreateBlueprintModal: React.FC<CreateBlueprintModalProps> = ({
 
     const savedBlueprint: StructuredAnswerBlueprint = {
       id: initialBlueprint?.id || `bp-${Date.now()}`,
-      title: title.trim(),
+      title: resolvedTitle,
       questionId: initialBlueprint?.questionId || `q-custom-${Date.now()}`,
       questionText: questionText.trim(),
       storyId: initialBlueprint?.storyId || `story-custom-${Date.now()}`,
-      storyTitle: title.trim(),
+      storyTitle: resolvedTitle,
       framework,
       components: componentsPayload,
       metrics: framework === 'Custom' ? [] : filteredMetrics,
@@ -221,103 +242,150 @@ export const CreateBlueprintModal: React.FC<CreateBlueprintModalProps> = ({
         </div>
 
         {/* Body */}
+        <DemoQuotaGate workflowKey="blueprints" isEditing={isEditing} onViewExistingItems={onClose}>
         <form onSubmit={handleSubmit} className="p-6 overflow-y-auto space-y-5 text-xs flex-1">
-          
-          {/* Blueprint Title & Framework */}
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-            <div className="sm:col-span-2">
-              <label className="block text-slate-700 font-semibold mb-1">Blueprint Title *</label>
-              <input
-                type="text"
+          <AccessCreationBanner workflowKey="blueprints" workflowLabel="Q&A Blueprints" />
+
+          {/* BASIC SECTION: Question, Role, Category, Difficulty */}
+          <div className="space-y-4">
+            <div className="flex items-center justify-between">
+              <span className="text-[11px] font-bold uppercase tracking-wider text-slate-500">
+                Basic Q&amp;A Blueprint Fields
+              </span>
+              <span className="text-[11px] text-slate-400">
+                Question · Role · Category · Difficulty
+              </span>
+            </div>
+
+            {/* Question Text */}
+            <div>
+              <label className="block text-slate-700 font-semibold mb-1">Question *</label>
+              <textarea
                 required
-                placeholder="e.g. Cost of Delay Tech Debt Negotiation"
-                value={title}
-                onChange={(e) => setTitle(e.target.value)}
-                className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500 text-slate-900"
+                rows={2}
+                placeholder="e.g. Tell me about a time you had to balance aggressive product feature deadlines against technical debt. How did you negotiate and execute the technical payoff?"
+                value={questionText}
+                onChange={(e) => setQuestionText(e.target.value)}
+                className="w-full p-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500 text-slate-900 font-vietnamese font-medium"
               />
             </div>
 
-            <div>
-              <label className="block text-slate-700 font-semibold mb-1">Structure Framework</label>
-              <select
-                value={framework}
-                onChange={(e) => setFramework(e.target.value as BlueprintFramework)}
-                className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500 text-slate-900 font-semibold cursor-pointer"
-              >
-                <option value="Custom">Custom Structure</option>
-                <option value="STAR">STAR (Situation, Task, Action, Result)</option>
-                <option value="CAR">CAR (Context, Action, Result)</option>
-                <option value="Problem → Decision → Impact">Problem → Decision → Impact</option>
-              </select>
-            </div>
-          </div>
-
-          {/* Question Text */}
-          <div>
-            <label className="block text-slate-700 font-semibold mb-1">Interview Question / Prompt *</label>
-            <textarea
-              required
-              rows={2}
-              placeholder="e.g. Tell me about a time you had to balance aggressive product feature deadlines against technical debt. How did you negotiate and execute the technical payoff?"
-              value={questionText}
-              onChange={(e) => setQuestionText(e.target.value)}
-              className="w-full p-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500 text-slate-900 font-vietnamese font-medium"
-            />
-          </div>
-
-          {/* Role & Job Taxonomy Mappings */}
-          <div className="p-3 bg-slate-50 border border-slate-200/80 rounded-xl space-y-3">
-            <div className="flex items-center gap-1.5 text-slate-700 font-semibold">
-              <Target className="w-3.5 h-3.5 text-purple-600" />
-              <span>Role &amp; Job Mapping Taxonomy</span>
-            </div>
-            
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3.5">
               <div>
-                <label className="block text-slate-600 font-medium mb-1">Target Role Category</label>
+                <label className="block text-slate-700 font-semibold mb-1">Role *</label>
                 <input
                   type="text"
+                  required
                   placeholder="e.g. Software Engineering"
                   value={targetRole}
                   onChange={(e) => setTargetRole(e.target.value)}
-                  className="w-full px-2.5 py-1.5 bg-white border border-slate-300 rounded-lg text-slate-900"
+                  className="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg text-slate-900"
                 />
               </div>
 
               <div>
-                <label className="block text-slate-600 font-medium mb-1">Target Job Title</label>
-                <input
-                  type="text"
-                  placeholder="e.g. Staff Backend Architect"
-                  value={targetJob}
-                  onChange={(e) => setTargetJob(e.target.value)}
-                  className="w-full px-2.5 py-1.5 bg-white border border-slate-300 rounded-lg text-slate-900"
-                />
+                <label className="block text-slate-700 font-semibold mb-1">Category *</label>
+                <select
+                  value={category}
+                  onChange={(e) => setCategory(e.target.value)}
+                  className="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg text-slate-900 font-medium cursor-pointer"
+                >
+                  <option value="System Architecture & Tradeoffs">System Architecture &amp; Tradeoffs</option>
+                  <option value="Technical Leadership & Alignment">Technical Leadership &amp; Alignment</option>
+                  <option value="Execution & Incident Recovery">Execution &amp; Incident Recovery</option>
+                  <option value="Product Strategy & Prioritization">Product Strategy &amp; Prioritization</option>
+                  <option value="Cross-Functional Collaboration">Cross-Functional Collaboration</option>
+                </select>
               </div>
 
               <div>
-                <label className="block text-slate-600 font-medium mb-1">Target Company (Optional)</label>
-                <input
-                  type="text"
-                  placeholder="e.g. Stripe, Ramp"
-                  value={targetCompany}
-                  onChange={(e) => setTargetCompany(e.target.value)}
-                  className="w-full px-2.5 py-1.5 bg-white border border-slate-300 rounded-lg text-slate-900"
-                />
+                <label className="block text-slate-700 font-semibold mb-1">Difficulty *</label>
+                <select
+                  value={difficulty}
+                  onChange={(e) => setDifficulty(e.target.value)}
+                  className="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg text-slate-900 font-medium cursor-pointer"
+                >
+                  <option value="Foundational">Foundational</option>
+                  <option value="Intermediate">Intermediate</option>
+                  <option value="Senior">Senior</option>
+                  <option value="Staff / Principal">Staff / Principal</option>
+                </select>
               </div>
             </div>
           </div>
 
-          {/* Structured Answer Architecture Section */}
-          <div className="border-t border-slate-100 pt-4 space-y-4">
-            <div className="flex items-center justify-between">
-              <h4 className="text-xs font-bold text-slate-900 uppercase tracking-wider flex items-center gap-1.5">
-                <Layers className="w-3.5 h-3.5 text-blue-600" /> Answer Architecture ({framework})
-              </h4>
-              <span className="text-[11px] text-slate-400">
-                {framework === 'Custom' ? 'Simplified two-tier architecture' : 'Structured behavioral framework'}
-              </span>
+          {/* ADVANCED SECTION: Capability Mapping, Evaluation Rubric, Evidence Criteria, Interview Intelligence */}
+          <ProgressiveCreationSection workflowKey="blueprints">
+            {/* Blueprint Title & Framework */}
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+              <div className="sm:col-span-2">
+                <label className="block text-slate-700 font-semibold mb-1">Blueprint Title</label>
+                <input
+                  type="text"
+                  placeholder="e.g. Cost of Delay Tech Debt Negotiation"
+                  value={title}
+                  onChange={(e) => setTitle(e.target.value)}
+                  className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500 text-slate-900"
+                />
+              </div>
+
+              <div>
+                <label className="block text-slate-700 font-semibold mb-1">Evaluation Rubric Framework</label>
+                <select
+                  value={framework}
+                  onChange={(e) => setFramework(e.target.value as BlueprintFramework)}
+                  className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500 text-slate-900 font-semibold cursor-pointer"
+                >
+                  <option value="Custom">Custom Structure</option>
+                  <option value="STAR">STAR (Situation, Task, Action, Result)</option>
+                  <option value="CAR">CAR (Context, Action, Result)</option>
+                  <option value="Problem → Decision → Impact">Problem → Decision → Impact</option>
+                </select>
+              </div>
             </div>
+
+            {/* Capability & Job Taxonomy Mappings */}
+            <div className="p-3 bg-slate-50 border border-slate-200/80 rounded-xl space-y-3">
+              <div className="flex items-center gap-1.5 text-slate-700 font-semibold">
+                <Target className="w-3.5 h-3.5 text-purple-600" />
+                <span>Capability Mapping &amp; Target Job Calibration</span>
+              </div>
+              
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-slate-600 font-medium mb-1">Target Job Title</label>
+                  <input
+                    type="text"
+                    placeholder="e.g. Staff Backend Architect"
+                    value={targetJob}
+                    onChange={(e) => setTargetJob(e.target.value)}
+                    className="w-full px-2.5 py-1.5 bg-white border border-slate-300 rounded-lg text-slate-900"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-slate-600 font-medium mb-1">Target Company (Optional)</label>
+                  <input
+                    type="text"
+                    placeholder="e.g. Stripe, Ramp"
+                    value={targetCompany}
+                    onChange={(e) => setTargetCompany(e.target.value)}
+                    className="w-full px-2.5 py-1.5 bg-white border border-slate-300 rounded-lg text-slate-900"
+                  />
+                </div>
+              </div>
+            </div>
+
+            {/* Structured Answer Architecture Section */}
+            <div className="border-t border-slate-100 pt-4 space-y-4">
+              <div className="flex items-center justify-between">
+                <h4 className="text-xs font-bold text-slate-900 uppercase tracking-wider flex items-center gap-1.5">
+                  <Layers className="w-3.5 h-3.5 text-blue-600" /> Answer Architecture ({framework})
+                </h4>
+                <span className="text-[11px] text-slate-400">
+                  {framework === 'Custom' ? 'Simplified two-tier architecture' : 'Structured behavioral framework'}
+                </span>
+              </div>
 
             {/* 1B: CUSTOM STRUCTURE: Context (Optional) + Solution & Impact */}
             {framework === 'Custom' && (
@@ -624,6 +692,7 @@ export const CreateBlueprintModal: React.FC<CreateBlueprintModalProps> = ({
             )}
 
           </div>
+          </ProgressiveCreationSection>
 
           {/* Footer Actions */}
           <div className="flex items-center justify-end gap-3 pt-4 border-t border-slate-100">
@@ -634,15 +703,27 @@ export const CreateBlueprintModal: React.FC<CreateBlueprintModalProps> = ({
             >
               Cancel
             </button>
-            <button
-              type="submit"
-              className="px-5 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-xl font-bold shadow-xs transition-colors flex items-center gap-1.5 cursor-pointer"
-            >
-              <CheckCircle2 className="w-4 h-4" />
-              <span>{isEditing ? 'Update Blueprint in Library' : 'Save Blueprint to Library'}</span>
-            </button>
+            {!capabilities.canCreate ? (
+              <button
+                type="button"
+                onClick={() => openContextualPrompt()}
+                className="px-5 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-bold shadow-xs transition-colors flex items-center gap-1.5 cursor-pointer"
+              >
+                <Lock className="w-3.5 h-3.5" />
+                <span>Unlock in Demo</span>
+              </button>
+            ) : (
+              <button
+                type="submit"
+                className="px-5 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-xl font-bold shadow-xs transition-colors flex items-center gap-1.5 cursor-pointer"
+              >
+                <CheckCircle2 className="w-4 h-4" />
+                <span>{isEditing ? 'Update Blueprint in Library' : 'Save Blueprint to Library'}</span>
+              </button>
+            )}
           </div>
         </form>
+        </DemoQuotaGate>
 
       </div>
     </div>

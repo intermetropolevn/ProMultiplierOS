@@ -167,6 +167,18 @@ export const AnswerBlueprintsSection: React.FC<AnswerBlueprintsSectionProps> = (
         })}
       </div>
 
+      {/* Results & Beta Indicator */}
+      <div className="flex flex-wrap items-center justify-between text-xs text-slate-500 px-1 gap-2">
+        <div className="flex items-center gap-2">
+          <span>
+            Showing <strong className="font-bold text-slate-900">{filteredBlueprints.length}</strong> curated answer {filteredBlueprints.length === 1 ? 'blueprint' : 'blueprints'}
+          </span>
+          <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-blue-50 text-blue-700 border border-blue-200">
+            Curated Beta Preview
+          </span>
+        </div>
+      </div>
+
       {/* Blueprints List */}
       {filteredBlueprints.length === 0 ? (
         <div className="bg-white rounded-2xl border border-dashed border-slate-300 p-12 text-center space-y-3">

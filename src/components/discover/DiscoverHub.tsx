@@ -10,6 +10,7 @@ import { CreateRoleBlueprintModal } from './CreateRoleBlueprintModal';
 import { OpportunitiesExplorer } from '../opportunities/OpportunitiesExplorer';
 import { CreateOpportunityModal } from '../opportunities/CreateOpportunityModal';
 import { JobService } from '../../services/jobService';
+import { AccessControlService } from '../../services/accessControlService';
 
 interface DiscoverHubProps {
   onSelectJob: (job: JobListing) => void;
@@ -42,11 +43,13 @@ export const DiscoverHub: React.FC<DiscoverHubProps> = ({
   const [roleToDuplicate, setRoleToDuplicate] = useState<RoleBlueprint | null>(null);
 
   const handleOpenJob = (job: JobListing) => {
+    AccessControlService.recordMeaningfulInteraction('detail_open');
     setActiveJobModal(job);
     onSelectJob(job);
   };
 
   const handleOpenRole = (role: RoleBlueprint) => {
+    AccessControlService.recordMeaningfulInteraction('detail_open');
     setActiveRoleModal(role);
     onSelectRole(role);
   };
@@ -71,7 +74,10 @@ export const DiscoverHub: React.FC<DiscoverHubProps> = ({
             {subView === 'jobs' && (
               <button
                 id="btn-discover-add-job"
-                onClick={() => setIsAddJobOpen(true)}
+                onClick={() => {
+                  AccessControlService.recordMeaningfulInteraction('creation_preview');
+                  setIsAddJobOpen(true);
+                }}
                 className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg text-xs font-semibold bg-blue-600 hover:bg-blue-700 text-white transition-colors shadow-2xs cursor-pointer"
               >
                 <Plus className="w-3.5 h-3.5 text-white" />
@@ -82,7 +88,10 @@ export const DiscoverHub: React.FC<DiscoverHubProps> = ({
             {subView === 'opportunities' && (
               <button
                 id="btn-discover-add-ecosystem-opp"
-                onClick={() => setIsAddOpportunityOpen(true)}
+                onClick={() => {
+                  AccessControlService.recordMeaningfulInteraction('creation_preview');
+                  setIsAddOpportunityOpen(true);
+                }}
                 className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg text-xs font-semibold bg-blue-600 hover:bg-blue-700 text-white transition-colors shadow-2xs cursor-pointer"
               >
                 <Plus className="w-3.5 h-3.5 text-white" />
@@ -94,6 +103,7 @@ export const DiscoverHub: React.FC<DiscoverHubProps> = ({
               <button
                 id="btn-discover-create-blueprint"
                 onClick={() => {
+                  AccessControlService.recordMeaningfulInteraction('creation_preview');
                   setRoleToEdit(null);
                   setRoleToDuplicate(null);
                   setIsCreateBlueprintOpen(true);

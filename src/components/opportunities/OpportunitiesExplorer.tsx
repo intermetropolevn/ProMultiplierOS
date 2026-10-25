@@ -29,6 +29,7 @@ import { OpportunityCard } from './OpportunityCard';
 import { CompanySignalCard } from './CompanySignalCard';
 import { OpportunityDetailModal } from './OpportunityDetailModal';
 import { CreateOpportunityModal } from './CreateOpportunityModal';
+import { useAccessControl } from '../../services/accessControlService';
 
 interface OpportunitiesExplorerProps {
   onOpenCreateModal?: () => void;
@@ -41,6 +42,8 @@ export const OpportunitiesExplorer: React.FC<OpportunitiesExplorerProps> = ({
   externalSearchQuery = '',
   onBuildMission,
 }) => {
+  const { accessLevel, capabilities } = useAccessControl();
+
   // Opportunities State
   const [opportunities, setOpportunities] = useState<CareerOpportunity[]>(() => {
     return OpportunityService.getAllOpportunities();
@@ -75,10 +78,12 @@ export const OpportunitiesExplorer: React.FC<OpportunitiesExplorerProps> = ({
 
     window.addEventListener('career_opportunities_updated', handleOppsUpdated);
     window.addEventListener('career_radar_updated', handleRadarUpdated);
+    window.addEventListener('career_access_changed', handleOppsUpdated);
 
     return () => {
       window.removeEventListener('career_opportunities_updated', handleOppsUpdated);
       window.removeEventListener('career_radar_updated', handleRadarUpdated);
+      window.removeEventListener('career_access_changed', handleOppsUpdated);
     };
   }, []);
 
@@ -422,6 +427,26 @@ export const OpportunitiesExplorer: React.FC<OpportunitiesExplorerProps> = ({
             </div>
           </div>
         )}
+      </div>
+
+      {/* Results & Beta Indicator */}
+      <div className="flex flex-wrap items-center justify-between text-xs text-slate-500 px-1 gap-2">
+        <div className="flex items-center gap-2">
+          <span>
+            Showing <strong className="font-bold text-slate-900">{filteredOpportunities.length}</strong> {filteredOpportunities.length === 1 ? 'opportunity' : 'opportunities'} &amp; signals
+          </span>
+          <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${
+            accessLevel === 'FULL'
+              ? 'bg-emerald-50 text-emerald-800 border-emerald-200'
+              : accessLevel === 'DEMO'
+              ? 'bg-amber-50 text-amber-800 border-amber-200'
+              : accessLevel === 'GUEST'
+              ? 'bg-blue-50 text-blue-700 border-blue-200'
+              : 'bg-slate-100 text-slate-700 border-slate-200'
+          }`}>
+            {capabilities.tierBadgeLabel}
+          </span>
+        </div>
       </div>
 
       {/* 3. OPPORTUNITIES CARDS GRID */}

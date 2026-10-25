@@ -11,6 +11,7 @@ import {
   Award
 } from 'lucide-react';
 import { AnswerEvaluation } from '../../../types';
+import { useAccessControl } from '../../../services/accessControlService';
 
 interface MockFeedbackPanelProps {
   evaluation: AnswerEvaluation;
@@ -27,6 +28,10 @@ export const MockFeedbackPanel: React.FC<MockFeedbackPanelProps> = ({
   onContinueNext,
   isLastQuestion = false,
 }) => {
+  const { accessLevel } = useAccessControl();
+  const isGuest = accessLevel === 'PUBLIC' || accessLevel === 'GUEST';
+  const isFull = accessLevel === 'FULL';
+
   const getRatingBadgeClass = (tier: string) => {
     switch (tier) {
       case 'Exceptional':
@@ -43,24 +48,28 @@ export const MockFeedbackPanel: React.FC<MockFeedbackPanelProps> = ({
   return (
     <div className="bg-white rounded-2xl border border-slate-200/90 shadow-2xs p-5 flex flex-col h-full space-y-4">
       
-      {/* Header with Score & Tier */}
+      {/* Header with Signal Status & Tier */}
       <div className="flex items-center justify-between pb-3 border-b border-slate-100 shrink-0">
         <div className="flex items-center gap-2">
           <div className="w-8 h-8 rounded-xl bg-blue-600 text-white flex items-center justify-center font-extrabold text-sm shadow-2xs">
-            {evaluation.score}
+            <Sparkles className="w-4 h-4" />
           </div>
           <div>
             <div className="text-[10px] font-black uppercase tracking-wider text-slate-500">
-              Evaluation &amp; Feedback
+              {isGuest ? 'Sample Signal Feedback' : 'Interview Signal Feedback'}
             </div>
             <div className="text-xs font-bold text-slate-900">
-              Calibration Score: {evaluation.score}/100
+              {isFull
+                ? `Calibration Signal: ${evaluation.ratingTier}`
+                : isGuest
+                  ? 'Basic Qualitative Feedback'
+                  : 'Demo Capability Signal'}
             </div>
           </div>
         </div>
 
         <span className={`px-2.5 py-1 text-xs font-extrabold rounded-lg border ${getRatingBadgeClass(evaluation.ratingTier)}`}>
-          {evaluation.ratingTier}
+          {isGuest ? 'Sample Signal' : evaluation.ratingTier}
         </span>
       </div>
 

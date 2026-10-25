@@ -50,7 +50,7 @@ export interface ResumeDocument {
   extractedData?: ExtractedResumeData;
 }
 
-const STORAGE_KEY = 'career_os_resume_document_v1';
+const STORAGE_KEY = 'career_os_resume_document_v2';
 
 export const MAX_RESUME_SIZE_BYTES = 3 * 1024 * 1024; // 3 MB Limit
 export const ACCEPTED_RESUME_TYPES = [
@@ -61,80 +61,12 @@ export const ACCEPTED_RESUME_TYPES = [
 ];
 
 export const INITIAL_RESUME_DOCUMENT: ResumeDocument = {
-  id: 'res-default-1',
-  fileName: 'phandora_lead_software_engineer_2026.pdf',
-  fileSize: 1.8 * 1024 * 1024, // 1.8 MB
-  fileType: 'application/pdf',
-  uploadedAt: new Date(Date.now() - 4 * 24 * 3600 * 1000).toISOString(),
-  status: 'ready',
-  extractedData: {
-    fullName: 'Phandora',
-    headline: 'Senior Software Engineer / Tech Lead — Distributed Systems & Fintech',
-    contactEmail: 'phandora.eng@career-os.local',
-    location: 'San Francisco, CA (Remote)',
-    summary: 'Senior software engineer with 7+ years of experience designing resilient distributed architectures, event-driven pipelines, and high-throughput transactional systems. Proven track record executing zero-downtime migrations for 12M+ records, sub-15ms p99 latency optimization, and cross-functional team leadership.',
-    workExperiences: [
-      {
-        company: 'Stripe / Fintech Core Platforms',
-        role: 'Lead Platform Engineer & Project Owner',
-        dates: '2023 — Present (2 yrs)',
-        location: 'San Francisco, CA',
-        summary: 'Architected zero-downtime dual-run migration of 12M customer records from legacy CRM to PostgreSQL with real-time Kafka CDC reconciliation.',
-        responsibilities: [
-          'Led technical design and RFC execution for mission-critical core payment ledger replication.',
-          'Built automated checksum parity verification engines processing 10,000 writes/sec.',
-          'Mentored 4 mid-level platform engineers in distributed systems and chaos engineering.'
-        ],
-        achievements: [
-          'Achieved 0 seconds unplanned downtime across enterprise cutover maintenance window.',
-          'Eliminated $35,000/month in legacy third-party license overhead.',
-          'Maintained 99.999% audit accuracy during dual-write reconciliation phase.'
-        ],
-        skills: ['PostgreSQL', 'Kafka', 'CDC (Debezium)', 'Distributed Systems', 'Zero-Downtime Migration', 'Stakeholder Management']
-      },
-      {
-        company: 'Ramp / High-Scale Financial Infra',
-        role: 'Senior Backend Engineer / Tech Lead',
-        dates: '2021 — 2023 (2 yrs)',
-        location: 'New York, NY',
-        summary: 'Engineered at-most-once financial transaction pipeline with atomic Redis locks and immutable PostgreSQL unique constraints.',
-        responsibilities: [
-          'Enforced client-side idempotency keys and distributed locking on payment gateway checkouts.',
-          'Conducted load benchmarks and authored collaborative RFCs resolving architecture deadlocks.',
-          'Managed sprint technical debt allocations using business Cost of Delay metrics.'
-        ],
-        achievements: [
-          'Prevented duplicate charges across $45,000,000 in processed transaction volume.',
-          'Reduced p99 replay latency to 85ms on retried network requests.',
-          'Halved customer-facing defect rate and compressed PR review cycle time from 4 days to 6 hours.'
-        ],
-        skills: ['Distributed Systems', 'Redis', 'PostgreSQL Serializable Transactions', 'Idempotency', 'Benchmarking']
-      }
-    ],
-    coreCompetences: [
-      'Distributed Systems Architecture',
-      'High-Throughput Idempotency',
-      'Zero-Downtime Migration Design',
-      'Stakeholder Management & RFC Consensus',
-      'Technical Debt & Cost of Delay',
-      'Constructive Conflict Resolution',
-      'Incident Post-Mortem & SRE',
-      'System Benchmarking & Profiling'
-    ],
-    toolsAndStacks: [
-      'PostgreSQL',
-      'Kafka',
-      'Debezium (CDC)',
-      'Redis',
-      'TypeScript',
-      'Node.js',
-      'Docker',
-      'Kubernetes',
-      'Prometheus / Grafana',
-      'AWS (ECS, SQS, RDS)'
-    ],
-    confidenceScore: 98
-  }
+  id: 'res-empty-init',
+  fileName: '',
+  fileSize: 0,
+  fileType: 'text/csv',
+  uploadedAt: new Date().toISOString(),
+  status: 'idle'
 };
 
 export class ResumeService {

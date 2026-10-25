@@ -214,6 +214,44 @@ export class JobSemanticExtractor {
     url?: string;
   }): ExtractedJobFields {
     const { title = '', company = '', overview = '', url = '' } = params;
+    let isGuestOrPublic = false;
+    if (typeof window !== 'undefined') {
+      try {
+        const storedLevel = localStorage.getItem('careeros_beta_access_level') || 'GUEST';
+        isGuestOrPublic = storedLevel === 'GUEST' || storedLevel === 'PUBLIC';
+      } catch {
+        isGuestOrPublic = true;
+      }
+    }
+    if (isGuestOrPublic) {
+      return {
+        roleCategory: 'Software Engineering',
+        domain: 'Enterprise SaaS',
+        industryDomainConfidence: 0,
+        industryDomainSource: 'ai',
+        industryClassificationStatus: 'classified',
+        level: 'Mid-Level',
+        workMode: 'Hybrid',
+        location: '',
+        isGlobalLocation: false,
+        salaryRange: undefined,
+        requiredSkills: [],
+        postedAt: null,
+        applicationDeadline: null,
+        deadlineType: 'none',
+        deadlineSource: 'none',
+        attributeDetails: {
+          workMode: { value: 'Hybrid', confidence: 'Low', evidence: '', sourceType: 'default' },
+          roleCategory: { value: 'Software Engineering', confidence: 'Low', evidence: '', sourceType: 'default' },
+          domain: { value: 'Enterprise SaaS', confidence: 'Low', evidence: '', sourceType: 'default' },
+          level: { value: 'Mid-Level', confidence: 'Low', evidence: '', sourceType: 'default' },
+          location: { value: '', confidence: 'Low', evidence: '', sourceType: 'default' }
+        },
+        detectedCompanyContext: '',
+        detectedSignals: []
+      };
+    }
+
     const combinedText = `${title}\n${company}\n${overview}`.trim();
     const cleanLower = combinedText.toLowerCase();
     const cleanNoDiacritics = VietnameseNormalizer.toSearchKey(combinedText);

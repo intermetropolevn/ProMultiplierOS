@@ -20,6 +20,8 @@ import {
 } from '../../features/roleIntelligence/types';
 import { roleIntelligenceStore } from '../../features/roleIntelligence/services/roleIntelligenceStore';
 import { UserCareerProfile } from '../../types';
+import { useAccessControl } from '../../services/accessControlService';
+import { CareerOSIntelligenceGate, IntelligenceModeBadge } from '../access/CareerOSIntelligenceGate';
 
 interface RoleReadinessModalProps {
   isOpen: boolean;
@@ -40,9 +42,13 @@ export const RoleReadinessModal: React.FC<RoleReadinessModalProps> = ({
   onNavigateToOpportunities,
   onNavigateToParticipation
 }) => {
+  const { getIntelligenceAccess } = useAccessControl();
   const [activeGapTab, setActiveGapTab] = useState<ReadinessGapCategory | 'all'>('all');
 
   if (!isOpen) return null;
+
+  const readinessAccess = getIntelligenceAccess('readiness_intelligence');
+  const isFull = readinessAccess.isFull;
 
   const analysis: RoleReadinessAnalysis = roleIntelligenceStore.generateReadinessAnalysis(
     role.id, 
@@ -59,6 +65,8 @@ export const RoleReadinessModal: React.FC<RoleReadinessModalProps> = ({
   const filteredGaps = activeGapTab === 'all' 
     ? allGaps 
     : allGaps.filter(g => g.category === activeGapTab);
+
+  const visibleGaps = isFull ? filteredGaps : filteredGaps.slice(0, 2);
 
   const getStatusIcon = (status: 'strong' | 'develop' | 'gap') => {
     switch (status) {
@@ -88,10 +96,11 @@ export const RoleReadinessModal: React.FC<RoleReadinessModalProps> = ({
               <Target className="w-5 h-5" />
             </div>
             <div>
-              <div className="flex items-center gap-2 text-[11px] text-slate-500">
+              <div className="flex items-center gap-2 text-[11px] text-slate-500 flex-wrap">
                 <span>Current Profile</span>
                 <span>vs</span>
                 <strong className="text-slate-800">{role.title}</strong>
+                <IntelligenceModeBadge capability="readiness_intelligence" />
               </div>
               <h2 className="text-base sm:text-lg font-black text-slate-900 tracking-tight">
                 Role Readiness &amp; Gap Diagnostics
@@ -281,7 +290,7 @@ export const RoleReadinessModal: React.FC<RoleReadinessModalProps> = ({
             </div>
 
             <div className="space-y-2.5">
-              {filteredGaps.map(gap => (
+              {visibleGaps.map(gap => (
                 <div
                   key={gap.id}
                   className="p-4 bg-white rounded-xl border border-slate-200 shadow-3xs hover:border-slate-300 transition-all space-y-2"
@@ -318,6 +327,15 @@ export const RoleReadinessModal: React.FC<RoleReadinessModalProps> = ({
                 </div>
               ))}
             </div>
+
+            {!isFull && (
+              <CareerOSIntelligenceGate
+                capability="readiness_intelligence"
+                title="CareerOS Intelligence — Readiness & Gap Diagnostics"
+                description="Turn career activity into structured evidence, capabilities and readiness signals. Unlock the complete 4-way gap diagnostic taxonomy and personalized remediation blueprints."
+                sampleCountLabel={`Showing ${visibleGaps.length} of ${filteredGaps.length} readiness diagnostics`}
+              />
+            )}
           </div>
 
           {/* Actionable Next Steps */}

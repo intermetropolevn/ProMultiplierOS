@@ -20,6 +20,8 @@ import {
   CareerOSDimensionScore, 
   SupportingWorkInitiative 
 } from '../../features/roleIntelligence/types';
+import { useAccessControl } from '../../services/accessControlService';
+import { CareerOSIntelligenceGate, IntelligenceModeBadge } from '../access/CareerOSIntelligenceGate';
 
 interface SystemEvidenceDrawerProps {
   isOpen: boolean;
@@ -47,10 +49,19 @@ export const SystemEvidenceDrawer: React.FC<SystemEvidenceDrawerProps> = ({
   onNavigateToEvidenceIntelligence,
   onUpdateAttribution
 }) => {
+  const { getIntelligenceAccess } = useAccessControl();
+  const [activeAttribution, setActiveAttribution] = useState<{ [id: string]: string }>({
+    'init-onboarding-revamp': 'Lead',
+    'init-api-v2': 'Contributor'
+  });
+
   if (!isOpen || !dimension) return null;
 
+  const attrAccess = getIntelligenceAccess('capability_attribution');
+  const isFull = attrAccess.isFull;
+
   // Mock sample initiatives if dimension doesn't have custom ones populated
-  const initiatives: SupportingWorkInitiative[] = dimension.supportingWork && dimension.supportingWork.length > 0 
+  const allInitiatives: SupportingWorkInitiative[] = dimension.supportingWork && dimension.supportingWork.length > 0 
     ? dimension.supportingWork 
     : [
         {
@@ -102,10 +113,7 @@ export const SystemEvidenceDrawer: React.FC<SystemEvidenceDrawerProps> = ({
         }
       ];
 
-  const [activeAttribution, setActiveAttribution] = useState<{ [id: string]: string }>({
-    'init-onboarding-revamp': 'Lead',
-    'init-api-v2': 'Contributor'
-  });
+  const initiatives = isFull ? allInitiatives : allInitiatives.slice(0, 1);
 
   const handleAttributionChange = (initId: string, val: string) => {
     setActiveAttribution(prev => ({ ...prev, [initId]: val }));
@@ -127,13 +135,14 @@ export const SystemEvidenceDrawer: React.FC<SystemEvidenceDrawerProps> = ({
         {/* Drawer Header */}
         <div className="p-5 border-b border-slate-200 flex items-start justify-between gap-4 bg-slate-50/80 shrink-0">
           <div>
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 flex-wrap">
               <span className="text-[10px] font-black uppercase tracking-wider px-2 py-0.5 rounded bg-emerald-100 text-emerald-800 border border-emerald-200">
                 System Evidence
               </span>
+              <IntelligenceModeBadge capability="capability_attribution" />
               <span className="text-slate-300">·</span>
               <span className="text-xs text-slate-500 font-medium">
-                {dimension.systemEvidenceWeight || 70}% Signal Weight
+                Primary Signal Driver
               </span>
             </div>
             <h3 className="text-lg font-black text-slate-900 mt-1">
@@ -176,9 +185,9 @@ export const SystemEvidenceDrawer: React.FC<SystemEvidenceDrawerProps> = ({
               </div>
 
               <div className="p-2 bg-slate-800/60 rounded-xl">
-                <span className="text-[10px] uppercase font-bold text-slate-400 block">System Weight</span>
+                <span className="text-[10px] uppercase font-bold text-slate-400 block">Signal Tier</span>
                 <span className="text-base font-black text-emerald-400 mt-0.5 block">
-                  {dimension.systemEvidenceWeight || 76}%
+                  Primary Driver
                 </span>
               </div>
 
@@ -248,7 +257,7 @@ export const SystemEvidenceDrawer: React.FC<SystemEvidenceDrawerProps> = ({
                 </p>
               </div>
               <span className="text-xs text-blue-700 font-bold bg-blue-50 px-2 py-0.5 rounded border border-blue-200">
-                {initiatives.length} Work Clusters
+                {initiatives.length} {isFull ? 'Work Clusters' : 'Sample Cluster'}
               </span>
             </div>
 
@@ -367,6 +376,15 @@ export const SystemEvidenceDrawer: React.FC<SystemEvidenceDrawerProps> = ({
                 );
               })}
             </div>
+
+            {!isFull && (
+              <CareerOSIntelligenceGate
+                capability="capability_attribution"
+                title="CareerOS Intelligence — Capability Attribution"
+                description="Turn career activity into structured evidence, capabilities and readiness signals. Unlock full cross-initiative entity resolution and multi-stakeholder ownership calibration."
+                sampleCountLabel="Showing 1 of 2 work initiative clusters"
+              />
+            )}
           </div>
 
         </div>

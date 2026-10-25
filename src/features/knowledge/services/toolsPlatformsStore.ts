@@ -4,6 +4,8 @@ import {
 } from '../types/toolsPlatforms';
 import { resolveProvenance } from '../types/provenance';
 import { TOOLS_PLATFORMS_DATA } from '../data/toolsPlatformsData';
+import { AccessControlService } from '../../../services/accessControlService';
+import { dataExposureGuard } from '../../../services/dataExposureGuardService';
 
 const STORAGE_KEY = 'career_os_tools_platforms_v3';
 
@@ -24,6 +26,10 @@ class ToolsPlatformsStore {
 
   private loadFromStorage(): void {
     try {
+      if (!dataExposureGuard.canPersistFullCatalogToStorage()) {
+        this.tools = TOOLS_PLATFORMS_DATA.map(normalizeTool);
+        return;
+      }
       const stored = localStorage.getItem(STORAGE_KEY);
       if (stored) {
         const parsed = JSON.parse(stored);
@@ -35,18 +41,19 @@ class ToolsPlatformsStore {
     } catch (err) {
       console.error('Failed to load tools & platforms from storage:', err);
     }
-    // Fallback to seed data
     this.tools = TOOLS_PLATFORMS_DATA.map(normalizeTool);
     this.saveToStorage();
   }
 
   private saveToStorage(): void {
-    try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(this.tools));
-      this.notifyListeners();
-    } catch (err) {
-      console.error('Failed to persist tools & platforms:', err);
+    if (dataExposureGuard.canPersistFullCatalogToStorage()) {
+      try {
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(this.tools));
+      } catch (err) {
+        console.error('Failed to persist tools & platforms:', err);
+      }
     }
+    this.notifyListeners();
   }
 
   private notifyListeners(): void {
@@ -59,14 +66,39 @@ class ToolsPlatformsStore {
   }
 
   public getTools(): ToolPlatformEntry[] {
+    const access = AccessControlService.getAccessLevel();
+    if (access === 'PUBLIC') {
+      return dataExposureGuard.paginateAndProject('tools', this.tools.slice(0, 1), undefined, 'PUBLIC').items;
+    }
+    if (access === 'GUEST') {
+      return dataExposureGuard.paginateAndProject('tools', this.tools.slice(0, 3), undefined, 'GUEST').items;
+    }
+    if (access === 'DEMO') {
+      const custom = this.tools.filter(t => !TOOLS_PLATFORMS_DATA.some(init => init.id === t.id));
+      const curated = this.tools.filter(t => TOOLS_PLATFORMS_DATA.some(init => init.id === t.id)).slice(0, 5);
+      return dataExposureGuard.projectCollectionForTier([...custom.slice(0, 2), ...curated], 'DEMO');
+    }
     return [...this.tools];
   }
 
   public getTool(id: string): ToolPlatformEntry | undefined {
-    return this.tools.find(t => t.id === id);
+    return dataExposureGuard.authorizeSingleRecordLookup('tools', id, this.getTools());
   }
 
   public addTool(tool: ToolPlatformEntry): void {
+    const auth = dataExposureGuard.assertWriteAuthorized('tools', 'create');
+    if (!auth.allowed) {
+      throw new Error(auth.reason || 'Creation restricted by active access tier.');
+    }
+    const customCount = this.tools.filter(t => !TOOLS_PLATFORMS_DATA.some(init => init.id === t.id)).length;
+    const decision = AccessControlService.canCreateWorkflowItem('tools', customCount);
+    if (!decision.allowed) {
+      console.warn('Tool creation blocked by access control:', decision.reason);
+      throw new Error(decision.reason || 'Creation restricted by active access tier.');
+    }
+    if (!dataExposureGuard.checkDuplicateSubmit('tools', `add:${tool.name}`)) {
+      return;
+    }
     this.tools.unshift(tool);
     this.saveToStorage();
   }
@@ -76,6 +108,8 @@ class ToolsPlatformsStore {
     updates: Partial<ToolPlatformEntry>, 
     preserveVersionHistory: boolean = true
   ): void {
+    const auth = dataExposureGuard.assertWriteAuthorized('tools', 'update');
+    if (!auth.allowed) return;
     const index = this.tools.findIndex(t => t.id === id);
     if (index === -1) return;
 
@@ -112,6 +146,8 @@ class ToolsPlatformsStore {
   }
 
   public duplicateTool(id: string): ToolPlatformEntry | null {
+    const auth = dataExposureGuard.assertWriteAuthorized('tools', 'create');
+    if (!auth.allowed) return null;
     const existing = this.tools.find(t => t.id === id);
     if (!existing) return null;
 
@@ -129,6 +165,8 @@ class ToolsPlatformsStore {
   }
 
   public archiveTool(id: string): void {
+    const auth = dataExposureGuard.assertWriteAuthorized('tools', 'update');
+    if (!auth.allowed) return;
     const index = this.tools.findIndex(t => t.id === id);
     if (index === -1) return;
     this.tools[index] = {
@@ -140,6 +178,8 @@ class ToolsPlatformsStore {
   }
 
   public deleteTool(id: string): void {
+    const auth = dataExposureGuard.assertWriteAuthorized('tools', 'delete');
+    if (!auth.allowed) return;
     this.tools = this.tools.filter(t => t.id !== id);
     this.saveToStorage();
   }

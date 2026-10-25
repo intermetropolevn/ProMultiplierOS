@@ -1,6 +1,8 @@
 import { InnovationSystemEntry } from '../types/innovationSystems';
 import { resolveProvenance } from '../types/provenance';
 import { INNOVATION_SYSTEMS_DATA } from '../data/innovationSystemsData';
+import { AccessControlService } from '../../../services/accessControlService';
+import { dataExposureGuard } from '../../../services/dataExposureGuardService';
 
 const STORAGE_KEY = 'career_os_innovation_systems_v3';
 
@@ -21,6 +23,10 @@ class InnovationSystemsStore {
 
   private loadFromStorage(): void {
     try {
+      if (!dataExposureGuard.canPersistFullCatalogToStorage()) {
+        this.entries = INNOVATION_SYSTEMS_DATA.map(normalizeInnovation);
+        return;
+      }
       const stored = localStorage.getItem(STORAGE_KEY);
       if (stored) {
         const parsed = JSON.parse(stored);
@@ -37,12 +43,14 @@ class InnovationSystemsStore {
   }
 
   private saveToStorage(): void {
-    try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(this.entries));
-      this.notifyListeners();
-    } catch (err) {
-      console.error('Failed to persist innovation systems:', err);
+    if (dataExposureGuard.canPersistFullCatalogToStorage()) {
+      try {
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(this.entries));
+      } catch (err) {
+        console.error('Failed to persist innovation systems:', err);
+      }
     }
+    this.notifyListeners();
   }
 
   private notifyListeners(): void {
@@ -55,19 +63,40 @@ class InnovationSystemsStore {
   }
 
   public getEntries(): InnovationSystemEntry[] {
+    const tier = AccessControlService.getAccessLevel();
+    if (tier === 'PUBLIC') {
+      return dataExposureGuard.paginateAndProject('innovation_systems', this.entries.slice(0, 1), undefined, 'PUBLIC').items;
+    }
+    if (tier === 'GUEST') {
+      return dataExposureGuard.paginateAndProject('innovation_systems', this.entries.slice(0, 3), undefined, 'GUEST').items;
+    }
+    if (tier === 'DEMO') {
+      const custom = this.entries.filter(e => !INNOVATION_SYSTEMS_DATA.some(init => init.id === e.id));
+      const curated = this.entries.filter(e => INNOVATION_SYSTEMS_DATA.some(init => init.id === e.id)).slice(0, 5);
+      return dataExposureGuard.projectCollectionForTier([...custom.slice(0, 2), ...curated], 'DEMO');
+    }
     return [...this.entries];
   }
 
   public getEntry(id: string): InnovationSystemEntry | undefined {
-    return this.entries.find(e => e.id === id);
+    return dataExposureGuard.authorizeSingleRecordLookup('innovation_systems', id, this.getEntries());
   }
 
   public addEntry(entry: InnovationSystemEntry): void {
+    const auth = dataExposureGuard.assertWriteAuthorized('innovation_systems', 'create');
+    if (!auth.allowed) {
+      throw new Error(auth.reason || 'Creation restricted by active access tier.');
+    }
+    if (!dataExposureGuard.checkDuplicateSubmit('innovation_systems', `add:${entry.name}`)) {
+      return;
+    }
     this.entries.unshift(entry);
     this.saveToStorage();
   }
 
   public updateEntry(id: string, updates: Partial<InnovationSystemEntry>): void {
+    const auth = dataExposureGuard.assertWriteAuthorized('innovation_systems', 'update');
+    if (!auth.allowed) return;
     const index = this.entries.findIndex(e => e.id === id);
     if (index === -1) return;
     this.entries[index] = {
@@ -79,6 +108,8 @@ class InnovationSystemsStore {
   }
 
   public duplicateEntry(id: string): InnovationSystemEntry | null {
+    const auth = dataExposureGuard.assertWriteAuthorized('innovation_systems', 'create');
+    if (!auth.allowed) return null;
     const existing = this.entries.find(e => e.id === id);
     if (!existing) return null;
 
@@ -95,6 +126,8 @@ class InnovationSystemsStore {
   }
 
   public archiveEntry(id: string): void {
+    const auth = dataExposureGuard.assertWriteAuthorized('innovation_systems', 'update');
+    if (!auth.allowed) return;
     const index = this.entries.findIndex(e => e.id === id);
     if (index === -1) return;
     this.entries[index] = {
@@ -105,6 +138,8 @@ class InnovationSystemsStore {
   }
 
   public deleteEntry(id: string): void {
+    const auth = dataExposureGuard.assertWriteAuthorized('innovation_systems', 'delete');
+    if (!auth.allowed) return;
     this.entries = this.entries.filter(e => e.id !== id);
     this.saveToStorage();
   }

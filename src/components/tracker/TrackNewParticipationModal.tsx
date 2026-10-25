@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import { 
   X, 
   Briefcase, 
@@ -25,7 +25,8 @@ import {
   Heart,
   Paperclip,
   CheckCircle2,
-  ChevronDown
+  ChevronDown,
+  Lock
 } from 'lucide-react';
 import { 
   ParticipationType, 
@@ -38,6 +39,10 @@ import {
 } from '../../features/applications/types';
 import { applicationStore } from '../../features/applications/services/applicationStore';
 import { JOBS_DATA } from '../../data/jobsData';
+import { AccessCreationBanner } from '../access/AccessCreationBanner';
+import { ProgressiveCreationSection } from '../access/ProgressiveCreationSection';
+import { DemoQuotaGate } from '../access/DemoQuotaGate';
+import { useAccessControl } from '../../services/accessControlService';
 
 interface TrackNewParticipationModalProps {
   isOpen: boolean;
@@ -57,6 +62,10 @@ export const TrackNewParticipationModal: React.FC<TrackNewParticipationModalProp
   // 1. Primary Field: Participation Type
   const [selectedType, setSelectedType] = useState<ParticipationType>(initialType || 'workshop');
   
+  const { accessLevel, can, canCreate, capabilities, openAccessModal } = useAccessControl();
+  const [accessError, setAccessError] = useState<string | null>(null);
+  const isSubmittingRef = useRef(false);
+
   // 2. Common Fields
   const [title, setTitle] = useState(initialContext?.roleTitle || '');
   const [organization, setOrganization] = useState(initialContext?.organization || initialContext?.companyName || '');
@@ -194,7 +203,12 @@ export const TrackNewParticipationModal: React.FC<TrackNewParticipationModalProp
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+    if (isSubmittingRef.current) return;
+    if (!canCreate('participation')) {
+      return;
+    }
     if (!title.trim()) return;
+    isSubmittingRef.current = true;
 
     const initialStage = currentLifecycle.stages[0];
 
@@ -355,9 +369,14 @@ export const TrackNewParticipationModal: React.FC<TrackNewParticipationModalProp
       ];
     }
 
-    const created = applicationStore.trackNewParticipation(newItem);
-    onItemCreated(created);
-    onClose();
+    try {
+      const created = applicationStore.trackNewParticipation(newItem);
+      onItemCreated(created);
+      onClose();
+    } catch (err: any) {
+      isSubmittingRef.current = false;
+      setAccessError(err.message || 'Creation restricted by current access tier.');
+    }
   };
 
   return (
@@ -390,14 +409,28 @@ export const TrackNewParticipationModal: React.FC<TrackNewParticipationModalProp
         </div>
 
         {/* Scrollable Form Body */}
+        <DemoQuotaGate workflowKey="participation" isEditing={false} onViewExistingItems={onClose}>
         <form onSubmit={handleSubmit} className="flex-1 overflow-y-auto p-5 sm:p-6 space-y-6">
           
+          {/* Access Control Tier Banner */}
+          <AccessCreationBanner 
+            workflowKey="participation" 
+            workflowLabel="activities" 
+            currentCount={applicationStore.getApplications().filter(a => a.id.startsWith('app-') || a.id.startsWith('track-')).length} 
+          />
+
+          {accessError && (
+            <div className="p-3 bg-rose-50 border border-rose-200 text-rose-800 text-xs rounded-xl font-medium">
+              {accessError}
+            </div>
+          )}
+          
           {/* ==================================================
-              FIELD 1: PARTICIPATION TYPE (First Field required)
+              FIELD 1: ACTIVITY TYPE (Basic Field)
               ================================================== */}
           <div className="space-y-2.5">
             <label className="text-2xs font-extrabold text-slate-500 uppercase tracking-wider block">
-              1. Participation Type *
+              1. Activity Type *
             </label>
             <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-2">
               {allSupportedTypes.map(opt => {
@@ -433,34 +466,34 @@ export const TrackNewParticipationModal: React.FC<TrackNewParticipationModalProp
           </div>
 
           {/* ==================================================
-              FIELD 2: COMMON MANDATORY & CONTEXT FIELDS
+              FIELD 2: BASIC PARTICIPATION DETAILS
               ================================================== */}
           <div className="space-y-4 pt-2 border-t border-slate-100">
             <h3 className="text-xs font-black uppercase tracking-wider text-slate-400">
-              2. Core Details &amp; Logistics
+              2. Basic Participation Details
             </h3>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3.5">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
               
               {/* Title */}
-              <div className="sm:col-span-2 space-y-1">
+              <div className="space-y-1">
                 <label className="text-xs font-bold text-slate-700">
-                  Activity Title *
+                  Title *
                 </label>
                 <input
                   type="text"
                   required
                   value={title}
                   onChange={(e) => setTitle(e.target.value)}
-                  placeholder="e.g. AI Product Architecture Workshop, ProductCon 2026, Q4 Tech Sync..."
+                  placeholder="e.g. AI Product Architecture Workshop, ProductCon 2026..."
                   className="w-full text-xs px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:border-blue-500 focus:outline-hidden transition-colors"
                 />
               </div>
 
-              {/* Organizer */}
+              {/* Organization */}
               <div className="space-y-1">
                 <label className="text-xs font-bold text-slate-700">
-                  Organizer / Host *
+                  Organization *
                 </label>
                 <input
                   type="text"
@@ -472,28 +505,21 @@ export const TrackNewParticipationModal: React.FC<TrackNewParticipationModalProp
                 />
               </div>
 
-              {/* Status */}
+              {/* Date */}
               <div className="space-y-1">
-                <label className="text-xs font-bold text-slate-700">Participation Status</label>
-                <select
-                  value={status}
-                  onChange={(e) => setStatus(e.target.value as UnifiedParticipationStatus)}
-                  className="w-full text-xs px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:border-blue-500 focus:outline-hidden transition-colors cursor-pointer capitalize font-medium"
-                >
-                  <option value="saved">Saved (Considering)</option>
-                  <option value="invited">Invited</option>
-                  <option value="registered">Registered</option>
-                  <option value="confirmed">Confirmed / Confirmed Seat</option>
-                  <option value="attended">Attended</option>
-                  <option value="completed">Completed</option>
-                  <option value="cancelled">Cancelled</option>
-                  <option value="no_show">No-Show</option>
-                </select>
+                <label className="text-xs font-bold text-slate-700">Date *</label>
+                <input
+                  type="date"
+                  required
+                  value={startDate}
+                  onChange={(e) => setStartDate(e.target.value)}
+                  className="w-full text-xs px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:border-blue-500 focus:outline-hidden transition-colors"
+                />
               </div>
 
               {/* Participation Role */}
               <div className="space-y-1">
-                <label className="text-xs font-bold text-slate-700">My Participation Role</label>
+                <label className="text-xs font-bold text-slate-700">Role</label>
                 <select
                   value={role}
                   onChange={(e) => setRole(e.target.value as ParticipationRole)}
@@ -513,109 +539,122 @@ export const TrackNewParticipationModal: React.FC<TrackNewParticipationModalProp
                   <option value="Team Member">Team Member</option>
                 </select>
               </div>
-
-              {/* Date */}
-              <div className="space-y-1">
-                <label className="text-xs font-bold text-slate-700">Date *</label>
-                <input
-                  type="date"
-                  required
-                  value={startDate}
-                  onChange={(e) => setStartDate(e.target.value)}
-                  className="w-full text-xs px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:border-blue-500 focus:outline-hidden transition-colors"
-                />
-              </div>
-
-              {/* Start Time & End Time */}
-              <div className="space-y-1">
-                <label className="text-xs font-bold text-slate-700">Start Time</label>
-                <input
-                  type="text"
-                  value={startTime}
-                  onChange={(e) => setStartTime(e.target.value)}
-                  placeholder="09:00 AM"
-                  className="w-full text-xs px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:border-blue-500 focus:outline-hidden transition-colors"
-                />
-              </div>
-
-              <div className="space-y-1">
-                <label className="text-xs font-bold text-slate-700">End Time / Duration</label>
-                <input
-                  type="text"
-                  value={duration}
-                  onChange={(e) => setDuration(e.target.value)}
-                  placeholder="e.g. 2 hours, 1 Day, 6 Weeks"
-                  className="w-full text-xs px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:border-blue-500 focus:outline-hidden transition-colors"
-                />
-              </div>
-
-              {/* Location & Online/Offline */}
-              <div className="space-y-1">
-                <div className="flex items-center justify-between">
-                  <label className="text-xs font-bold text-slate-700">Location / Platform</label>
-                  <label className="inline-flex items-center gap-1 cursor-pointer text-2xs text-blue-600 font-bold">
-                    <input
-                      type="checkbox"
-                      checked={isOnline}
-                      onChange={(e) => {
-                        setIsOnline(e.target.checked);
-                        if (e.target.checked && (!location || location === 'In-Person')) {
-                          setLocation('Remote / Online');
-                        }
-                      }}
-                      className="rounded text-blue-600 w-3 h-3"
-                    />
-                    <span>Online / Virtual</span>
-                  </label>
-                </div>
-                <input
-                  type="text"
-                  value={location}
-                  onChange={(e) => setLocation(e.target.value)}
-                  placeholder="e.g. Zoom, Moscone Center San Francisco, Hanoi Office"
-                  className="w-full text-xs px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:border-blue-500 focus:outline-hidden transition-colors"
-                />
-              </div>
-
             </div>
-
-            {/* Description & Topics & Skills */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
-              <div className="space-y-1">
-                <label className="text-xs font-bold text-slate-700">Topics (comma-separated)</label>
-                <input
-                  type="text"
-                  value={topicsInput}
-                  onChange={(e) => setTopicsInput(e.target.value)}
-                  placeholder="e.g. AI Agents, LLM Evaluation, Growth Loops, Vector Search"
-                  className="w-full text-xs px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:border-blue-500 focus:outline-hidden transition-colors"
-                />
-              </div>
-
-              <div className="space-y-1">
-                <label className="text-xs font-bold text-slate-700">Skills Acquired / Practiced</label>
-                <input
-                  type="text"
-                  value={skillsInput}
-                  onChange={(e) => setSkillsInput(e.target.value)}
-                  placeholder="e.g. Strategic Thinking, Python, Kubernetes, Product Strategy"
-                  className="w-full text-xs px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:border-blue-500 focus:outline-hidden transition-colors"
-                />
-              </div>
-
-              <div className="sm:col-span-2 space-y-1">
-                <label className="text-xs font-bold text-slate-700">Description &amp; Objective</label>
-                <textarea
-                  rows={2}
-                  value={description}
-                  onChange={(e) => setDescription(e.target.value)}
-                  placeholder="Brief summary of what this activity covers and key objectives..."
-                  className="w-full text-xs px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:border-blue-500 focus:outline-hidden transition-colors"
-                />
-              </div>
-            </div>
-
           </div>
+
+          {/* ==================================================
+              ADVANCED SECTION: EVIDENCE MAPPING, CAPABILITY ATTRIBUTION, READINESS IMPACT, VERIFICATION
+              ================================================== */}
+          <ProgressiveCreationSection workflowKey="participation">
+            <div className="space-y-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3.5">
+                {/* Status */}
+                <div className="space-y-1">
+                  <label className="text-xs font-bold text-slate-700">Participation Status</label>
+                  <select
+                    value={status}
+                    onChange={(e) => setStatus(e.target.value as UnifiedParticipationStatus)}
+                    className="w-full text-xs px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:border-blue-500 focus:outline-hidden transition-colors cursor-pointer capitalize font-medium"
+                  >
+                    <option value="saved">Saved (Considering)</option>
+                    <option value="invited">Invited</option>
+                    <option value="registered">Registered</option>
+                    <option value="confirmed">Confirmed / Confirmed Seat</option>
+                    <option value="attended">Attended</option>
+                    <option value="completed">Completed</option>
+                    <option value="cancelled">Cancelled</option>
+                    <option value="no_show">No-Show</option>
+                  </select>
+                </div>
+
+                {/* Start Time & End Time */}
+                <div className="space-y-1">
+                  <label className="text-xs font-bold text-slate-700">Start Time</label>
+                  <input
+                    type="text"
+                    value={startTime}
+                    onChange={(e) => setStartTime(e.target.value)}
+                    placeholder="09:00 AM"
+                    className="w-full text-xs px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:border-blue-500 focus:outline-hidden transition-colors"
+                  />
+                </div>
+
+                <div className="space-y-1">
+                  <label className="text-xs font-bold text-slate-700">End Time / Duration</label>
+                  <input
+                    type="text"
+                    value={duration}
+                    onChange={(e) => setDuration(e.target.value)}
+                    placeholder="e.g. 2 hours, 1 Day, 6 Weeks"
+                    className="w-full text-xs px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:border-blue-500 focus:outline-hidden transition-colors"
+                  />
+                </div>
+
+                {/* Location & Online/Offline */}
+                <div className="space-y-1">
+                  <div className="flex items-center justify-between">
+                    <label className="text-xs font-bold text-slate-700">Location / Platform</label>
+                    <label className="inline-flex items-center gap-1 cursor-pointer text-2xs text-blue-600 font-bold">
+                      <input
+                        type="checkbox"
+                        checked={isOnline}
+                        onChange={(e) => {
+                          setIsOnline(e.target.checked);
+                          if (e.target.checked && (!location || location === 'In-Person')) {
+                            setLocation('Remote / Online');
+                          }
+                        }}
+                        className="rounded text-blue-600 w-3 h-3"
+                      />
+                      <span>Online / Virtual</span>
+                    </label>
+                  </div>
+                  <input
+                    type="text"
+                    value={location}
+                    onChange={(e) => setLocation(e.target.value)}
+                    placeholder="e.g. Zoom, Moscone Center San Francisco, Hanoi Office"
+                    className="w-full text-xs px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:border-blue-500 focus:outline-hidden transition-colors"
+                  />
+                </div>
+              </div>
+
+              {/* Description & Topics & Skills */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+                <div className="space-y-1">
+                  <label className="text-xs font-bold text-slate-700">Topics (comma-separated)</label>
+                  <input
+                    type="text"
+                    value={topicsInput}
+                    onChange={(e) => setTopicsInput(e.target.value)}
+                    placeholder="e.g. AI Agents, LLM Evaluation, Growth Loops, Vector Search"
+                    className="w-full text-xs px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:border-blue-500 focus:outline-hidden transition-colors"
+                  />
+                </div>
+
+                <div className="space-y-1">
+                  <label className="text-xs font-bold text-slate-700">Skills Acquired / Practiced (Capability Attribution)</label>
+                  <input
+                    type="text"
+                    value={skillsInput}
+                    onChange={(e) => setSkillsInput(e.target.value)}
+                    placeholder="e.g. Strategic Thinking, Python, Kubernetes, Product Strategy"
+                    className="w-full text-xs px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:border-blue-500 focus:outline-hidden transition-colors"
+                  />
+                </div>
+
+                <div className="sm:col-span-2 space-y-1">
+                  <label className="text-xs font-bold text-slate-700">Description &amp; Objective</label>
+                  <textarea
+                    rows={2}
+                    value={description}
+                    onChange={(e) => setDescription(e.target.value)}
+                    placeholder="Brief summary of what this activity covers and key objectives..."
+                    className="w-full text-xs px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:border-blue-500 focus:outline-hidden transition-colors"
+                  />
+                </div>
+              </div>
+            </div>
 
           {/* ==================================================
               FIELD 3: DYNAMIC FIELDS BY PARTICIPATION TYPE
@@ -1165,6 +1204,7 @@ export const TrackNewParticipationModal: React.FC<TrackNewParticipationModalProp
             </div>
 
           </div>
+          </ProgressiveCreationSection>
 
           {/* Footer Submit */}
           <div className="pt-4 border-t border-slate-100 flex items-center justify-between gap-3 sticky bottom-0 bg-white py-2 z-20">
@@ -1176,17 +1216,29 @@ export const TrackNewParticipationModal: React.FC<TrackNewParticipationModalProp
               Cancel
             </button>
 
-            <button
-              id="submit-participation-btn"
-              type="submit"
-              className="px-6 py-2.5 rounded-xl text-xs font-bold bg-blue-600 hover:bg-blue-700 text-white transition-all shadow-xs cursor-pointer flex items-center gap-1.5"
-            >
-              <Plus className="w-4 h-4 stroke-[2.5]" />
-              <span>Track Participation</span>
-            </button>
+            {!capabilities.canCreate ? (
+              <button
+                type="button"
+                onClick={() => openAccessModal('DEMO')}
+                className="px-6 py-2.5 rounded-xl text-xs font-bold bg-indigo-600 hover:bg-indigo-700 text-white transition-all shadow-xs cursor-pointer flex items-center gap-1.5"
+              >
+                <Lock className="w-3.5 h-3.5" />
+                <span>Unlock in Demo</span>
+              </button>
+            ) : (
+              <button
+                id="submit-participation-btn"
+                type="submit"
+                className="px-6 py-2.5 rounded-xl text-xs font-bold bg-blue-600 hover:bg-blue-700 text-white transition-all shadow-xs cursor-pointer flex items-center gap-1.5"
+              >
+                <Plus className="w-4 h-4 stroke-[2.5]" />
+                <span>Track Participation</span>
+              </button>
+            )}
           </div>
 
         </form>
+        </DemoQuotaGate>
 
       </div>
     </div>

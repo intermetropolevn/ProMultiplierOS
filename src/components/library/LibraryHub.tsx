@@ -26,6 +26,8 @@ import { innovationSystemsStore } from '../../features/knowledge/services/innova
 import { ToolsPlatformsView } from './ToolsPlatformsView';
 import { toolsPlatformsStore } from '../../features/knowledge/services/toolsPlatformsStore';
 import { RoleJobArchitectureView } from './RoleJobArchitectureView';
+import { useAccessControl } from '../../services/accessControlService';
+import { CareerOSIntelligenceGate, IntelligenceModeBadge } from '../access/CareerOSIntelligenceGate';
 import { 
   Search, 
   Plus, 
@@ -91,6 +93,10 @@ export const LibraryHub: React.FC<LibraryHubProps> = ({
   onOpenSourceDetail,
   onNavigateToProfile
 }) => {
+  const { accessLevel, capabilities, getIntelligenceAccess, consumeDemoIntelligenceSignal } = useAccessControl();
+  const poolAccess = getIntelligenceAccess('full_knowledge_data_pool');
+  const isFull = poolAccess.isFull;
+  const [showGateModal, setShowGateModal] = useState(false);
   const [sources, setSources] = useState<NormalizedSource[]>(() => sourceStore.getSources());
   const [selectedPillar, setSelectedPillar] = useState<LibraryPillar>('all');
   const [selectedFamily, setSelectedFamily] = useState<SourceFamily | 'all'>('all');
@@ -149,12 +155,20 @@ export const LibraryHub: React.FC<LibraryHubProps> = ({
       setSources(sourceStore.getSources());
       setStoreTick(t => t + 1);
     });
+
+    const handleAccessChange = () => {
+      setSources(sourceStore.getSources());
+      setStoreTick(t => t + 1);
+    };
+    window.addEventListener('career_access_changed', handleAccessChange);
+
     return () => {
       unsubTools();
       unsubCivic();
       unsubInno();
       unsubPath();
       unsubSources();
+      window.removeEventListener('career_access_changed', handleAccessChange);
     };
   }, []);
 
@@ -367,6 +381,11 @@ export const LibraryHub: React.FC<LibraryHubProps> = ({
       return true;
     });
   }, [sources, selectedPillar, selectedFamily, selectedType, selectedStrength, selectedStatus, selectedDomain, selectedRole, selectedLanguage, searchQuery]);
+
+  const visibleSources = useMemo(() => {
+    if (isFull) return filteredSources;
+    return poolAccess.isDemo ? filteredSources.slice(0, 6) : filteredSources.slice(0, 4);
+  }, [filteredSources, isFull, poolAccess.isDemo]);
 
   const handleSourceUpdated = (updated: NormalizedSource) => {
     sourceStore.updateSource(updated.id, updated);
@@ -1072,10 +1091,24 @@ export const LibraryHub: React.FC<LibraryHubProps> = ({
           )}
 
           {/* Results Count & Active Chips */}
-          <div className="flex items-center justify-between text-xs text-slate-500 font-medium pt-1">
-            <span>
-              Showing <strong>{filteredSources.length}</strong> of <strong>{sources.length}</strong> sources
-            </span>
+          <div className="flex flex-wrap items-center justify-between text-xs text-slate-500 font-medium pt-1 gap-2">
+            <div className="flex items-center gap-2 flex-wrap">
+              <span>
+                Showing <strong>{visibleSources.length}</strong> {isFull ? 'selected knowledge sources' : 'curated sample knowledge sources'}
+              </span>
+              <IntelligenceModeBadge capability="full_knowledge_data_pool" />
+              <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${
+                accessLevel === 'FULL'
+                  ? 'bg-emerald-50 text-emerald-800 border-emerald-200'
+                  : accessLevel === 'DEMO'
+                  ? 'bg-amber-50 text-amber-800 border-amber-200'
+                  : accessLevel === 'GUEST'
+                  ? 'bg-blue-50 text-blue-700 border-blue-200'
+                  : 'bg-slate-100 text-slate-700 border-slate-200'
+              }`}>
+                {capabilities.tierBadgeLabel}
+              </span>
+            </div>
 
             {(selectedPillar !== 'all' || selectedCredentialSubtype !== 'all' || selectedFamily !== 'all' || selectedType !== 'all' || selectedStrength !== 'all' || searchQuery) && (
               <button
@@ -1098,23 +1131,31 @@ export const LibraryHub: React.FC<LibraryHubProps> = ({
           </div>
 
           {/* Sources Cards Grid */}
-          {filteredSources.length > 0 ? (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-              {filteredSources.map(src => {
-                const typeConfig = getTypeConfig(src.sourceType);
-                const familyConfig = getFamilyConfig(src.sourceFamily);
-                const strengthDef = getEvidenceStrengthDefinition(src.evidenceStrength);
-                const allSkills = Array.from(new Set([...src.confirmedSkills, ...src.inferredSkills]));
+          {visibleSources.length > 0 ? (
+            <div className="space-y-6">
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                {visibleSources.map(src => {
+                  const typeConfig = getTypeConfig(src.sourceType);
+                  const familyConfig = getFamilyConfig(src.sourceFamily);
+                  const strengthDef = getEvidenceStrengthDefinition(src.evidenceStrength);
+                  const allSkills = Array.from(new Set([...src.confirmedSkills, ...src.inferredSkills]));
 
-                return (
-                  <div
-                    key={src.id}
-                    onClick={() => {
-                      setActiveDetailSource(src);
-                      if (onOpenSourceDetail) onOpenSourceDetail(src.id);
-                    }}
-                    className="p-5 rounded-3xl border border-slate-200/90 bg-white hover:border-blue-500 hover:shadow-xs transition-all cursor-pointer flex flex-col justify-between space-y-4 group"
-                  >
+                  return (
+                    <div
+                      key={src.id}
+                      onClick={() => {
+                        if (poolAccess.isDemo) {
+                          const allowed = consumeDemoIntelligenceSignal('full_knowledge_data_pool', src.id);
+                          if (!allowed) {
+                            setShowGateModal(true);
+                            return;
+                          }
+                        }
+                        setActiveDetailSource(src);
+                        if (onOpenSourceDetail) onOpenSourceDetail(src.id);
+                      }}
+                      className="p-5 rounded-3xl border border-slate-200/90 bg-white hover:border-blue-500 hover:shadow-xs transition-all cursor-pointer flex flex-col justify-between space-y-4 group"
+                    >
                     <div className="space-y-3">
                       {/* Top Bar: Family, Type, Strength Badge */}
                       <div className="flex items-center justify-between gap-2">
@@ -1203,6 +1244,15 @@ export const LibraryHub: React.FC<LibraryHubProps> = ({
                   </div>
                 );
               })}
+              </div>
+
+              {!isFull && (
+                <CareerOSIntelligenceGate
+                  capability="full_knowledge_data_pool"
+                  title="Unlock Full CareerOS Knowledge & Data Pool"
+                  subtitle="You are viewing a curated sample of the knowledge pool. Full Access unlocks complete verified credentials, domain frameworks, civic systems, and multi-source evidence attribution."
+                />
+              )}
             </div>
           ) : (
             <div className="bg-white rounded-3xl border border-slate-200 p-12 text-center space-y-4">
@@ -1251,6 +1301,15 @@ export const LibraryHub: React.FC<LibraryHubProps> = ({
           }}
           initialMethod={ingestionMethod}
           initialFamily={selectedFamily !== 'all' ? selectedFamily : 'learn'}
+        />
+      )}
+
+      {showGateModal && (
+        <CareerOSIntelligenceGate
+          capability="full_knowledge_data_pool"
+          variant="modal"
+          onClose={() => setShowGateModal(false)}
+          onContinueDemo={() => setShowGateModal(false)}
         />
       )}
 

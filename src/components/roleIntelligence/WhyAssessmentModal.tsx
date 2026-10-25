@@ -12,6 +12,8 @@ import {
   Info
 } from 'lucide-react';
 import { RoleAssessmentSummaryData } from '../../features/roleIntelligence/types';
+import { useAccessControl } from '../../services/accessControlService';
+import { CareerOSIntelligenceGate, IntelligenceModeBadge } from '../access/CareerOSIntelligenceGate';
 
 interface WhyAssessmentModalProps {
   isOpen: boolean;
@@ -24,9 +26,12 @@ export const WhyAssessmentModal: React.FC<WhyAssessmentModalProps> = ({
   isOpen,
   onClose,
   summary,
-  onNavigateToTarget
 }) => {
+  const { getIntelligenceAccess } = useAccessControl();
   if (!isOpen) return null;
+
+  const scoringAccess = getIntelligenceAccess('proprietary_scoring_logic');
+  const isFull = scoringAccess.isFull;
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs animate-in fade-in duration-150">
@@ -41,15 +46,16 @@ export const WhyAssessmentModal: React.FC<WhyAssessmentModalProps> = ({
         {/* Header */}
         <div className="p-5 border-b border-slate-200 flex items-start justify-between gap-4 bg-slate-50/80">
           <div>
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 flex-wrap">
               <span className="text-[10px] font-black uppercase tracking-wider px-2 py-0.5 rounded bg-blue-100 text-blue-800 border border-blue-200">
                 AI Synthesis Rationale
               </span>
+              <IntelligenceModeBadge capability="proprietary_scoring_logic" />
               <span className="text-slate-300">·</span>
               <span className="text-xs text-slate-500 font-medium">Explainable Career Intelligence</span>
             </div>
             <h3 className="text-lg font-black text-slate-900 mt-1">
-              Why P4 Senior Assessment?
+              Why {summary.currentLevelCode} Senior Assessment?
             </h3>
             <p className="text-xs text-slate-500 mt-0.5">
               Breakdown of how system-observed work, human signals, and organizational context were synthesized.
@@ -74,11 +80,11 @@ export const WhyAssessmentModal: React.FC<WhyAssessmentModalProps> = ({
               Core Assessment Model
             </span>
             <div className="flex items-center gap-1.5 flex-wrap font-mono text-[11px] text-blue-200">
-              <span className="px-2 py-0.5 rounded bg-slate-800 border border-slate-700 text-white">System Evidence ({summary.systemEvidencePercentage}%)</span>
+              <span className="px-2 py-0.5 rounded bg-slate-800 border border-slate-700 text-white">System Evidence (Primary Driver)</span>
               <span>+</span>
-              <span className="px-2 py-0.5 rounded bg-slate-800 border border-slate-700 text-white">Human &amp; Context ({summary.humanContextPercentage}%)</span>
+              <span className="px-2 py-0.5 rounded bg-slate-800 border border-slate-700 text-white">Human &amp; Context (Calibrated Signal)</span>
               <span>→</span>
-              <span className="px-2 py-0.5 rounded bg-blue-600 text-white font-bold">AI Synthesis</span>
+              <span className="px-2 py-0.5 rounded bg-blue-600 text-white font-bold">CareerOS Synthesis</span>
               <span>→</span>
               <span className="px-2 py-0.5 rounded bg-emerald-600 text-white font-bold">{summary.currentLevelCode} Assessment</span>
             </div>
@@ -94,38 +100,51 @@ export const WhyAssessmentModal: React.FC<WhyAssessmentModalProps> = ({
               <p>
                 <strong>1. Repeated Cross-Functional Ownership:</strong> Across {summary.initiativesCount || 4} verified initiatives (including <em>Onboarding Revamp</em> and <em>Enterprise API Gateway</em>), system evidence detected 28 completed PRDs, architectural decision records (ADRs), and live production experiments.
               </p>
-              <p>
-                <strong>2. Strong Peer Concordance:</strong> Peer feedback from Staff Platform Engineering and Design Leads corroborates senior-level product judgment, specifically praising trade-off resolution without escalating to management.
-              </p>
-              <p>
-                <strong>3. Attribution Calibration:</strong> While top-line revenue (+34% activation) was partially shared with Growth marketing, attribution models confirm primary authoring of the critical discovery and technical RFC artifacts.
-              </p>
-              <p>
-                <strong>4. High Confidence ({summary.assessmentConfidence}):</strong> 8 of 10 dimensions have Strong evidence coverage. Only People Management / Direct Team Ownership has limited signals, which is typical for an advanced Individual Contributor.
-              </p>
+              {isFull && (
+                <>
+                  <p>
+                    <strong>2. Strong Peer Concordance:</strong> Peer feedback from Staff Platform Engineering and Design Leads corroborates senior-level product judgment, specifically praising trade-off resolution without escalating to management.
+                  </p>
+                  <p>
+                    <strong>3. Attribution Calibration:</strong> While top-line activation lift was partially shared with Growth marketing, attribution models confirm primary authoring of the critical discovery and technical RFC artifacts.
+                  </p>
+                  <p>
+                    <strong>4. High Confidence ({summary.assessmentConfidence}):</strong> 8 of 10 dimensions have Strong evidence coverage. Only People Management / Direct Team Ownership has limited signals, which is typical for an advanced Individual Contributor.
+                  </p>
+                </>
+              )}
             </div>
           </div>
 
-          {/* Evidence Coverage & Confidence Breakdown */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
-            <div className="p-3 bg-slate-50 rounded-xl border border-slate-200/80 space-y-1">
-              <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500 block">
-                Evidence Coverage ({summary.evidenceCoveragePercentage}%)
-              </span>
-              <p className="text-slate-600">
-                Covers product discovery, tech architecture, business telemetry, and stakeholder diplomacy.
-              </p>
-            </div>
+          {!isFull ? (
+            <CareerOSIntelligenceGate
+              capability="proprietary_scoring_logic"
+              title="CareerOS Intelligence — Synthesis & Calibration"
+              description="Turn career activity into structured evidence, capabilities and readiness signals. Unlock full multi-signal concordance, attribution calibration, and longitudinal readiness synthesis."
+              sampleCountLabel="Showing 1 sample synthesis finding"
+            />
+          ) : (
+            /* Evidence Coverage & Confidence Breakdown */
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
+              <div className="p-3 bg-slate-50 rounded-xl border border-slate-200/80 space-y-1">
+                <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500 block">
+                  Evidence Coverage (Strong)
+                </span>
+                <p className="text-slate-600">
+                  Covers product discovery, tech architecture, business telemetry, and stakeholder diplomacy.
+                </p>
+              </div>
 
-            <div className="p-3 bg-slate-50 rounded-xl border border-slate-200/80 space-y-1">
-              <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500 block">
-                What&apos;s Needed for {summary.targetLevelCode} (Staff PM)?
-              </span>
-              <p className="text-slate-600">
-                Closing the organization-wide strategic influence gap and leading multi-squad roadmaps.
-              </p>
+              <div className="p-3 bg-slate-50 rounded-xl border border-slate-200/80 space-y-1">
+                <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500 block">
+                  What&apos;s Needed for {summary.targetLevelCode} (Staff PM)?
+                </span>
+                <p className="text-slate-600">
+                  Closing the organization-wide strategic influence gap and leading multi-squad roadmaps.
+                </p>
+              </div>
             </div>
-          </div>
+          )}
 
         </div>
 

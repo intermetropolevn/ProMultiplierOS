@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { 
   X, 
   Sparkles, 
@@ -20,7 +20,8 @@ import {
   Check, 
   AlertCircle,
   Wand2,
-  Compass
+  Compass,
+  Lock
 } from 'lucide-react';
 import { 
   RoleBlueprint, 
@@ -33,6 +34,10 @@ import {
 } from '../../types';
 import { RoleBlueprintService } from '../../services/roleBlueprintService';
 import { ROLES_DATA } from '../../data/rolesData';
+import { AccessCreationBanner } from '../access/AccessCreationBanner';
+import { ProgressiveCreationSection } from '../access/ProgressiveCreationSection';
+import { DemoQuotaGate } from '../access/DemoQuotaGate';
+import { useAccessControl } from '../../services/accessControlService';
 
 interface CreateRoleBlueprintModalProps {
   isOpen: boolean;
@@ -90,6 +95,10 @@ export const CreateRoleBlueprintModal: React.FC<CreateRoleBlueprintModalProps> =
   initialRoleToEdit,
   initialDuplicateFromRole,
 }) => {
+  const { capabilities, canCreate, openAccessModal } = useAccessControl();
+  const [accessError, setAccessError] = useState<string | null>(null);
+  const isSubmittingRef = useRef(false);
+
   // Mode: builder vs preview
   const [activeView, setActiveView] = useState<'build' | 'preview'>('build');
 
@@ -159,6 +168,8 @@ export const CreateRoleBlueprintModal: React.FC<CreateRoleBlueprintModalProps> =
 
   // Prepopulate form if editing or duplicating
   useEffect(() => {
+    isSubmittingRef.current = false;
+    setAccessError(null);
     const target = initialRoleToEdit || initialDuplicateFromRole;
     if (target) {
       setTitle(initialDuplicateFromRole ? `${target.title} (Variant)` : target.title);
@@ -362,10 +373,15 @@ export const CreateRoleBlueprintModal: React.FC<CreateRoleBlueprintModalProps> =
 
   // Final Save / Publish
   const handleSave = (status: 'draft' | 'published') => {
-    if (!title.trim()) {
-      alert('Please provide a Role Title before saving.');
+    if (isSubmittingRef.current) return;
+    if (!initialRoleToEdit?.id && !canCreate('roles')) {
       return;
     }
+    if (!title.trim()) {
+      setAccessError('Please provide a Role Title before saving.');
+      return;
+    }
+    isSubmittingRef.current = true;
 
     const formattedBenchmark = {
       junior: formatCompTier(compTiers.junior),
@@ -415,16 +431,21 @@ export const CreateRoleBlueprintModal: React.FC<CreateRoleBlueprintModalProps> =
       isCustom: true
     };
 
-    if (initialRoleToEdit?.id) {
-      const updated = RoleBlueprintService.updateBlueprint(initialRoleToEdit.id, blueprintPayload);
-      if (updated) {
-        onBlueprintCreated(updated);
+    try {
+      if (initialRoleToEdit?.id) {
+        const updated = RoleBlueprintService.updateBlueprint(initialRoleToEdit.id, blueprintPayload);
+        if (updated) {
+          onBlueprintCreated(updated);
+          onClose();
+        }
+      } else {
+        const created = RoleBlueprintService.createBlueprint(blueprintPayload);
+        onBlueprintCreated(created);
         onClose();
       }
-    } else {
-      const created = RoleBlueprintService.createBlueprint(blueprintPayload);
-      onBlueprintCreated(created);
-      onClose();
+    } catch (err: any) {
+      isSubmittingRef.current = false;
+      setAccessError(err.message || 'Creation is restricted in your current access mode.');
     }
   };
 
@@ -494,21 +515,26 @@ export const CreateRoleBlueprintModal: React.FC<CreateRoleBlueprintModalProps> =
         </div>
 
         {/* MODAL BODY (SCROLLABLE) */}
+        <DemoQuotaGate workflowKey="roles" isEditing={Boolean(initialRoleToEdit)} onViewExistingItems={onClose}>
         <div className="flex-1 overflow-y-auto p-5 sm:p-7 space-y-7">
+          <AccessCreationBanner workflowKey="roles" workflowLabel="role blueprints" />
+
+          {accessError && (
+            <div className="p-3 rounded-xl bg-rose-50 border border-rose-200 text-rose-700 text-xs font-medium flex items-center gap-2">
+              <AlertCircle className="w-4 h-4 shrink-0" />
+              <span>{accessError}</span>
+            </div>
+          )}
           
           {/* VIEW 1: PREVIEW BLUEPRINT (Resembles RoleDetailModal) */}
           {activeView === 'preview' ? (
             <div className="space-y-6 max-w-4xl mx-auto">
-              {/* Preview Header */}
+              {/* Preview Header (Basic Fields) */}
               <div className="p-6 rounded-2xl bg-slate-50 border border-slate-200 space-y-4">
                 <div className="flex items-center justify-between gap-3">
                   <div className="flex items-center gap-2">
                     <span className="text-xs font-bold uppercase tracking-wider text-blue-700 bg-blue-100/70 px-2.5 py-0.5 rounded-full">
                       {category}
-                    </span>
-                    <span className="text-xs font-semibold text-emerald-700 bg-emerald-50 px-2.5 py-0.5 rounded-md border border-emerald-100 flex items-center gap-1">
-                      <TrendingUp className="w-3.5 h-3.5" />
-                      {marketDemand} Demand
                     </span>
                     <span className="text-xs text-slate-500 font-medium">
                       {domain} · {seniority}
@@ -521,135 +547,137 @@ export const CreateRoleBlueprintModal: React.FC<CreateRoleBlueprintModalProps> =
                     {title || 'Untitled Role Blueprint'}
                   </h1>
                   <p className="text-sm text-slate-600 mt-1">
-                    {tagline || 'No tagline specified.'}
+                    {tagline || 'No short description specified.'}
                   </p>
                 </div>
               </div>
 
-              {/* Mission & Scope */}
-              <div className="space-y-2">
-                <h3 className="text-xs font-bold uppercase tracking-wider text-slate-400">
-                  Mission &amp; Scope
-                </h3>
-                <p className="text-sm text-slate-700 leading-relaxed bg-white p-4 rounded-xl border border-slate-200">
-                  {missionScope || 'No mission & scope defined yet.'}
-                </p>
-              </div>
-
-              {/* Compensation Benchmarks */}
-              <div className="bg-slate-50 p-4 rounded-xl border border-slate-200 space-y-3">
-                <h3 className="text-xs font-bold uppercase tracking-wider text-slate-500 flex items-center gap-1.5">
-                  <DollarSign className="w-4 h-4 text-emerald-600" />
-                  Market Compensation Benchmarks (Base + Variable)
-                </h3>
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-center">
-                  <div className="bg-white p-3 rounded-lg border border-slate-200">
-                    <div className="text-[11px] text-slate-500 font-medium">Junior</div>
-                    <div className="text-xs font-bold text-slate-900 mt-0.5">{formatCompTier(compTiers.junior)}</div>
-                  </div>
-                  <div className="bg-white p-3 rounded-lg border border-slate-200">
-                    <div className="text-[11px] text-slate-500 font-medium">Mid-Level</div>
-                    <div className="text-xs font-bold text-slate-900 mt-0.5">{formatCompTier(compTiers.mid)}</div>
-                  </div>
-                  <div className="bg-white p-3 rounded-lg border border-blue-200 bg-blue-50/40">
-                    <div className="text-[11px] text-blue-700 font-bold">Senior (Benchmark)</div>
-                    <div className="text-xs font-bold text-blue-900 mt-0.5">{formatCompTier(compTiers.senior)}</div>
-                  </div>
-                  <div className="bg-white p-3 rounded-lg border border-slate-200">
-                    <div className="text-[11px] text-slate-500 font-medium">Lead / Staff</div>
-                    <div className="text-xs font-bold text-slate-900 mt-0.5">{formatCompTier(compTiers.lead)}</div>
-                  </div>
-                </div>
-              </div>
-
-              {/* Core Competencies */}
-              <div className="space-y-3">
-                <h3 className="text-xs font-bold uppercase tracking-wider text-slate-400">
-                  Core Competencies &amp; Calibration Standards ({competencies.length})
-                </h3>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  {competencies.map((comp, idx) => (
-                    <div key={idx} className="p-4 rounded-xl border border-slate-200 bg-white space-y-2">
-                      <h4 className="text-sm font-bold text-slate-900 flex items-center gap-2">
-                        <span className="w-5 h-5 rounded-full bg-blue-100 text-blue-700 text-xs flex items-center justify-center font-bold shrink-0">
-                          {idx + 1}
-                        </span>
-                        <span>{comp.name}</span>
-                      </h4>
-                      <p className="text-xs text-slate-600 leading-relaxed">
-                        {comp.description}
-                      </p>
-                      {comp.keyIndicators.length > 0 && (
-                        <div className="pt-2 border-t border-slate-100">
-                          <div className="text-[10px] uppercase font-bold text-slate-400 mb-1">Key Calibration Signals:</div>
-                          <ul className="space-y-1">
-                            {comp.keyIndicators.map((ind, i) => (
-                              <li key={i} className="text-[11px] text-slate-700 flex items-start gap-1.5">
-                                <CheckCircle2 className="w-3.5 h-3.5 text-blue-600 shrink-0 mt-0.5" />
-                                <span>{ind}</span>
-                              </li>
-                            ))}
-                          </ul>
-                        </div>
-                      )}
-                    </div>
-                  ))}
-                </div>
-              </div>
-
-              {/* Typical Day */}
-              <div className="space-y-3">
-                <h3 className="text-xs font-bold uppercase tracking-wider text-slate-400 flex items-center gap-1.5">
-                  <Clock className="w-4 h-4 text-slate-500" />
-                  Typical Day in the Life
-                </h3>
+              <ProgressiveCreationSection workflowKey="roles">
+                {/* Mission & Scope */}
                 <div className="space-y-2">
-                  {dailyTimeline.map((item, idx) => (
-                    <div key={idx} className="flex items-start gap-3 p-3 rounded-xl bg-slate-50 border border-slate-100">
-                      <span className="text-xs font-mono font-bold text-blue-600 whitespace-nowrap pt-0.5">
-                        {item.time}
-                      </span>
-                      <div>
-                        <div className="text-xs font-bold text-slate-900">{item.activity}</div>
-                        <div className="text-xs text-slate-600 mt-0.5">{item.description}</div>
-                      </div>
-                    </div>
-                  ))}
+                  <h3 className="text-xs font-bold uppercase tracking-wider text-slate-400">
+                    Mission &amp; Scope
+                  </h3>
+                  <p className="text-sm text-slate-700 leading-relaxed bg-white p-4 rounded-xl border border-slate-200">
+                    {missionScope || 'No mission & scope defined yet.'}
+                  </p>
                 </div>
-              </div>
 
-              {/* Tech Stack & Interview Stages */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div className="p-4 rounded-xl border border-slate-200 bg-white">
-                  <h4 className="text-xs font-bold uppercase tracking-wider text-slate-400 mb-2">
-                    Primary Tech Stack &amp; Tools ({techStack.length})
-                  </h4>
-                  <div className="flex flex-wrap gap-1.5">
-                    {techStack.map((tech, idx) => (
-                      <span key={idx} className="text-xs font-medium px-2 py-0.5 rounded-md bg-slate-100 text-slate-700 border border-slate-200">
-                        {tech}
-                      </span>
+                {/* Compensation Benchmarks */}
+                <div className="bg-slate-50 p-4 rounded-xl border border-slate-200 space-y-3">
+                  <h3 className="text-xs font-bold uppercase tracking-wider text-slate-500 flex items-center gap-1.5">
+                    <DollarSign className="w-4 h-4 text-emerald-600" />
+                    Market Compensation Benchmarks (Base + Variable)
+                  </h3>
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-center">
+                    <div className="bg-white p-3 rounded-lg border border-slate-200">
+                      <div className="text-[11px] text-slate-500 font-medium">Junior</div>
+                      <div className="text-xs font-bold text-slate-900 mt-0.5">{formatCompTier(compTiers.junior)}</div>
+                    </div>
+                    <div className="bg-white p-3 rounded-lg border border-slate-200">
+                      <div className="text-[11px] text-slate-500 font-medium">Mid-Level</div>
+                      <div className="text-xs font-bold text-slate-900 mt-0.5">{formatCompTier(compTiers.mid)}</div>
+                    </div>
+                    <div className="bg-white p-3 rounded-lg border border-blue-200 bg-blue-50/40">
+                      <div className="text-[11px] text-blue-700 font-bold">Senior (Benchmark)</div>
+                      <div className="text-xs font-bold text-blue-900 mt-0.5">{formatCompTier(compTiers.senior)}</div>
+                    </div>
+                    <div className="bg-white p-3 rounded-lg border border-slate-200">
+                      <div className="text-[11px] text-slate-500 font-medium">Lead / Staff</div>
+                      <div className="text-xs font-bold text-slate-900 mt-0.5">{formatCompTier(compTiers.lead)}</div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Core Competencies */}
+                <div className="space-y-3">
+                  <h3 className="text-xs font-bold uppercase tracking-wider text-slate-400">
+                    Core Competencies &amp; Calibration Standards ({competencies.length})
+                  </h3>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    {competencies.map((comp, idx) => (
+                      <div key={idx} className="p-4 rounded-xl border border-slate-200 bg-white space-y-2">
+                        <h4 className="text-sm font-bold text-slate-900 flex items-center gap-2">
+                          <span className="w-5 h-5 rounded-full bg-blue-100 text-blue-700 text-xs flex items-center justify-center font-bold shrink-0">
+                            {idx + 1}
+                          </span>
+                          <span>{comp.name}</span>
+                        </h4>
+                        <p className="text-xs text-slate-600 leading-relaxed">
+                          {comp.description}
+                        </p>
+                        {comp.keyIndicators.length > 0 && (
+                          <div className="pt-2 border-t border-slate-100">
+                            <div className="text-[10px] uppercase font-bold text-slate-400 mb-1">Key Calibration Signals:</div>
+                            <ul className="space-y-1">
+                              {comp.keyIndicators.map((ind, i) => (
+                                <li key={i} className="text-[11px] text-slate-700 flex items-start gap-1.5">
+                                  <CheckCircle2 className="w-3.5 h-3.5 text-blue-600 shrink-0 mt-0.5" />
+                                  <span>{ind}</span>
+                                </li>
+                              ))}
+                            </ul>
+                          </div>
+                        )}
+                      </div>
                     ))}
                   </div>
                 </div>
 
-                <div className="p-4 rounded-xl border border-slate-200 bg-white">
-                  <h4 className="text-xs font-bold uppercase tracking-wider text-slate-400 mb-2">
-                    Standard Interview Pipeline ({interviewStages.length})
-                  </h4>
-                  <ol className="space-y-1.5">
-                    {interviewStages.map((stage, idx) => (
-                      <li key={idx} className="text-xs text-slate-700 flex items-center gap-2">
-                        <span className="w-4 h-4 rounded-full bg-slate-100 text-slate-600 text-[10px] font-bold flex items-center justify-center shrink-0">
-                          {stage.order || idx + 1}
+                {/* Typical Day */}
+                <div className="space-y-3">
+                  <h3 className="text-xs font-bold uppercase tracking-wider text-slate-400 flex items-center gap-1.5">
+                    <Clock className="w-4 h-4 text-slate-500" />
+                    Typical Day in the Life
+                  </h3>
+                  <div className="space-y-2">
+                    {dailyTimeline.map((item, idx) => (
+                      <div key={idx} className="flex items-start gap-3 p-3 rounded-xl bg-slate-50 border border-slate-100">
+                        <span className="text-xs font-mono font-bold text-blue-600 whitespace-nowrap pt-0.5">
+                          {item.time}
                         </span>
-                        <span className="font-semibold text-slate-900">{stage.name}</span>
-                        <span className="text-slate-400 text-[11px]">({stage.duration})</span>
-                      </li>
+                        <div>
+                          <div className="text-xs font-bold text-slate-900">{item.activity}</div>
+                          <div className="text-xs text-slate-600 mt-0.5">{item.description}</div>
+                        </div>
+                      </div>
                     ))}
-                  </ol>
+                  </div>
                 </div>
-              </div>
+
+                {/* Tech Stack & Interview Stages */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div className="p-4 rounded-xl border border-slate-200 bg-white">
+                    <h4 className="text-xs font-bold uppercase tracking-wider text-slate-400 mb-2">
+                      Primary Tech Stack &amp; Tools ({techStack.length})
+                    </h4>
+                    <div className="flex flex-wrap gap-1.5">
+                      {techStack.map((tech, idx) => (
+                        <span key={idx} className="text-xs font-medium px-2 py-0.5 rounded-md bg-slate-100 text-slate-700 border border-slate-200">
+                          {tech}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div className="p-4 rounded-xl border border-slate-200 bg-white">
+                    <h4 className="text-xs font-bold uppercase tracking-wider text-slate-400 mb-2">
+                      Standard Interview Pipeline ({interviewStages.length})
+                    </h4>
+                    <ol className="space-y-1.5">
+                      {interviewStages.map((stage, idx) => (
+                        <li key={idx} className="text-xs text-slate-700 flex items-center gap-2">
+                          <span className="w-4 h-4 rounded-full bg-slate-100 text-slate-600 text-[10px] font-bold flex items-center justify-center shrink-0">
+                            {stage.order || idx + 1}
+                          </span>
+                          <span className="font-semibold text-slate-900">{stage.name}</span>
+                          <span className="text-slate-400 text-[11px]">({stage.duration})</span>
+                        </li>
+                      ))}
+                    </ol>
+                  </div>
+                </div>
+              </ProgressiveCreationSection>
 
               <div className="pt-4 text-center">
                 <button
@@ -666,43 +694,14 @@ export const CreateRoleBlueprintModal: React.FC<CreateRoleBlueprintModalProps> =
             /* VIEW 2: STRUCTURED BUILDER FORM */
             <div className="space-y-8">
               
-              {/* SECONDARY ACTION: Create from existing blueprint */}
-              <div className="p-4 rounded-xl bg-blue-50/50 border border-blue-200/70 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                <div className="flex items-center gap-2.5">
-                  <div className="w-7 h-7 rounded-lg bg-blue-100 text-blue-700 flex items-center justify-center shrink-0">
-                    <Copy className="w-4 h-4" />
-                  </div>
-                  <div>
-                    <span className="text-xs font-bold text-blue-950 block">Create from existing blueprint?</span>
-                    <span className="text-[11px] text-blue-700">Pre-fill competencies, compensation tiers, and interview structure from an existing role ladder.</span>
-                  </div>
-                </div>
-
-                <div className="shrink-0 flex items-center gap-2">
-                  <select
-                    id="select-existing-blueprint"
-                    onChange={(e) => handleSelectExistingBlueprint(e.target.value)}
-                    defaultValue=""
-                    className="text-xs font-semibold px-3 py-1.5 bg-white border border-blue-300 rounded-lg text-slate-800 shadow-2xs focus:ring-2 focus:ring-blue-500 cursor-pointer"
-                  >
-                    <option value="" disabled>Select existing blueprint...</option>
-                    {allExistingRoles.map(r => (
-                      <option key={r.id} value={r.id}>
-                        {r.title} ({r.category})
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              </div>
-
-              {/* SECTION A: ROLE IDENTITY */}
+              {/* SECTION A: BASIC ROLE BLUEPRINT FIELDS */}
               <div className="space-y-4">
                 <div className="border-b border-slate-100 pb-2 flex items-center justify-between">
                   <div className="flex items-center gap-2">
                     <span className="w-5 h-5 rounded-md bg-blue-600 text-white text-[11px] font-bold flex items-center justify-center">A</span>
-                    <h3 className="text-sm font-bold text-slate-900 uppercase tracking-wider">Role Identity</h3>
+                    <h3 className="text-sm font-bold text-slate-900 uppercase tracking-wider">Basic Role Blueprint Details</h3>
                   </div>
-                  <span className="text-xs text-slate-400">Core taxonomy &amp; market positioning</span>
+                  <span className="text-xs text-slate-400">Role Title, Family, Seniority, Domain &amp; Short Description</span>
                 </div>
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -724,7 +723,7 @@ export const CreateRoleBlueprintModal: React.FC<CreateRoleBlueprintModalProps> =
                   {/* Role Family / Category */}
                   <div>
                     <label className="block text-xs font-bold text-slate-700 mb-1">
-                      Role Family / Category <span className="text-rose-500">*</span>
+                      Role Family <span className="text-rose-500">*</span>
                     </label>
                     <select
                       id="select-role-category"
@@ -738,27 +737,10 @@ export const CreateRoleBlueprintModal: React.FC<CreateRoleBlueprintModalProps> =
                     </select>
                   </div>
 
-                  {/* Industry Domain */}
-                  <div>
-                    <label className="block text-xs font-bold text-slate-700 mb-1">
-                      Primary Industry Domain
-                    </label>
-                    <select
-                      id="select-role-domain"
-                      value={domain}
-                      onChange={(e) => setDomain(e.target.value as SectorDomain)}
-                      className="w-full text-xs font-medium px-3.5 py-2.5 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white cursor-pointer"
-                    >
-                      {SECTOR_DOMAINS.map(d => (
-                        <option key={d} value={d}>{d}</option>
-                      ))}
-                    </select>
-                  </div>
-
                   {/* Seniority Level */}
                   <div>
                     <label className="block text-xs font-bold text-slate-700 mb-1">
-                      Seniority Level
+                      Seniority
                     </label>
                     <select
                       id="select-role-seniority"
@@ -772,19 +754,19 @@ export const CreateRoleBlueprintModal: React.FC<CreateRoleBlueprintModalProps> =
                     </select>
                   </div>
 
-                  {/* Market Demand */}
-                  <div>
+                  {/* Industry Domain */}
+                  <div className="lg:col-span-2">
                     <label className="block text-xs font-bold text-slate-700 mb-1">
-                      Market Demand Signal
+                      Domain
                     </label>
                     <select
-                      id="select-market-demand"
-                      value={marketDemand}
-                      onChange={(e) => setMarketDemand(e.target.value as any)}
+                      id="select-role-domain"
+                      value={domain}
+                      onChange={(e) => setDomain(e.target.value as SectorDomain)}
                       className="w-full text-xs font-medium px-3.5 py-2.5 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white cursor-pointer"
                     >
-                      {MARKET_DEMANDS.map(dem => (
-                        <option key={dem} value={dem}>{dem} Demand</option>
+                      {SECTOR_DOMAINS.map(d => (
+                        <option key={d} value={d}>{d}</option>
                       ))}
                     </select>
                   </div>
@@ -792,7 +774,7 @@ export const CreateRoleBlueprintModal: React.FC<CreateRoleBlueprintModalProps> =
                   {/* Short Tagline */}
                   <div className="sm:col-span-2 lg:col-span-3">
                     <label className="block text-xs font-bold text-slate-700 mb-1">
-                      Short Role Description / Tagline
+                      Short Description
                     </label>
                     <input
                       id="input-role-tagline"
@@ -806,48 +788,96 @@ export const CreateRoleBlueprintModal: React.FC<CreateRoleBlueprintModalProps> =
                 </div>
               </div>
 
-              {/* SECTION B: MISSION & SCOPE */}
-              <div className="space-y-2">
-                <div className="border-b border-slate-100 pb-2 flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <span className="w-5 h-5 rounded-md bg-blue-600 text-white text-[11px] font-bold flex items-center justify-center">B</span>
-                    <h3 className="text-sm font-bold text-slate-900 uppercase tracking-wider">Mission &amp; Scope</h3>
+              {/* ADVANCED SECTION: CAPABILITY ARCHITECTURE, COMPETENCY MAPPING, EVIDENCE REQUIREMENTS, EVALUATION CRITERIA, MARKET BENCHMARK */}
+              <ProgressiveCreationSection workflowKey="roles">
+                {/* SECONDARY ACTION: Create from existing blueprint */}
+                <div className="p-4 rounded-xl bg-blue-50/50 border border-blue-200/70 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                  <div className="flex items-center gap-2.5">
+                    <div className="w-7 h-7 rounded-lg bg-blue-100 text-blue-700 flex items-center justify-center shrink-0">
+                      <Copy className="w-4 h-4" />
+                    </div>
+                    <div>
+                      <span className="text-xs font-bold text-blue-950 block">Create from existing blueprint?</span>
+                      <span className="text-[11px] text-blue-700">Pre-fill competencies, compensation tiers, and interview structure from an existing role ladder.</span>
+                    </div>
                   </div>
-                  {suggestions && (
-                    <button
-                      type="button"
-                      onClick={() => setMissionScope(suggestions.suggestedMissionScope)}
-                      className="text-xs font-bold text-purple-700 hover:text-purple-900 flex items-center gap-1 cursor-pointer"
+
+                  <div className="shrink-0 flex items-center gap-2">
+                    <select
+                      id="select-existing-blueprint"
+                      onChange={(e) => handleSelectExistingBlueprint(e.target.value)}
+                      defaultValue=""
+                      className="text-xs font-semibold px-3 py-1.5 bg-white border border-blue-300 rounded-lg text-slate-800 shadow-2xs focus:ring-2 focus:ring-blue-500 cursor-pointer"
                     >
-                      <Sparkles className="w-3.5 h-3.5 text-purple-600" />
-                      <span>Use AI Draft</span>
-                    </button>
-                  )}
-                </div>
-
-                <p className="text-[11px] text-slate-500">
-                  Define what this role is responsible for, the problems it solves, and its expected scope of impact.
-                </p>
-
-                <textarea
-                  id="textarea-mission-scope"
-                  rows={4}
-                  value={missionScope}
-                  onChange={(e) => setMissionScope(e.target.value)}
-                  placeholder="Backend Engineers are responsible for server-side logic, database reliability, performance optimization, and API orchestration..."
-                  className="w-full text-xs font-medium p-3.5 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white leading-relaxed"
-                />
-              </div>
-
-              {/* SECTION C: COMPENSATION BENCHMARKS */}
-              <div className="space-y-4">
-                <div className="border-b border-slate-100 pb-2 flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <span className="w-5 h-5 rounded-md bg-blue-600 text-white text-[11px] font-bold flex items-center justify-center">C</span>
-                    <h3 className="text-sm font-bold text-slate-900 uppercase tracking-wider">Compensation Benchmarks</h3>
+                      <option value="" disabled>Select existing blueprint...</option>
+                      {allExistingRoles.map(r => (
+                        <option key={r.id} value={r.id}>
+                          {r.title} ({r.category})
+                        </option>
+                      ))}
+                    </select>
                   </div>
-                  <span className="text-xs text-slate-400">4-tier career level matrix</span>
                 </div>
+
+                {/* Market Demand Signal */}
+                <div className="max-w-xs">
+                  <label className="block text-xs font-bold text-slate-700 mb-1">
+                    Market Demand Signal
+                  </label>
+                  <select
+                    id="select-market-demand"
+                    value={marketDemand}
+                    onChange={(e) => setMarketDemand(e.target.value as any)}
+                    className="w-full text-xs font-medium px-3.5 py-2.5 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white cursor-pointer"
+                  >
+                    {MARKET_DEMANDS.map(dem => (
+                      <option key={dem} value={dem}>{dem} Demand</option>
+                    ))}
+                  </select>
+                </div>
+
+                {/* SECTION B: MISSION & SCOPE */}
+                <div className="space-y-2">
+                  <div className="border-b border-slate-100 pb-2 flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <span className="w-5 h-5 rounded-md bg-blue-600 text-white text-[11px] font-bold flex items-center justify-center">B</span>
+                      <h3 className="text-sm font-bold text-slate-900 uppercase tracking-wider">Mission &amp; Scope</h3>
+                    </div>
+                    {suggestions && (
+                      <button
+                        type="button"
+                        onClick={() => setMissionScope(suggestions.suggestedMissionScope)}
+                        className="text-xs font-bold text-purple-700 hover:text-purple-900 flex items-center gap-1 cursor-pointer"
+                      >
+                        <Sparkles className="w-3.5 h-3.5 text-purple-600" />
+                        <span>Use AI Draft</span>
+                      </button>
+                    )}
+                  </div>
+
+                  <p className="text-[11px] text-slate-500">
+                    Define what this role is responsible for, the problems it solves, and its expected scope of impact.
+                  </p>
+
+                  <textarea
+                    id="textarea-mission-scope"
+                    rows={4}
+                    value={missionScope}
+                    onChange={(e) => setMissionScope(e.target.value)}
+                    placeholder="Backend Engineers are responsible for server-side logic, database reliability, performance optimization, and API orchestration..."
+                    className="w-full text-xs font-medium p-3.5 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white leading-relaxed"
+                  />
+                </div>
+
+                {/* SECTION C: COMPENSATION BENCHMARKS */}
+                <div className="space-y-4">
+                  <div className="border-b border-slate-100 pb-2 flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <span className="w-5 h-5 rounded-md bg-blue-600 text-white text-[11px] font-bold flex items-center justify-center">C</span>
+                      <h3 className="text-sm font-bold text-slate-900 uppercase tracking-wider">Compensation Benchmarks</h3>
+                    </div>
+                    <span className="text-xs text-slate-400">4-tier career level matrix</span>
+                  </div>
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
                   {(['junior', 'mid', 'senior', 'lead'] as const).map(tierKey => {
@@ -1355,6 +1385,7 @@ export const CreateRoleBlueprintModal: React.FC<CreateRoleBlueprintModalProps> =
                   ))}
                 </div>
               </div>
+              </ProgressiveCreationSection>
 
             </div>
           )}
@@ -1372,15 +1403,17 @@ export const CreateRoleBlueprintModal: React.FC<CreateRoleBlueprintModalProps> =
             >
               Cancel
             </button>
-            <button
-              id="btn-save-draft-blueprint"
-              type="button"
-              onClick={() => handleSave('draft')}
-              className="px-4 py-2 rounded-xl text-xs font-semibold text-slate-700 bg-white border border-slate-200 hover:bg-slate-100 transition-colors shadow-2xs cursor-pointer flex items-center gap-1.5"
-            >
-              <Save className="w-3.5 h-3.5 text-slate-500" />
-              <span>Save as Draft</span>
-            </button>
+            {capabilities.canCreate && (
+              <button
+                id="btn-save-draft-blueprint"
+                type="button"
+                onClick={() => handleSave('draft')}
+                className="px-4 py-2 rounded-xl text-xs font-semibold text-slate-700 bg-white border border-slate-200 hover:bg-slate-100 transition-colors shadow-2xs cursor-pointer flex items-center gap-1.5"
+              >
+                <Save className="w-3.5 h-3.5 text-slate-500" />
+                <span>Save as Draft</span>
+              </button>
+            )}
           </div>
 
           <div className="flex items-center gap-2">
@@ -1404,17 +1437,29 @@ export const CreateRoleBlueprintModal: React.FC<CreateRoleBlueprintModalProps> =
               </button>
             )}
 
-            <button
-              id="btn-publish-blueprint"
-              type="button"
-              onClick={() => handleSave('published')}
-              className="px-5 py-2.5 rounded-xl text-xs font-bold text-white bg-blue-600 hover:bg-blue-700 transition-all shadow-sm cursor-pointer flex items-center gap-2"
-            >
-              <Check className="w-4 h-4 text-white" />
-              <span>{initialRoleToEdit ? 'Save Changes & Publish' : 'Create Role Blueprint'}</span>
-            </button>
+            {!capabilities.canCreate ? (
+              <button
+                type="button"
+                onClick={() => openAccessModal('DEMO')}
+                className="px-5 py-2.5 rounded-xl text-xs font-bold text-white bg-indigo-600 hover:bg-indigo-700 transition-all shadow-sm cursor-pointer flex items-center gap-2"
+              >
+                <Lock className="w-3.5 h-3.5" />
+                <span>Unlock in Demo</span>
+              </button>
+            ) : (
+              <button
+                id="btn-publish-blueprint"
+                type="button"
+                onClick={() => handleSave('published')}
+                className="px-5 py-2.5 rounded-xl text-xs font-bold text-white bg-blue-600 hover:bg-blue-700 transition-all shadow-sm cursor-pointer flex items-center gap-2"
+              >
+                <Check className="w-4 h-4 text-white" />
+                <span>{initialRoleToEdit ? 'Save Changes & Publish' : 'Create Role Blueprint'}</span>
+              </button>
+            )}
           </div>
         </div>
+        </DemoQuotaGate>
 
       </div>
     </div>

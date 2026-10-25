@@ -1,6 +1,9 @@
 import { JobListing, JobOpportunityLifecycleStatus } from '../types';
 import { JOBS_DATA } from '../data/jobsData';
 import { resolveJobSource, getDeadlineInfo, normalizeJobUrl } from '../data/jobTaxonomies';
+import { curatedBetaData } from './curatedBetaData';
+import { AccessControlService } from './accessControlService';
+import { demoWorkspaceService } from './demoWorkspaceService';
 
 const CUSTOM_JOBS_STORAGE_KEY = 'career_os_custom_jobs_v1';
 const STATUS_OVERRIDES_STORAGE_KEY = 'career_os_job_status_overrides_v1';
@@ -60,6 +63,9 @@ export class JobService {
    * Status overrides map (jobId -> 'active' | 'expired' | 'archived')
    */
   public static getStatusOverrides(): Record<string, JobOpportunityLifecycleStatus> {
+    if (AccessControlService.getAccessLevel() === 'DEMO') {
+      return demoWorkspaceService.getJobStatusOverrides();
+    }
     try {
       const data = localStorage.getItem(STATUS_OVERRIDES_STORAGE_KEY);
       if (data) {
@@ -72,6 +78,12 @@ export class JobService {
   }
 
   public static saveStatusOverrides(overrides: Record<string, JobOpportunityLifecycleStatus>): void {
+    if (AccessControlService.getAccessLevel() === 'DEMO') {
+      Object.entries(overrides).forEach(([jobId, status]) => {
+        demoWorkspaceService.setJobStatusOverride(jobId, status);
+      });
+      return;
+    }
     try {
       localStorage.setItem(STATUS_OVERRIDES_STORAGE_KEY, JSON.stringify(overrides));
       if (typeof window !== 'undefined') {
@@ -144,6 +156,14 @@ export class JobService {
    * Add a new custom job opportunity
    */
   public static addCustomJob(jobData: Partial<JobListing>): JobListing {
+    const isDemo = AccessControlService.getAccessLevel() === 'DEMO';
+    const current = isDemo ? demoWorkspaceService.getJobs().filter(j => j.createdByDemoUser) : this.getCustomJobs();
+    const decision = AccessControlService.canCreateWorkflowItem('jobs', current.length);
+    if (!decision.allowed) {
+      console.warn('Job creation blocked by access control:', decision.reason);
+      throw new Error(decision.reason || 'Creation restricted by active access tier.');
+    }
+
     const rawUrl = jobData.externalUrl?.trim() || '';
     const norm = normalizeJobUrl(rawUrl);
     const finalUrl = norm.isValid ? norm.normalized : (rawUrl || 'https://www.linkedin.com/jobs');
@@ -204,7 +224,14 @@ export class JobService {
       createdAt: new Date().toISOString(),
     };
 
-    const current = this.getCustomJobs();
+    if (isDemo) {
+      demoWorkspaceService.addOrUpdateJob(newJob, true);
+      if (initialStatus !== 'active') {
+        demoWorkspaceService.setJobStatusOverride(newJob.id, initialStatus);
+      }
+      return newJob;
+    }
+
     const updated = [newJob, ...current];
     this.saveCustomJobs(updated);
 
@@ -308,6 +335,12 @@ export class JobService {
       isCustom: true,
     };
 
+    if (AccessControlService.getAccessLevel() === 'DEMO') {
+      demoWorkspaceService.addOrUpdateJob(mergedJob, false);
+      demoWorkspaceService.setJobStatusOverride(jobId, newStatus);
+      return mergedJob;
+    }
+
     const current = this.getCustomJobs();
     const existingIndex = current.findIndex(j => j.id === jobId);
 
@@ -345,6 +378,11 @@ export class JobService {
    * Delete a job opportunity permanently (both custom and catalog jobs)
    */
   public static deleteJob(jobId: string): void {
+    if (AccessControlService.getAccessLevel() === 'DEMO') {
+      demoWorkspaceService.deleteJob(jobId);
+      return;
+    }
+
     const current = this.getCustomJobs();
     const updated = current.filter(j => j.id !== jobId);
     this.saveCustomJobs(updated);
@@ -378,9 +416,37 @@ export class JobService {
    * excluding deleted jobs and prioritizing custom overrides of catalog jobs.
    */
   public static getAllJobs(): JobListing[] {
+    const accessLevel = AccessControlService.getAccessLevel();
+
+    if (accessLevel === 'DEMO') {
+      return demoWorkspaceService.getJobs().map(job => {
+        const status = this.getJobStatus(job);
+        return {
+          ...job,
+          opportunityStatus: status,
+          status: status
+        };
+      });
+    }
+
     const custom = this.getCustomJobs();
-    const customIds = new Set(custom.map(j => j.id));
     const deletedIds = new Set(this.getDeletedJobIds());
+
+    // Public Beta (PUBLIC / GUEST): Return curated dataset
+    if (curatedBetaData.isCuratedBetaActive()) {
+      const curated = curatedBetaData.getJobs()
+        .filter(job => !deletedIds.has(job.id));
+      return curated.map(job => {
+        const status = this.getJobStatus(job);
+        return {
+          ...job,
+          opportunityStatus: status,
+          status: status,
+        };
+      });
+    }
+
+    const customIds = new Set(custom.map(j => j.id));
 
     // Normalize pre-seeded jobs with source and deadline resolution if missing
     const catalog = JOBS_DATA

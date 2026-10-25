@@ -3,6 +3,40 @@ import { EvidenceItem } from '../features/knowledge/types';
 import { ActivityService } from './activityService';
 import { sourceStore } from '../features/sources/services/sourceStore';
 import { careerGraphEventBus } from './careerGraphEventBus';
+import { curatedBetaData } from './curatedBetaData';
+import { AccessControlService } from './accessControlService';
+import { demoWorkspaceService } from './demoWorkspaceService';
+
+import { SkillService } from './skillService';
+
+export interface UserProvidedExperienceData {
+  company: string;
+  role: string;
+  startDate: string;
+  endDate?: string;
+  currentRole?: boolean;
+  location?: string;
+  rawDescription?: string;
+  rawAchievements?: string;
+  importedSummaryLine: string;
+}
+
+export interface CareerOSInferredExperienceIntelligence {
+  roleFamily: string;
+  functionalArea: string;
+  domain: string;
+  industry: string;
+  seniority: string;
+  relationshipPillars: string[];
+  capabilities: string[];
+  skills: string[];
+  tools: string[];
+  stakeholders: string[];
+  keywords: string[];
+  careerTrajectory: string;
+  evidenceRelationships: string[];
+  intelligenceSummaryLine: string;
+}
 
 export interface WorkExperienceRecord {
   id: string;
@@ -19,10 +53,14 @@ export interface WorkExperienceRecord {
   provenance: 'evidence' | 'manual' | 'extracted' | 'edited';
   isDemo?: boolean;
   sourceText?: string;
+  userProvided?: UserProvidedExperienceData;
+  inferredIntelligence?: CareerOSInferredExperienceIntelligence;
   updatedAt: string;
 }
 
 const STORAGE_KEY = 'career_os_work_experiences_v1';
+const CSV_SESSION_STORAGE_KEY = 'careeros_csv_imported_work_experiences_v1';
+const DELETED_IDS_SESSION_KEY = 'careeros_deleted_work_experience_ids_v1';
 
 export const INITIAL_WORK_EXPERIENCES: WorkExperienceRecord[] = [
   {
@@ -84,26 +122,220 @@ export const INITIAL_WORK_EXPERIENCES: WorkExperienceRecord[] = [
 ];
 
 export class WorkExperienceService {
-  public static getWorkExperiences(): WorkExperienceRecord[] {
+  private static getSessionImportedRecords(): WorkExperienceRecord[] {
     try {
-      const data = localStorage.getItem(STORAGE_KEY);
-      if (data) {
-        return JSON.parse(data);
-      }
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(INITIAL_WORK_EXPERIENCES));
-      return INITIAL_WORK_EXPERIENCES;
+      const raw = sessionStorage.getItem(CSV_SESSION_STORAGE_KEY);
+      return raw ? JSON.parse(raw) : [];
     } catch {
-      return INITIAL_WORK_EXPERIENCES;
+      return [];
     }
   }
 
-  public static saveWorkExperiences(records: WorkExperienceRecord[]): void {
+  private static saveSessionImportedRecords(records: WorkExperienceRecord[]): void {
     try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(records));
-    } catch (e) {
-      console.warn('Failed to save work experiences', e);
+      sessionStorage.setItem(CSV_SESSION_STORAGE_KEY, JSON.stringify(records));
+    } catch {}
+  }
+
+  private static getDeletedIds(): Set<string> {
+    try {
+      const raw = sessionStorage.getItem(DELETED_IDS_SESSION_KEY);
+      return new Set(raw ? JSON.parse(raw) : []);
+    } catch {
+      return new Set();
+    }
+  }
+
+  private static addDeletedId(id: string): void {
+    try {
+      const set = this.getDeletedIds();
+      set.add(id);
+      sessionStorage.setItem(DELETED_IDS_SESSION_KEY, JSON.stringify(Array.from(set)));
+    } catch {}
+  }
+
+  public static getWorkExperiences(): WorkExperienceRecord[] {
+    const access = AccessControlService.getAccessLevel();
+    const sessionRecords = this.getSessionImportedRecords();
+    const deletedIds = this.getDeletedIds();
+
+    let baseList: WorkExperienceRecord[] = [];
+    if (access === 'DEMO') {
+      baseList = demoWorkspaceService.getWorkExperiences();
+    } else if (curatedBetaData.isCuratedBetaActive()) {
+      baseList = curatedBetaData.getWorkExperiences();
+    } else {
+      try {
+        const data = localStorage.getItem(STORAGE_KEY);
+        if (data) {
+          baseList = JSON.parse(data);
+        } else {
+          localStorage.setItem(STORAGE_KEY, JSON.stringify(INITIAL_WORK_EXPERIENCES));
+          baseList = INITIAL_WORK_EXPERIENCES;
+        }
+      } catch {
+        baseList = INITIAL_WORK_EXPERIENCES;
+      }
+    }
+
+    const sessionMap = new Map(sessionRecords.map(r => [r.id, r]));
+    const merged: WorkExperienceRecord[] = [];
+
+    // First include any newly imported session records not already in baseList
+    for (const sRec of sessionRecords) {
+      if (!deletedIds.has(sRec.id) && !baseList.some(b => b.id === sRec.id)) {
+        merged.push(sRec);
+      }
+    }
+
+    // Then include baseList records (applying any session edits)
+    for (const bRec of baseList) {
+      if (deletedIds.has(bRec.id)) continue;
+      const override = sessionMap.get(bRec.id);
+      merged.push(override || bRec);
+    }
+
+    return merged;
+  }
+
+  public static saveWorkExperiences(records: WorkExperienceRecord[]): void {
+    if (AccessControlService.getAccessLevel() === 'DEMO') {
+      demoWorkspaceService.saveWorkExperiences(records, false);
+      careerGraphEventBus.emit({ type: 'WORK_EXPERIENCES_UPDATED' });
+      return;
+    }
+
+    if (!curatedBetaData.isCuratedBetaActive()) {
+      try {
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(records));
+      } catch (e) {
+        console.warn('Failed to save work experiences', e);
+      }
     }
     careerGraphEventBus.emit({ type: 'WORK_EXPERIENCES_UPDATED' });
+  }
+
+  /**
+   * Commits one or more structured CSV-imported Work Experience records after user review.
+   * Creates canonical WorkExperienceRecord entries, syncs with KnowledgeStorageService,
+   * SourceStore, and SkillService, and preserves both user-provided and CareerOS inferred fields.
+   */
+  public static commitCsvImportedExperiences(
+    stagedRecords: Array<
+      Omit<WorkExperienceRecord, 'id' | 'updatedAt'> & {
+        userProvided: UserProvidedExperienceData;
+        inferredIntelligence: CareerOSInferredExperienceIntelligence;
+      }
+    >
+  ): WorkExperienceRecord[] {
+    const now = new Date().toISOString();
+    const existingSession = this.getSessionImportedRecords();
+    const committed: WorkExperienceRecord[] = [];
+    const allInferredCompetences: string[] = [];
+    const allInferredTools: string[] = [];
+
+    stagedRecords.forEach((rec, idx) => {
+      const expId = `exp-csv-${Date.now()}-${idx}`;
+      const evId = `ev-csv-${Date.now()}-${idx}`;
+
+      const evidenceItem: EvidenceItem = {
+        id: evId,
+        title: `${rec.role} at ${rec.company}`,
+        shortSummary: rec.scope || rec.responsibilities[0] || 'CSV Imported Work Experience',
+        category: 'Experience',
+        context: rec.scope || '',
+        myRole: rec.role,
+        actions: rec.responsibilities.join('; '),
+        decision: `Focused on ${rec.inferredIntelligence.functionalArea} and ${rec.inferredIntelligence.domain} execution.`,
+        tradeoffs: 'Balanced delivery velocity with enterprise reliability and measurable outcomes.',
+        outcome: rec.achievements.join('; '),
+        metrics: rec.measurableOutcomes,
+        skills: rec.relevantSkills,
+        domains: [rec.inferredIntelligence.domain as any],
+        roles: [rec.inferredIntelligence.roleFamily as any],
+        tags: ['csv-imported', rec.company.toLowerCase().replace(/[^a-z0-9]/g, '')],
+        linkedQuestionIds: [],
+        createdAt: now,
+        updatedAt: now
+      };
+
+      KnowledgeStorageService.addOrUpdateEvidence(evidenceItem);
+
+      sourceStore.addSource({
+        id: `source-exp-${expId}`,
+        title: `${rec.role} — ${rec.company}`,
+        sourceFamily: 'experience',
+        sourceType: 'work_project',
+        description: rec.scope || '',
+        organization: rec.company,
+        dateCompleted: rec.dates.split('—')[1]?.trim() || rec.dates,
+        status: 'completed',
+        language: 'en',
+        languages: ['en'],
+        tags: ['csv-import', 'experience', ...rec.relevantSkills.map(s => s.toLowerCase())],
+        attachments: [],
+        createdAt: now,
+        updatedAt: now,
+        evidenceStrength: 4,
+        inferredKnowledge: rec.inferredIntelligence.capabilities,
+        confirmedKnowledge: rec.inferredIntelligence.skills.slice(0, 2),
+        inferredSkills: rec.relevantSkills,
+        confirmedSkills: rec.relevantSkills,
+        competencies: rec.inferredIntelligence.capabilities,
+        domains: [rec.inferredIntelligence.domain],
+        methods: [rec.inferredIntelligence.functionalArea],
+        frameworks: [],
+        evidenceStatements: [
+          rec.scope || '',
+          ...(rec.achievements || []).slice(0, 2)
+        ].filter(Boolean),
+        careerRelevance: [rec.inferredIntelligence.roleFamily],
+        metadata: {
+          company: rec.company,
+          role: rec.role,
+          dates: rec.dates,
+          location: rec.location || 'Remote'
+        }
+      });
+
+      allInferredCompetences.push(...rec.inferredIntelligence.capabilities, ...rec.inferredIntelligence.skills);
+      allInferredTools.push(...rec.inferredIntelligence.tools);
+
+      const newRecord: WorkExperienceRecord = {
+        ...rec,
+        id: expId,
+        linkedEvidenceId: evId,
+        provenance: 'extracted',
+        isDemo: false,
+        updatedAt: now
+      };
+
+      committed.push(newRecord);
+    });
+
+    if (allInferredCompetences.length > 0 || allInferredTools.length > 0) {
+      SkillService.importExtractedSkills(
+        Array.from(new Set(allInferredCompetences)),
+        Array.from(new Set(allInferredTools))
+      );
+    }
+
+    const nextSession = [...committed, ...existingSession];
+    this.saveSessionImportedRecords(nextSession);
+
+    const allExperiences = this.getWorkExperiences();
+    this.saveWorkExperiences(allExperiences);
+
+    ActivityService.logActivity({
+      category: 'work',
+      title: `Imported ${committed.length} Work Experience Record${committed.length === 1 ? '' : 's'} via CSV`,
+      description: `CareerOS structured ${committed.length} role${committed.length === 1 ? '' : 's'} and classified capabilities, domains, and measurable outcomes.`,
+      source: 'Evidence',
+      badgeText: `${committed.length} Imported`,
+      badgeVariant: 'emerald'
+    });
+
+    return allExperiences;
   }
 
   /**
@@ -112,10 +344,28 @@ export class WorkExperienceService {
    * avoiding data silos and preserving complete auditability.
    */
   public static addWorkExperience(record: Omit<WorkExperienceRecord, 'id' | 'updatedAt'>): WorkExperienceRecord {
+    let customCount = 0;
+    if (AccessControlService.getAccessLevel() === 'DEMO') {
+      customCount = demoWorkspaceService.getCategoryUsage('work_experience').used;
+    } else {
+      try {
+        const data = localStorage.getItem(STORAGE_KEY);
+        if (data) {
+          const list: WorkExperienceRecord[] = JSON.parse(data);
+          customCount = list.filter(item => !INITIAL_WORK_EXPERIENCES.some(init => init.id === item.id)).length;
+        }
+      } catch {}
+    }
+
+    const decision = AccessControlService.canCreateWorkflowItem('work_experiences', customCount);
+    if (!decision.allowed) {
+      console.warn('Work experience creation blocked by access control:', decision.reason);
+      throw new Error(decision.reason || 'Creation restricted by active access tier.');
+    }
+
     const newId = `exp-${Date.now()}`;
     const now = new Date().toISOString();
 
-    // 1. Create Evidence Item in KnowledgeStorageService
     const evidenceItem: EvidenceItem = {
       id: `ev-${Date.now()}`,
       title: `${record.role} at ${record.company}`,
@@ -139,7 +389,6 @@ export class WorkExperienceService {
 
     KnowledgeStorageService.addOrUpdateEvidence(evidenceItem);
 
-    // 2. Create canonical WorkExperienceRecord
     const newExperience: WorkExperienceRecord = {
       ...record,
       id: newId,
@@ -147,11 +396,12 @@ export class WorkExperienceService {
       updatedAt: now
     };
 
-    const currentList = this.getWorkExperiences();
-    const updated = [newExperience, ...currentList];
-    this.saveWorkExperiences(updated);
+    const existingSession = this.getSessionImportedRecords();
+    this.saveSessionImportedRecords([newExperience, ...existingSession]);
 
-    // 3. Log Activity
+    const currentList = this.getWorkExperiences();
+    this.saveWorkExperiences(currentList);
+
     ActivityService.logActivity({
       category: 'work',
       title: `Added Work Experience: ${record.role} at ${record.company}`,
@@ -186,10 +436,19 @@ export class WorkExperienceService {
       updatedAt: new Date().toISOString()
     };
 
+    // Update session store so edits persist across Guest/Demo/Full
+    const sessionList = this.getSessionImportedRecords();
+    const sIdx = sessionList.findIndex(s => s.id === id);
+    if (sIdx !== -1) {
+      sessionList[sIdx] = updatedRecord;
+      this.saveSessionImportedRecords(sessionList);
+    } else {
+      this.saveSessionImportedRecords([updatedRecord, ...sessionList]);
+    }
+
     list[index] = updatedRecord;
     this.saveWorkExperiences(list);
 
-    // Sync to KnowledgeStorageService if linked
     if (updatedRecord.linkedEvidenceId) {
       KnowledgeStorageService.addOrUpdateEvidence({
         id: updatedRecord.linkedEvidenceId,
@@ -226,12 +485,6 @@ export class WorkExperienceService {
     return updatedRecord;
   }
 
-  /**
-   * Imports extracted experiences from an uploaded resume.
-   * CRITICAL REQUIREMENT:
-   * Replaces previous default / mock / extracted experiences,
-   * while STRICTLY PRESERVING any manually added ('manual') or user-edited ('edited') records!
-   */
   public static importExtractedExperiences(
     extractedList: Array<{
       company: string;
@@ -247,12 +500,10 @@ export class WorkExperienceService {
     const currentList = this.getWorkExperiences();
     const now = new Date().toISOString();
 
-    // Preserve user manual entries and user-edited entries
     const preservedRecords = currentList.filter(
       r => r.provenance === 'manual' || r.provenance === 'edited'
     );
 
-    // Transform extracted experiences into canonical records
     const newlyExtractedRecords: WorkExperienceRecord[] = extractedList.map((ext, idx) => {
       const expId = `exp-ext-${Date.now()}-${idx}`;
       const evId = `ev-ext-${Date.now()}-${idx}`;
@@ -261,11 +512,10 @@ export class WorkExperienceService {
         ? ext.achievements.slice(0, 3)
         : ['Delivered zero-regression production roadmap', '99.9% reliability parity'];
 
-      // Also register into KnowledgeStorageService
       KnowledgeStorageService.addOrUpdateEvidence({
         id: evId,
         title: `${ext.role} at ${ext.company}`,
-        shortSummary: ext.summary || ext.responsibilities[0] || 'Resume Extracted Experience',
+        shortSummary: ext.summary || ext.responsibilities[0] || 'Imported Experience',
         category: 'Experience',
         context: ext.summary || '',
         myRole: ext.role,
@@ -277,48 +527,10 @@ export class WorkExperienceService {
         skills: ext.skills,
         domains: ['Enterprise SaaS', 'Fintech & Payments'],
         roles: ['Software Engineering'],
-        tags: ['resume-extracted', ext.company.toLowerCase().replace(/[^a-z0-9]/g, '')],
+        tags: ['experience', ext.company.toLowerCase().replace(/[^a-z0-9]/g, '')],
         linkedQuestionIds: [],
         createdAt: now,
         updatedAt: now
-      });
-
-      // Register into SourceStore to update the Skill Evidence Graph
-      sourceStore.addSource({
-        id: `source-exp-${expId}`,
-        title: `${ext.role} — ${ext.company}`,
-        sourceFamily: 'experience',
-        sourceType: 'work_project',
-        description: ext.summary,
-        organization: ext.company,
-        dateCompleted: ext.dates.split('—')[1]?.trim() || ext.dates,
-        status: 'completed',
-        language: 'en',
-        languages: ['en'],
-        tags: ['resume', 'experience', ...ext.skills.map(s => s.toLowerCase())],
-        attachments: [],
-        createdAt: now,
-        updatedAt: now,
-        evidenceStrength: 4, // L4 Applied
-        inferredKnowledge: ext.skills.slice(0, 3),
-        confirmedKnowledge: ext.skills.slice(0, 2),
-        inferredSkills: ext.skills,
-        confirmedSkills: ext.skills,
-        competencies: ext.skills.slice(0, 3),
-        domains: ['Enterprise SaaS'],
-        methods: ['Production Delivery'],
-        frameworks: [],
-        evidenceStatements: [
-          ext.summary,
-          ...(ext.achievements || []).slice(0, 2)
-        ],
-        careerRelevance: ['Software Engineering'],
-        metadata: {
-          company: ext.company,
-          role: ext.role,
-          dates: ext.dates,
-          location: ext.location || 'Remote'
-        }
       });
 
       return {
@@ -340,23 +552,16 @@ export class WorkExperienceService {
       };
     });
 
-    // Merge: newly extracted first, then preserved manual/edited
     const merged = [...newlyExtractedRecords, ...preservedRecords];
+    this.saveSessionImportedRecords(newlyExtractedRecords);
     this.saveWorkExperiences(merged);
-
-    ActivityService.logActivity({
-      category: 'resume',
-      title: `Imported ${newlyExtractedRecords.length} Work Experiences from Resume`,
-      description: `Refreshed experience chronology with auditable proof. Preserved ${preservedRecords.length} manual/edited records.`,
-      source: 'Resume',
-      badgeText: `${newlyExtractedRecords.length} Roles`,
-      badgeVariant: 'emerald'
-    });
-
     return merged;
   }
 
   public static removeWorkExperience(id: string): void {
+    this.addDeletedId(id);
+    const sessionList = this.getSessionImportedRecords().filter(e => e.id !== id);
+    this.saveSessionImportedRecords(sessionList);
     const list = this.getWorkExperiences().filter(e => e.id !== id);
     this.saveWorkExperiences(list);
   }

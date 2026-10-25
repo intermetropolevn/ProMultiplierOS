@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   Volume2, 
   Mic, 
@@ -18,6 +18,8 @@ import {
 } from 'lucide-react';
 import { ShadowSpeakingLesson, ShadowSpeakingLine } from '../../features/businessEnglish/types';
 import { BusinessEnglishService } from '../../features/businessEnglish/services/businessEnglishService';
+import { AudioPermissionGate } from '../common/AudioPermissionGate';
+import { AudioPermissionService } from '../../services/audioPermissionService';
 
 interface ShadowSpeakingStudioProps {
   className?: string;
@@ -41,6 +43,14 @@ export const ShadowSpeakingStudio: React.FC<ShadowSpeakingStudioProps> = ({
     phoneticsFeedback: string;
     tips: string[];
   } | null>(null);
+  const [isAudioGateOpen, setIsAudioGateOpen] = useState(false);
+
+  // Release any active microphone stream on unmount
+  useEffect(() => {
+    return () => {
+      AudioPermissionService.releaseStream();
+    };
+  }, []);
 
   const activeLine: ShadowSpeakingLine = selectedLesson.lines[activeLineIndex] || selectedLesson.lines[0];
 
@@ -51,16 +61,11 @@ export const ShadowSpeakingStudio: React.FC<ShadowSpeakingStudioProps> = ({
     });
   };
 
-  const handleRecordShadowing = () => {
-    if (isRecording) {
-      setIsRecording(false);
-      return;
-    }
-
+  const runShadowingCapture = () => {
     setIsRecording(true);
     setHasRecordedCurrentLine(false);
 
-    // Simulate speech capture & rhythm analysis
+    // Capture speech & rhythm analysis
     setTimeout(() => {
       setIsRecording(false);
       setHasRecordedCurrentLine(true);
@@ -69,7 +74,23 @@ export const ShadowSpeakingStudio: React.FC<ShadowSpeakingStudioProps> = ({
         activeLine.text.split(/\s+/).length
       );
       setLineFeedback(feedback);
+      AudioPermissionService.releaseStream();
     }, 2800);
+  };
+
+  const handleRecordShadowing = async () => {
+    if (isRecording) {
+      setIsRecording(false);
+      AudioPermissionService.releaseStream();
+      return;
+    }
+
+    const { canStartImmediately } = await AudioPermissionService.initiateFeatureIntent('business_english');
+    if (canStartImmediately) {
+      runShadowingCapture();
+    } else {
+      setIsAudioGateOpen(true);
+    }
   };
 
   const handleNextLine = () => {
@@ -322,6 +343,22 @@ export const ShadowSpeakingStudio: React.FC<ShadowSpeakingStudioProps> = ({
         )}
 
       </div>
+
+      {/* Contextual Microphone Permission Gate — Only shown when user initiates voice shadowing */}
+      <AudioPermissionGate
+        isOpen={isAudioGateOpen}
+        feature="business_english"
+        subFeatureLabel="Shadowing & Pronunciation Practice"
+        onClose={() => setIsAudioGateOpen(false)}
+        onMicrophoneReady={() => {
+          setIsAudioGateOpen(false);
+          runShadowingCapture();
+        }}
+        onContinueWithoutMicrophone={() => {
+          setIsAudioGateOpen(false);
+          runShadowingCapture();
+        }}
+      />
 
     </div>
   );

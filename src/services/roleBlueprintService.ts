@@ -1,5 +1,8 @@
 import { RoleBlueprint, RoleCategory, SectorDomain, ExperienceLevel, CompetencyPillar, CompensationBenchmarkTier, InterviewPipelineStage } from '../types';
 import { ROLES_DATA } from '../data/rolesData';
+import { curatedBetaData } from './curatedBetaData';
+import { AccessControlService } from './accessControlService';
+import { demoWorkspaceService } from './demoWorkspaceService';
 
 const CUSTOM_ROLES_STORAGE_KEY = 'career_os_custom_blueprints_v1';
 const DELETED_ROLES_STORAGE_KEY = 'career_os_deleted_blueprints_v1';
@@ -49,8 +52,21 @@ export class RoleBlueprintService {
    * Get all active blueprints (predefined + custom, minus archived)
    */
   public static getAllBlueprints(includeDrafts = true): RoleBlueprint[] {
+    const access = AccessControlService.getAccessLevel();
+
+    if (access === 'DEMO') {
+      const demoRoles = demoWorkspaceService.getRoleBlueprints();
+      return includeDrafts ? demoRoles : demoRoles.filter(r => r.status === 'published');
+    }
+
     const archivedIds = new Set(this.getArchivedRoleIds());
     const customList = this.getCustomBlueprints();
+
+    // Public Beta (PUBLIC / GUEST): Return curated role blueprints
+    if (curatedBetaData.isCuratedBetaActive()) {
+      const curated = curatedBetaData.getRoles().filter(r => !archivedIds.has(r.id));
+      return includeDrafts ? curated : curated.filter(r => r.status === 'published');
+    }
 
     // Map base roles and apply any custom overrides
     const baseRoles: RoleBlueprint[] = ROLES_DATA.map(role => ({
@@ -94,6 +110,14 @@ export class RoleBlueprintService {
    * Create a new blueprint
    */
   public static createBlueprint(blueprint: Omit<RoleBlueprint, 'id' | 'createdAt' | 'updatedAt'>): RoleBlueprint {
+    const isDemo = AccessControlService.getAccessLevel() === 'DEMO';
+    const current = isDemo ? demoWorkspaceService.getRoleBlueprints().filter(r => r.createdByDemoUser) : this.getCustomBlueprints();
+    const decision = AccessControlService.canCreateWorkflowItem('roles', current.length);
+    if (!decision.allowed) {
+      console.warn('Role blueprint creation blocked by access control:', decision.reason);
+      throw new Error(decision.reason || 'Creation restricted by active access tier.');
+    }
+
     const newBlueprint: RoleBlueprint = {
       ...blueprint,
       id: `role-custom-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
@@ -103,7 +127,11 @@ export class RoleBlueprintService {
       status: blueprint.status || 'published'
     };
 
-    const current = this.getCustomBlueprints();
+    if (isDemo) {
+      demoWorkspaceService.addOrUpdateRoleBlueprint(newBlueprint, true);
+      return newBlueprint;
+    }
+
     current.unshift(newBlueprint);
     this.saveCustomBlueprints(current);
     return newBlueprint;
@@ -122,6 +150,11 @@ export class RoleBlueprintService {
       updatedAt: new Date().toISOString(),
       isCustom: true
     };
+
+    if (AccessControlService.getAccessLevel() === 'DEMO') {
+      demoWorkspaceService.addOrUpdateRoleBlueprint(updated, false);
+      return updated;
+    }
 
     const current = this.getCustomBlueprints();
     const idx = current.findIndex(b => b.id === id);
@@ -200,6 +233,23 @@ export class RoleBlueprintService {
     suggestedMarketDemand: 'High' | 'Very High' | 'Surging';
     suggestedMissionScope: string;
   } {
+    if (!AccessControlService.can('canViewIntelligence')) {
+      return {
+        suggestedCompetencies: [],
+        suggestedCompensation: {
+          junior: { min: 0, max: 0, formatted: '' },
+          mid: { min: 0, max: 0, formatted: '' },
+          senior: { min: 0, max: 0, formatted: '' },
+          lead: { min: 0, max: 0, formatted: '' }
+        },
+        suggestedTechStack: [],
+        suggestedInterviewPipeline: [],
+        suggestedTypicalDay: [],
+        suggestedMarketDemand: 'High',
+        suggestedMissionScope: ''
+      };
+    }
+
     const t = params.title.toLowerCase();
     const cat = params.category;
     const isEng = cat === 'Software Engineering' || t.includes('engineer') || t.includes('developer') || t.includes('architect');

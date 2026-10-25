@@ -1,6 +1,5 @@
 import React, { useState } from 'react';
 import { 
-  Award, 
   CheckCircle2, 
   Sparkles, 
   RotateCcw, 
@@ -8,18 +7,20 @@ import {
   Check, 
   ArrowRight, 
   Clock, 
-  Bookmark, 
-  FileText,
-  TrendingUp,
-  AlertTriangle
 } from 'lucide-react';
 import { MockInterviewSession } from '../../types';
+import { useAccessControl } from '../../services/accessControlService';
+import { CareerOSIntelligenceGate, IntelligenceModeBadge } from '../access/CareerOSIntelligenceGate';
+import { ProtectedFrameworkAttribution } from '../access/ProtectedPreviewOverlay';
+import { LiveInterviewEcosystemService } from '../../services/liveInterviewEcosystemService';
+import { InterviewIntelligenceOutcomePanel } from './InterviewIntelligenceOutcomePanel';
 
 interface InterviewReportCardProps {
   session: MockInterviewSession;
   onRetake: () => void;
   onGoToTracker: () => void;
   onGoToDiscover: () => void;
+  onOpenMissionControl?: () => void;
   onGetFeedback?: (sessionData: { title: string; content: string; capability: string; score: number }) => void;
 }
 
@@ -27,22 +28,36 @@ export const InterviewReportCard: React.FC<InterviewReportCardProps> = ({
   session,
   onRetake,
   onGoToTracker,
-  onGoToDiscover,
+  onOpenMissionControl,
   onGetFeedback,
 }) => {
+  const { accessLevel, getIntelligenceAccess } = useAccessControl();
   const [copied, setCopied] = useState(false);
 
+  const isGuest = accessLevel === 'PUBLIC' || accessLevel === 'GUEST';
+  const analysisAccess = getIntelligenceAccess('ai_interview_analysis');
+  const isFull = analysisAccess.isFull;
+  const visibleResponses = isFull
+    ? session.responses
+    : isGuest
+      ? session.responses.slice(0, 1)
+      : session.responses.slice(0, 2);
+
+  const interviewOutcome = LiveInterviewEcosystemService.synthesizeInterviewOutcome({
+    config: session.config,
+    candidateAnswers: session.responses.map(r => r.candidateAnswer)
+  });
+
   const handleCopyReport = () => {
-    let report = `CAREER INTERVIEW OS - MOCK SESSION REPORT\n`;
-    report += `==========================================\n`;
+    let report = `CAREER INTERVIEW OS - SESSION INTELLIGENCE SUMMARY\n`;
+    report += `==================================================\n`;
     report += `Role: ${session.config.roleCategory} (${session.config.level})\n`;
     report += `Domain: ${session.config.domain}\n`;
-    report += `Overall Calibration Score: ${session.overallScore} / 100\n`;
     report += `Status: ${session.readinessSummary}\n\n`;
 
-    session.responses.forEach((resp, idx) => {
+    visibleResponses.forEach((resp, idx) => {
       report += `[Q${idx + 1}] ${resp.question.question}\n`;
-      report += `Score: ${resp.evaluation?.score || 'N/A'}/100 (${resp.evaluation?.ratingTier || 'Evaluated'})\n`;
+      report += `Calibration Tier: ${resp.evaluation?.ratingTier || 'Evaluated'}\n`;
       report += `Candidate Answer:\n${resp.candidateAnswer || '(No response provided)'}\n\n`;
       if (resp.evaluation) {
         report += `Strengths:\n- ${resp.evaluation.strengths.join('\n- ')}\n`;
@@ -50,6 +65,9 @@ export const InterviewReportCard: React.FC<InterviewReportCardProps> = ({
       }
       report += `------------------------------------------\n`;
     });
+
+    report += `\nCareerOS Protected Preview · Developer / Product: Dynaisys (cpo@dynaisys.com)\n`;
+    report += `© 2026 Dynaisys. All rights reserved.\n`;
 
     navigator.clipboard.writeText(report);
     setCopied(true);
@@ -70,38 +88,56 @@ export const InterviewReportCard: React.FC<InterviewReportCardProps> = ({
   };
 
   return (
-    <div className="max-w-4xl mx-auto space-y-8 animate-in fade-in duration-200">
+    <div
+      data-protected-ip="Session Evaluation & Calibration Report"
+      className="max-w-5xl mx-auto space-y-8 animate-in fade-in duration-200"
+    >
       
-      {/* Celebration & Overall Score Card */}
+      {/* 1. Connected Career Intelligence Ecosystem Outcome */}
+      <InterviewIntelligenceOutcomePanel
+        outcome={interviewOutcome}
+        onOpenMissionControl={onOpenMissionControl}
+        onRestartSession={onRetake}
+      />
+
+      {/* 2. Session Summary & Practitioner Review Card */}
       <div className="bg-white rounded-3xl p-8 border border-slate-200 shadow-sm space-y-6">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-6 pb-6 border-b border-slate-100">
           <div>
-            <div className="flex items-center gap-2 mb-2">
+            <div className="flex items-center gap-2 mb-2 flex-wrap">
               <span className="text-xs font-bold uppercase tracking-wider text-blue-600 bg-blue-50 px-2.5 py-0.5 rounded-full border border-blue-100">
-                Mock Interview Evaluated
+                Interview Session Evaluated
               </span>
+              <IntelligenceModeBadge capability="ai_interview_analysis" />
               <span className="text-xs text-slate-500 font-medium flex items-center gap-1">
                 <Clock className="w-3.5 h-3.5" />
                 Duration: {formatDuration(session.totalDurationSeconds)}
               </span>
             </div>
             <h2 className="text-2xl sm:text-3xl font-extrabold text-slate-900 tracking-tight">
-              Executive Evaluation Report
+              Session Dialogue &amp; Calibration Detail
             </h2>
             <p className="text-sm text-slate-600 mt-1 font-medium">
               Calibrated for <strong className="text-slate-900">{session.config.level} {session.config.roleCategory}</strong> in <strong className="text-slate-900">{session.config.domain}</strong>.
             </p>
           </div>
 
-          {/* Big Score Dial */}
+          {/* Qualitative Calibration Badge (Never exposes underlying scoring formula) */}
           <div className="flex items-center gap-4 shrink-0">
             <div className="text-center p-4 rounded-2xl bg-slate-50 border border-slate-200">
-              <div className="text-3xl sm:text-4xl font-black text-blue-600">
-                {session.overallScore}
-                <span className="text-sm text-slate-400 font-normal">/100</span>
+              <div className="text-xs font-bold uppercase tracking-wider text-slate-400">
+                Signal Calibration
               </div>
-              <div className={`mt-1 px-2 py-0.5 rounded text-[11px] font-bold uppercase border ${getTierColor(session.overallScore)}`}>
-                {session.overallScore >= 85 ? 'Exceptional' : session.overallScore >= 72 ? 'Strong' : session.overallScore >= 55 ? 'Competent' : 'Needs Polish'}
+              <div className={`mt-1.5 px-3 py-1 rounded-lg text-xs font-extrabold uppercase border ${getTierColor(session.overallScore)}`}>
+                {isGuest
+                  ? 'Sample Calibration'
+                  : session.overallScore >= 85
+                    ? 'Exceptional Signal'
+                    : session.overallScore >= 72
+                      ? 'Strong Signal'
+                      : session.overallScore >= 55
+                        ? 'Competent Signal'
+                        : 'Developing Signal'}
               </div>
             </div>
           </div>
@@ -120,8 +156,8 @@ export const InterviewReportCard: React.FC<InterviewReportCardProps> = ({
           </div>
         </div>
 
-        {/* Expert Feedback Callout (Requirement 2) */}
-        {onGetFeedback && (
+        {/* Expert Feedback Callout */}
+        {onGetFeedback && !isGuest && (
           <div className="p-4 rounded-2xl bg-gradient-to-r from-blue-900 via-indigo-900 to-slate-900 text-white flex flex-col sm:flex-row sm:items-center justify-between gap-4 border border-blue-500/30 shadow-md">
             <div className="space-y-1">
               <div className="flex items-center gap-2">
@@ -185,7 +221,7 @@ export const InterviewReportCard: React.FC<InterviewReportCardProps> = ({
             onClick={onGoToTracker}
             className="flex items-center gap-2 px-5 py-2 rounded-xl bg-blue-600 text-white text-xs font-bold hover:bg-blue-700 transition-colors shadow-xs cursor-pointer"
           >
-            <span>View in Tracker & Analytics</span>
+            <span>View in Participation &amp; Tracker</span>
             <ArrowRight className="w-4 h-4" />
           </button>
         </div>
@@ -194,10 +230,10 @@ export const InterviewReportCard: React.FC<InterviewReportCardProps> = ({
       {/* Per-Question Breakdown */}
       <div className="space-y-4">
         <h3 className="text-base font-bold text-slate-900 px-1">
-          Question-by-Question Deep Analysis ({session.responses.length} Prompts)
+          Question-by-Question Dialogue Feedback ({visibleResponses.length} of {session.responses.length} Prompts)
         </h3>
 
-        {session.responses.map((resp, idx) => {
+        {visibleResponses.map((resp, idx) => {
           const ev = resp.evaluation;
           return (
             <div
@@ -216,8 +252,9 @@ export const InterviewReportCard: React.FC<InterviewReportCardProps> = ({
                 </div>
                 {ev && (
                   <div className="text-right shrink-0">
-                    <span className="text-xl font-extrabold text-blue-600">{ev.score}/100</span>
-                    <div className="text-[10px] font-bold uppercase text-slate-500">{ev.ratingTier}</div>
+                    <span className="px-2.5 py-1 rounded-lg bg-blue-50 text-blue-800 border border-blue-200 text-xs font-extrabold uppercase">
+                      {isGuest ? 'Basic Feedback' : ev.ratingTier}
+                    </span>
                   </div>
                 )}
               </div>
@@ -238,7 +275,7 @@ export const InterviewReportCard: React.FC<InterviewReportCardProps> = ({
                   <div className="p-3.5 bg-emerald-50/40 rounded-xl border border-emerald-100 text-xs space-y-1">
                     <span className="text-[10px] font-bold uppercase tracking-wider text-emerald-800 block">Demonstrated Strengths</span>
                     <ul className="space-y-1">
-                      {ev.strengths.map((s, i) => (
+                      {ev.strengths.slice(0, isGuest ? 2 : 4).map((s, i) => (
                         <li key={i} className="text-xs text-emerald-950 flex items-start gap-1.5">
                           <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 shrink-0 mt-0.5" />
                           <span>{s}</span>
@@ -250,7 +287,7 @@ export const InterviewReportCard: React.FC<InterviewReportCardProps> = ({
                   <div className="p-3.5 bg-amber-50/40 rounded-xl border border-amber-100 text-xs space-y-1">
                     <span className="text-[10px] font-bold uppercase tracking-wider text-amber-800 block">Recommended Polish</span>
                     <ul className="space-y-1">
-                      {ev.improvementAreas.map((a, i) => (
+                      {ev.improvementAreas.slice(0, isGuest ? 2 : 4).map((a, i) => (
                         <li key={i} className="text-xs text-amber-950 flex items-start gap-1.5">
                           <span className="w-1.5 h-1.5 rounded-full bg-amber-500 mt-1.5 shrink-0" />
                           <span>{a}</span>
@@ -261,21 +298,29 @@ export const InterviewReportCard: React.FC<InterviewReportCardProps> = ({
                 </div>
               )}
 
-              {/* Exemplary Benchmark Answer */}
-              <div className="p-3.5 rounded-xl bg-blue-50/30 border border-blue-100 space-y-1">
-                <div className="text-[10px] font-bold uppercase tracking-wider text-blue-900 flex items-center gap-1">
-                  <Sparkles className="w-3 h-3 text-blue-600" />
-                  Benchmark Model Answer for Comparison
+              {/* Exemplary Benchmark Answer (Full Access only) */}
+              {isFull && (
+                <div className="p-3.5 rounded-xl bg-blue-50/30 border border-blue-100 space-y-1">
+                  <div className="text-[10px] font-bold uppercase tracking-wider text-blue-900 flex items-center gap-1">
+                    <Sparkles className="w-3 h-3 text-blue-600" />
+                    Benchmark Model Answer for Comparison
+                  </div>
+                  <p className="text-xs text-slate-700 italic leading-relaxed">
+                    &ldquo;{resp.question.exemplaryModelAnswer}&rdquo;
+                  </p>
                 </div>
-                <p className="text-xs text-slate-700 italic leading-relaxed">
-                  &ldquo;{resp.question.exemplaryModelAnswer}&rdquo;
-                </p>
-              </div>
+              )}
             </div>
           );
         })}
       </div>
 
+      {/* Subtle Copyright Awareness on Exported / Evaluation Preview */}
+      <ProtectedFrameworkAttribution
+        areaLabel="Exported Evaluation Preview & Calibration Rubric"
+      />
+
     </div>
   );
 };
+

@@ -181,12 +181,16 @@ export class ExpertFeedbackService {
   }
 
   /**
-   * Create a new Feedback Request
+   * Create a new Career Feedback Session
    */
   public static createFeedbackRequest(payload: CreateFeedbackPayload): FeedbackRequest {
     const requests = this.getAllRequests();
     const aiReview = this.generateAIReview(payload.context, payload.helpType);
     const assignedExpert = payload.expertId ? this.getExpertById(payload.expertId) : null;
+    const expertId = payload.expertId || assignedExpert?.id || 'expert-sarah-chen';
+    const expertName = payload.expertName || assignedExpert?.name || 'Sarah Chen';
+    const scoreBefore = payload.context.readinessScore || 68;
+    const scoreAfter = Math.min(98, scoreBefore + 5);
 
     const newRequest: FeedbackRequest = {
       id: `req-${Date.now()}`,
@@ -195,9 +199,9 @@ export class ExpertFeedbackService {
       context: payload.context,
       selectedFocusAreas: payload.selectedFocusAreas,
       feedbackFormat: payload.feedbackFormat,
-      expertId: payload.expertId || assignedExpert?.id || 'expert-sarah-chen',
-      expertName: payload.expertName || assignedExpert?.name || 'Sarah Chen',
-      status: 'waiting_for_expert',
+      expertId,
+      expertName,
+      status: payload.deliverImmediately !== false ? 'feedback_delivered' : 'waiting_for_expert',
       submittedAt: new Date().toISOString(),
       deadline: payload.deadline,
       privacyShared: payload.privacyShared || {
@@ -210,13 +214,44 @@ export class ExpertFeedbackService {
         currentApplications: false
       },
       aiReview: aiReview,
+      expertFeedback: payload.deliverImmediately !== false ? {
+        expertId,
+        expertName,
+        overallAssessment: 'Strong foundation with sharp execution instincts. Defining explicit strategic trade-offs makes this evidence-worthy.',
+        whatWorked: [
+          'Progressive Permission Staging is the exact right architectural framing for enterprise trial friction',
+          'The 2-minute compliance audit export anticipates the primary blocker in IT procurement'
+        ],
+        whatCouldImprove: [
+          'Declare explicit scope elimination: state what you are deliberately choosing NOT to build in v1',
+          'Decline custom SAML/SCIM connectors until post-trial conversion to protect shipping velocity'
+        ],
+        expertRecommendation: 'Explicitly decline custom IdP/SCIM provisioning in v1. Support standard OAuth and OIDC first to protect your 3-week shipping velocity and validate user activation.',
+        suggestedNextStep: 'find_build',
+        scoreBefore,
+        scoreAfter,
+        deliveredAt: new Date().toISOString(),
+        verifiedValidationBadge: true,
+        recommendedResources: [
+          {
+            id: 'res-wardley-mapping',
+            title: 'Wardley Mapping for B2B Enterprise Feature Staging',
+            type: 'Knowledge System · Strategic Framework'
+          },
+          {
+            id: 'res-b2b-activation',
+            title: 'Stripe Billing Self-Serve Activation Architecture',
+            type: 'Case Study · Proven Blueprints'
+          }
+        ]
+      } : undefined,
       iterations: [
         {
           iterationNumber: 1,
           submittedAnswer: payload.context.workSubmittedContent,
-          score: payload.context.readinessScore,
+          score: scoreBefore,
           date: new Date().toISOString(),
-          deltaSummary: 'Initial submission for expert review'
+          deltaSummary: 'Baseline submission for expert calibration'
         }
       ],
       followUpMessages: []

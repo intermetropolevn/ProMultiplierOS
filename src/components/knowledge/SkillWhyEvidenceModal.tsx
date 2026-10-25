@@ -31,6 +31,9 @@ import {
   FileText
 } from 'lucide-react';
 
+import { useAccessControl } from '../../services/accessControlService';
+import { CareerOSIntelligenceGate, IntelligenceModeBadge } from '../access/CareerOSIntelligenceGate';
+
 interface SkillWhyEvidenceModalProps {
   skillName: string;
   onClose: () => void;
@@ -44,6 +47,8 @@ export const SkillWhyEvidenceModal: React.FC<SkillWhyEvidenceModalProps> = ({
   onOpenSourceDetail,
   onSkillUpdated
 }) => {
+  const { accessLevel } = useAccessControl();
+  const isFullAccess = accessLevel === 'FULL_ACCESS';
   const [profile, setProfile] = useState<DetailedSkillEvidenceProfile | undefined>(() => 
     EvidenceGraphEngine.getDetailedSkillProfile(skillName)
   );
@@ -130,6 +135,7 @@ export const SkillWhyEvidenceModal: React.FC<SkillWhyEvidenceModalProps> = ({
               <span className="p-1 rounded-md bg-blue-600 text-white text-[10px] font-black uppercase tracking-wider">
                 Skill Evidence Ledger
               </span>
+              <IntelligenceModeBadge capability="proprietary_scoring_logic" />
               <span className="text-xs text-slate-400">•</span>
               <span className="text-xs font-semibold text-slate-500">{profile.domain}</span>
               
@@ -216,16 +222,16 @@ export const SkillWhyEvidenceModal: React.FC<SkillWhyEvidenceModalProps> = ({
               </div>
             </div>
 
-            {/* Right: 5 Weighted Factor Meters */}
+            {/* Right: Qualitative Signal Drivers (No raw weighting formulas exposed) */}
             <div className="space-y-1.5 text-xs">
               <div className="flex items-center justify-between text-[11px] font-bold text-slate-300">
-                <span>Multi-Factor Algorithmic Weights:</span>
+                <span>Multi-Signal Evidence Drivers:</span>
               </div>
               <div className="space-y-1">
                 <div>
                   <div className="flex justify-between text-[10px] text-slate-300 mb-0.5">
-                    <span>1. Application Depth (30%)</span>
-                    <span className="font-bold">{profile.scoring.applicationDepthScore}%</span>
+                    <span>1. Application Depth</span>
+                    <span className="font-bold">Primary Driver</span>
                   </div>
                   <div className="h-1.5 bg-white/10 rounded-full overflow-hidden">
                     <div className="h-full bg-blue-400 rounded-full" style={{ width: `${profile.scoring.applicationDepthScore}%` }} />
@@ -234,8 +240,8 @@ export const SkillWhyEvidenceModal: React.FC<SkillWhyEvidenceModalProps> = ({
 
                 <div>
                   <div className="flex justify-between text-[10px] text-slate-300 mb-0.5">
-                    <span>2. External Validation (25%)</span>
-                    <span className="font-bold text-emerald-400">{profile.scoring.externalValidationScore}%</span>
+                    <span>2. External Validation</span>
+                    <span className="font-bold text-emerald-400">High Signal</span>
                   </div>
                   <div className="h-1.5 bg-white/10 rounded-full overflow-hidden">
                     <div className="h-full bg-emerald-400 rounded-full" style={{ width: `${profile.scoring.externalValidationScore}%` }} />
@@ -244,8 +250,8 @@ export const SkillWhyEvidenceModal: React.FC<SkillWhyEvidenceModalProps> = ({
 
                 <div>
                   <div className="flex justify-between text-[10px] text-slate-300 mb-0.5">
-                    <span>3. Outcome Metrics (20%)</span>
-                    <span className="font-bold">{profile.scoring.outcomeImpactScore}%</span>
+                    <span>3. Outcome Impact</span>
+                    <span className="font-bold">Core Driver</span>
                   </div>
                   <div className="h-1.5 bg-white/10 rounded-full overflow-hidden">
                     <div className="h-full bg-purple-400 rounded-full" style={{ width: `${profile.scoring.outcomeImpactScore}%` }} />
@@ -254,8 +260,8 @@ export const SkillWhyEvidenceModal: React.FC<SkillWhyEvidenceModalProps> = ({
 
                 <div>
                   <div className="flex justify-between text-[10px] text-slate-300 mb-0.5">
-                    <span>4. Recency Currency (15%)</span>
-                    <span className="font-bold">{profile.scoring.recencyScore}%</span>
+                    <span>4. Recency Currency</span>
+                    <span className="font-bold">Active Signal</span>
                   </div>
                   <div className="h-1.5 bg-white/10 rounded-full overflow-hidden">
                     <div className="h-full bg-amber-400 rounded-full" style={{ width: `${profile.scoring.recencyScore}%` }} />
@@ -703,192 +709,161 @@ export const SkillWhyEvidenceModal: React.FC<SkillWhyEvidenceModalProps> = ({
         {/* TAB 3: RELATIONSHIP MODEL CHAIN */}
         {activeTab === 'relationship_model' && (
           <div className="p-6 overflow-y-auto flex-1 bg-slate-50/50 space-y-5">
-            <div className="bg-white p-4 rounded-2xl border border-slate-200 space-y-1">
-              <h4 className="text-xs font-black uppercase tracking-wider text-slate-900">
-                End-to-End Relationship Lineage
-              </h4>
-              <p className="text-xs text-slate-500">
-                Source → Knowledge → Skill → Competency → Evidence → Project / Artifact / Experience → Role → Job
-              </p>
-            </div>
+            {!isFullAccess ? (
+              <CareerOSIntelligenceGate
+                capability="full_knowledge_graph"
+                variant="inline"
+                sampleCountLabel="Full Source → Capability → Role Lineage Chain requires Full CareerOS Access"
+              />
+            ) : (
+              <>
+                <div className="bg-white p-4 rounded-2xl border border-slate-200 space-y-1">
+                  <h4 className="text-xs font-black uppercase tracking-wider text-slate-900">
+                    End-to-End Relationship Lineage
+                  </h4>
+                  <p className="text-xs text-slate-500">
+                    Source → Knowledge → Skill → Competency → Evidence → Project / Artifact / Experience → Role → Job
+                  </p>
+                </div>
 
-            {/* 8-Stage Flow Diagram */}
-            <div className="space-y-3">
-              
-              {/* 1. Sources */}
-              <div className="p-4 rounded-2xl bg-white border border-slate-200 space-y-2">
-                <span className="text-[10px] font-black uppercase tracking-wider text-blue-600 block">
-                  1. Backing Sources ({profile.relationshipChain.sources.length})
-                </span>
-                <div className="flex flex-wrap gap-2">
-                  {profile.relationshipChain.sources.map(src => (
-                    <span key={src.id} className="text-xs font-semibold px-2.5 py-1 rounded-lg bg-blue-50 text-blue-900 border border-blue-100">
-                      📖 {src.title} ({src.type})
+                <div className="space-y-3">
+                  <div className="p-4 rounded-2xl bg-white border border-slate-200 space-y-2">
+                    <span className="text-[10px] font-black uppercase tracking-wider text-blue-600 block">
+                      1. Backing Sources ({profile.relationshipChain.sources.length})
                     </span>
-                  ))}
-                </div>
-              </div>
-
-              <div className="flex justify-center text-slate-400">
-                <ChevronRight className="w-5 h-5 rotate-90" />
-              </div>
-
-              {/* 2. Knowledge Principles */}
-              <div className="p-4 rounded-2xl bg-white border border-slate-200 space-y-2">
-                <span className="text-[10px] font-black uppercase tracking-wider text-indigo-600 block">
-                  2. Extracted Knowledge Concepts ({profile.relationshipChain.knowledgeConcepts.length})
-                </span>
-                <div className="flex flex-wrap gap-1.5">
-                  {profile.relationshipChain.knowledgeConcepts.map((k, idx) => (
-                    <span key={`k-${idx}`} className="text-xs font-medium px-2.5 py-1 rounded-lg bg-indigo-50 text-indigo-900 border border-indigo-100">
-                      🧠 {k}
-                    </span>
-                  ))}
-                </div>
-              </div>
-
-              <div className="flex justify-center text-slate-400">
-                <ChevronRight className="w-5 h-5 rotate-90" />
-              </div>
-
-              {/* 3. Canonical Skill */}
-              <div className="p-4 rounded-2xl bg-gradient-to-r from-blue-600 to-indigo-600 text-white space-y-1">
-                <span className="text-[10px] font-black uppercase tracking-wider text-blue-200 block">
-                  3. Canonical Core Skill
-                </span>
-                <h3 className="text-base font-black tracking-tight">{profile.canonicalSkillName}</h3>
-                <p className="text-xs text-blue-100">
-                  Multilingual aliases normalized: {profile.aliases.slice(0, 4).join(', ')}
-                </p>
-              </div>
-
-              <div className="flex justify-center text-slate-400">
-                <ChevronRight className="w-5 h-5 rotate-90" />
-              </div>
-
-              {/* 4. High-Level Competencies */}
-              <div className="p-4 rounded-2xl bg-white border border-slate-200 space-y-2">
-                <span className="text-[10px] font-black uppercase tracking-wider text-purple-600 block">
-                  4. Professional Competencies ({profile.relationshipChain.competencies.length})
-                </span>
-                <div className="flex flex-wrap gap-1.5">
-                  {profile.relationshipChain.competencies.map((comp, idx) => (
-                    <span key={`comp-${idx}`} className="text-xs font-semibold px-2.5 py-1 rounded-lg bg-purple-50 text-purple-900 border border-purple-100">
-                      ⚡ {comp}
-                    </span>
-                  ))}
-                </div>
-              </div>
-
-              <div className="flex justify-center text-slate-400">
-                <ChevronRight className="w-5 h-5 rotate-90" />
-              </div>
-
-              {/* 5. Concrete Tangible Manifestations */}
-              <div className="p-4 rounded-2xl bg-white border border-slate-200 space-y-2">
-                <span className="text-[10px] font-black uppercase tracking-wider text-emerald-600 block">
-                  5. Project / Artifact / Work Experience ({profile.relationshipChain.tangibleEntities.length})
-                </span>
-                <div className="flex flex-wrap gap-2">
-                  {profile.relationshipChain.tangibleEntities.map((t, idx) => (
-                    <span key={`tangible-${idx}`} className="text-xs font-bold px-2.5 py-1 rounded-lg bg-emerald-50 text-emerald-900 border border-emerald-200">
-                      📁 {t.title} ({t.type})
-                    </span>
-                  ))}
-                </div>
-              </div>
-
-              <div className="flex justify-center text-slate-400">
-                <ChevronRight className="w-5 h-5 rotate-90" />
-              </div>
-
-              {/* 6. Target Roles & Jobs */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <div className="p-4 rounded-2xl bg-white border border-slate-200 space-y-2">
-                  <span className="text-[10px] font-black uppercase tracking-wider text-amber-600 block">
-                    6. Target Roles Evaluated
-                  </span>
-                  <div className="flex flex-wrap gap-1.5">
-                    {profile.relationshipChain.targetRoles.map((r, idx) => (
-                      <span key={`role-${idx}`} className="text-xs font-bold px-2.5 py-1 rounded-lg bg-amber-50 text-amber-900 border border-amber-200">
-                        💼 {r}
-                      </span>
-                    ))}
-                  </div>
-                </div>
-
-                <div className="p-4 rounded-2xl bg-white border border-slate-200 space-y-2">
-                  <span className="text-[10px] font-black uppercase tracking-wider text-rose-600 block">
-                    7. Matched Jobs in Pipeline
-                  </span>
-                  <div className="flex flex-wrap gap-1.5">
-                    {profile.relationshipChain.matchedJobs.length > 0 ? (
-                      profile.relationshipChain.matchedJobs.map((j, idx) => (
-                        <span key={`job-${idx}`} className="text-xs font-bold px-2.5 py-1 rounded-lg bg-rose-50 text-rose-900 border border-rose-200">
-                          🎯 {j.title} @ {j.company}
+                    <div className="flex flex-wrap gap-2">
+                      {profile.relationshipChain.sources.map(src => (
+                        <span key={src.id} className="text-xs font-semibold px-2.5 py-1 rounded-lg bg-blue-50 text-blue-900 border border-blue-100">
+                          📖 {src.title} ({src.type})
                         </span>
-                      ))
-                    ) : (
-                      <span className="text-xs text-slate-400">Matched across all active Tech & Product job postings</span>
-                    )}
+                      ))}
+                    </div>
+                  </div>
+
+                  <div className="flex justify-center text-slate-400">
+                    <ChevronRight className="w-5 h-5 rotate-90" />
+                  </div>
+
+                  <div className="p-4 rounded-2xl bg-white border border-slate-200 space-y-2">
+                    <span className="text-[10px] font-black uppercase tracking-wider text-indigo-600 block">
+                      2. Extracted Knowledge Concepts ({profile.relationshipChain.knowledgeConcepts.length})
+                    </span>
+                    <div className="flex flex-wrap gap-1.5">
+                      {profile.relationshipChain.knowledgeConcepts.map((k, idx) => (
+                        <span key={`k-${idx}`} className="text-xs font-medium px-2.5 py-1 rounded-lg bg-indigo-50 text-indigo-900 border border-indigo-100">
+                          🧠 {k}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div className="flex justify-center text-slate-400">
+                    <ChevronRight className="w-5 h-5 rotate-90" />
+                  </div>
+
+                  <div className="p-4 rounded-2xl bg-gradient-to-r from-blue-600 to-indigo-600 text-white space-y-1">
+                    <span className="text-[10px] font-black uppercase tracking-wider text-blue-200 block">
+                      3. Canonical Core Skill
+                    </span>
+                    <h3 className="text-base font-black tracking-tight">{profile.canonicalSkillName}</h3>
+                  </div>
+
+                  <div className="flex justify-center text-slate-400">
+                    <ChevronRight className="w-5 h-5 rotate-90" />
+                  </div>
+
+                  <div className="p-4 rounded-2xl bg-white border border-slate-200 space-y-2">
+                    <span className="text-[10px] font-black uppercase tracking-wider text-purple-600 block">
+                      4. Professional Competencies ({profile.relationshipChain.competencies.length})
+                    </span>
+                    <div className="flex flex-wrap gap-1.5">
+                      {profile.relationshipChain.competencies.map((comp, idx) => (
+                        <span key={`comp-${idx}`} className="text-xs font-semibold px-2.5 py-1 rounded-lg bg-purple-50 text-purple-900 border border-purple-100">
+                          ⚡ {comp}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div className="flex justify-center text-slate-400">
+                    <ChevronRight className="w-5 h-5 rotate-90" />
+                  </div>
+
+                  <div className="p-4 rounded-2xl bg-white border border-slate-200 space-y-2">
+                    <span className="text-[10px] font-black uppercase tracking-wider text-emerald-600 block">
+                      5. Project / Artifact / Work Experience ({profile.relationshipChain.tangibleEntities.length})
+                    </span>
+                    <div className="flex flex-wrap gap-2">
+                      {profile.relationshipChain.tangibleEntities.map((t, idx) => (
+                        <span key={`tangible-${idx}`} className="text-xs font-bold px-2.5 py-1 rounded-lg bg-emerald-50 text-emerald-900 border border-emerald-200">
+                          📁 {t.title} ({t.type})
+                        </span>
+                      ))}
+                    </div>
                   </div>
                 </div>
-              </div>
-
-            </div>
+              </>
+            )}
           </div>
         )}
 
         {/* TAB 4: SCORING AUDIT */}
         {activeTab === 'scoring_audit' && (
           <div className="p-6 overflow-y-auto flex-1 bg-slate-50/50 space-y-4">
-            <div className="bg-white p-4 rounded-2xl border border-slate-200 space-y-1">
-              <h4 className="text-xs font-black uppercase tracking-wider text-slate-900">
-                Algorithmic Audit: How {profile.scoring.overallScore}% Was Calculated
-              </h4>
-              <p className="text-xs text-slate-500">
-                Career OS rejects naive source counting. A candidate with 1 demonstrated production artifact outranks someone who read 10 books.
-              </p>
-            </div>
-
-            <div className="space-y-3">
-              {profile.scoring.scoringFactors.map((factor, idx) => (
-                <div key={idx} className="p-4 rounded-2xl bg-white border border-slate-200 space-y-2">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                      <span className="w-5 h-5 rounded-full bg-slate-100 text-slate-700 text-xs font-black flex items-center justify-center">
-                        {idx + 1}
-                      </span>
-                      <h4 className="text-sm font-bold text-slate-900">{factor.name}</h4>
-                      <span className="text-xs text-slate-400">(Weight: {factor.weight}%)</span>
-                    </div>
-
-                    <div className="flex items-center gap-3">
-                      <span className="text-xs text-slate-500">
-                        Score: <strong>{factor.score}/100</strong>
-                      </span>
-                      <span className="text-xs font-black text-blue-600 bg-blue-50 px-2.5 py-0.5 rounded-lg border border-blue-100">
-                        +{factor.weightedContribution} pts
-                      </span>
-                    </div>
-                  </div>
-
-                  <p className="text-xs text-slate-700 leading-relaxed font-normal">
-                    {factor.assessment}
+            {!isFullAccess ? (
+              <CareerOSIntelligenceGate
+                capability="proprietary_scoring_logic"
+                variant="inline"
+                sampleCountLabel="Multi-Factor Evaluation Audit & Signal Drivers require Full CareerOS Access"
+              />
+            ) : (
+              <>
+                <div className="bg-white p-4 rounded-2xl border border-slate-200 space-y-1">
+                  <h4 className="text-xs font-black uppercase tracking-wider text-slate-900">
+                    Evaluation Synthesis: How {profile.scoring.overallScore}% Was Verified
+                  </h4>
+                  <p className="text-xs text-slate-500">
+                    CareerOS prioritizes demonstrated production artifacts and verified outcomes over passive source counts.
                   </p>
-
-                  {factor.evidenceHighlights.length > 0 && (
-                    <div className="flex flex-wrap gap-1.5 pt-1">
-                      {factor.evidenceHighlights.map((hl, hlIdx) => (
-                        <span key={`hl-${hlIdx}`} className="text-[10px] font-semibold px-2 py-0.5 rounded-md bg-slate-100 text-slate-800">
-                          Proof: {hl}
-                        </span>
-                      ))}
-                    </div>
-                  )}
                 </div>
-              ))}
-            </div>
+
+                <div className="space-y-3">
+                  {profile.scoring.scoringFactors.map((factor, idx) => (
+                    <div key={idx} className="p-4 rounded-2xl bg-white border border-slate-200 space-y-2">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                          <span className="w-5 h-5 rounded-full bg-slate-100 text-slate-700 text-xs font-black flex items-center justify-center">
+                            {idx + 1}
+                          </span>
+                          <h4 className="text-sm font-bold text-slate-900">{factor.name}</h4>
+                          <span className="text-xs text-slate-400">• Verified Signal Driver</span>
+                        </div>
+
+                        <div className="flex items-center gap-3">
+                          <span className="text-xs font-black text-blue-600 bg-blue-50 px-2.5 py-0.5 rounded-lg border border-blue-100">
+                            {factor.score >= 80 ? 'Strong Signal' : factor.score >= 60 ? 'Moderate Signal' : 'Emerging Signal'}
+                          </span>
+                        </div>
+                      </div>
+
+                      <p className="text-xs text-slate-700 leading-relaxed font-normal">
+                        {factor.assessment}
+                      </p>
+
+                      {factor.evidenceHighlights.length > 0 && (
+                        <div className="flex flex-wrap gap-1.5 pt-1">
+                          {factor.evidenceHighlights.map((hl, hlIdx) => (
+                            <span key={`hl-${hlIdx}`} className="text-[10px] font-semibold px-2 py-0.5 rounded-md bg-slate-100 text-slate-800">
+                              Proof: {hl}
+                            </span>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </>
+            )}
           </div>
         )}
 

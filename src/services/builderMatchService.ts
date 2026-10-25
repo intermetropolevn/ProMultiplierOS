@@ -13,6 +13,9 @@ import {
   INITIAL_TEAMS, 
   INITIAL_MY_BUILDS 
 } from '../data/builderMatchData';
+import { curatedBetaData } from './curatedBetaData';
+import { AccessControlService } from './accessControlService';
+import { demoWorkspaceService } from './demoWorkspaceService';
 
 const STORAGE_KEYS = {
   OPPORTUNITIES: 'career_os_builder_match_opportunities_v1',
@@ -36,9 +39,24 @@ export const BuilderMatchService = {
 
   // 1. OPPORTUNITIES
   getAllBuildOpportunities(): BuildOpportunity[] {
+    const access = AccessControlService.getAccessLevel();
+
+    if (access === 'DEMO') {
+      return demoWorkspaceService.getBuildOpportunities();
+    }
+
+    const savedIds = this.getSavedBuildIds();
+
+    if (curatedBetaData.isCuratedBetaActive()) {
+      const curated = curatedBetaData.getBuildOpportunities();
+      return curated.map(item => ({
+        ...item,
+        isSaved: savedIds.includes(item.id)
+      }));
+    }
+
     try {
       const stored = localStorage.getItem(STORAGE_KEYS.OPPORTUNITIES);
-      const savedIds = this.getSavedBuildIds();
       let list: BuildOpportunity[] = stored ? JSON.parse(stored) : INITIAL_BUILD_OPPORTUNITIES;
       return list.map(item => ({
         ...item,
@@ -55,8 +73,35 @@ export const BuilderMatchService = {
   },
 
   saveBuildOpportunity(opportunity: BuildOpportunity): BuildOpportunity {
+    const isDemo = AccessControlService.getAccessLevel() === 'DEMO';
     const list = this.getAllBuildOpportunities();
     const index = list.findIndex(o => o.id === opportunity.id);
+
+    if (index < 0) {
+      // New opportunity creation: check access control limit
+      let customCount = 0;
+      if (isDemo) {
+        customCount = demoWorkspaceService.getCategoryUsage('builds').used;
+      } else {
+        try {
+          const stored = localStorage.getItem(STORAGE_KEYS.OPPORTUNITIES);
+          if (stored) {
+            const storedList: BuildOpportunity[] = JSON.parse(stored);
+            customCount = storedList.filter(item => !INITIAL_BUILD_OPPORTUNITIES.some(init => init.id === item.id)).length;
+          }
+        } catch {}
+      }
+      const decision = AccessControlService.canCreateWorkflowItem('build_opportunities', customCount);
+      if (!decision.allowed) {
+        console.warn('Build opportunity creation blocked by access control:', decision.reason);
+        throw new Error(decision.reason || 'Creation restricted by active access tier.');
+      }
+    }
+
+    if (isDemo) {
+      return demoWorkspaceService.saveBuildOpportunity(opportunity, index < 0);
+    }
+
     if (index >= 0) {
       list[index] = opportunity;
     } else {
@@ -68,6 +113,9 @@ export const BuilderMatchService = {
   },
 
   toggleSaveBuild(id: string): boolean {
+    if (AccessControlService.getAccessLevel() === 'DEMO') {
+      return demoWorkspaceService.toggleSaveBuild(id);
+    }
     const saved = this.getSavedBuildIds();
     let isNowSaved = false;
     if (saved.includes(id)) {
@@ -84,6 +132,9 @@ export const BuilderMatchService = {
   },
 
   getSavedBuildIds(): string[] {
+    if (AccessControlService.getAccessLevel() === 'DEMO') {
+      return demoWorkspaceService.getSavedBuildIds();
+    }
     try {
       const stored = localStorage.getItem(STORAGE_KEYS.SAVED_BUILDS);
       return stored ? JSON.parse(stored) : ['build-saas-activation', 'build-cobuilder-knowledge-graph'];
@@ -94,9 +145,20 @@ export const BuilderMatchService = {
 
   // 2. BUILDERS
   getAllBuilders(): BuilderProfile[] {
+    if (AccessControlService.getAccessLevel() === 'DEMO') {
+      return demoWorkspaceService.getBuilders();
+    }
+    const savedIds = this.getSavedBuilderIds();
+
+    if (curatedBetaData.isCuratedBetaActive()) {
+      return curatedBetaData.getBuilders().map(b => ({
+        ...b,
+        isSaved: savedIds.includes(b.id)
+      }));
+    }
+
     try {
       const stored = localStorage.getItem(STORAGE_KEYS.BUILDERS);
-      const savedIds = this.getSavedBuilderIds();
       let list: BuilderProfile[] = stored ? JSON.parse(stored) : INITIAL_BUILDERS;
       return list.map(b => ({
         ...b,
@@ -112,6 +174,9 @@ export const BuilderMatchService = {
   },
 
   toggleSaveBuilder(id: string): boolean {
+    if (AccessControlService.getAccessLevel() === 'DEMO') {
+      return demoWorkspaceService.toggleSaveBuilder(id);
+    }
     const saved = this.getSavedBuilderIds();
     let isNowSaved = false;
     if (saved.includes(id)) {
@@ -128,6 +193,9 @@ export const BuilderMatchService = {
   },
 
   getSavedBuilderIds(): string[] {
+    if (AccessControlService.getAccessLevel() === 'DEMO') {
+      return demoWorkspaceService.getSavedBuilderIds();
+    }
     try {
       const stored = localStorage.getItem(STORAGE_KEYS.SAVED_BUILDERS);
       return stored ? JSON.parse(stored) : ['builder-liza', 'builder-marcus'];
@@ -138,6 +206,13 @@ export const BuilderMatchService = {
 
   // 3. TEAMS
   getAllTeams(): BuildTeam[] {
+    if (AccessControlService.getAccessLevel() === 'DEMO') {
+      return demoWorkspaceService.getTeams();
+    }
+    if (curatedBetaData.isCuratedBetaActive()) {
+      return curatedBetaData.getTeams();
+    }
+
     try {
       const stored = localStorage.getItem(STORAGE_KEYS.TEAMS);
       return stored ? JSON.parse(stored) : INITIAL_TEAMS;
@@ -147,12 +222,27 @@ export const BuilderMatchService = {
   },
 
   createTeam(teamData: Omit<BuildTeam, 'id' | 'createdAt'>): BuildTeam {
+    const isDemo = AccessControlService.getAccessLevel() === 'DEMO';
     const teams = this.getAllTeams();
+    const customCount = isDemo
+      ? demoWorkspaceService.getCategoryUsage('builds').used
+      : teams.filter(t => !INITIAL_TEAMS.some(init => init.id === t.id)).length;
+    const decision = AccessControlService.canCreateWorkflowItem('teams', customCount);
+    if (!decision.allowed) {
+      console.warn('Team creation blocked by access control:', decision.reason);
+      throw new Error(decision.reason || 'Team creation restricted by active access tier.');
+    }
+
     const newTeam: BuildTeam = {
       ...teamData,
       id: `team-${Date.now()}`,
       createdAt: new Date().toISOString().split('T')[0]
     };
+
+    if (isDemo) {
+      return demoWorkspaceService.addTeam(newTeam);
+    }
+
     teams.unshift(newTeam);
     localStorage.setItem(STORAGE_KEYS.TEAMS, JSON.stringify(teams));
     this.notify();
@@ -161,6 +251,9 @@ export const BuilderMatchService = {
 
   // 4. MY BUILDS
   getMyBuilds(): MyBuildItem[] {
+    if (AccessControlService.getAccessLevel() === 'DEMO') {
+      return demoWorkspaceService.getMyBuilds();
+    }
     try {
       const stored = localStorage.getItem(STORAGE_KEYS.MY_BUILDS);
       return stored ? JSON.parse(stored) : INITIAL_MY_BUILDS;
@@ -170,17 +263,34 @@ export const BuilderMatchService = {
   },
 
   saveMyBuilds(items: MyBuildItem[]) {
+    if (AccessControlService.getAccessLevel() === 'DEMO') {
+      demoWorkspaceService.saveMyBuilds(items, true);
+      return;
+    }
     localStorage.setItem(STORAGE_KEYS.MY_BUILDS, JSON.stringify(items));
     this.notify();
   },
 
   joinBuild(opportunity: BuildOpportunity, role: string): MyBuildItem {
+    if (!AccessControlService.can('canStartBuild')) {
+      const decision = AccessControlService.checkActionAllowed('start_build');
+      throw new Error(decision.message || 'Starting or joining builds requires Demo Workspace or Full Access.');
+    }
+
     const myBuilds = this.getMyBuilds();
     const existing = myBuilds.find(b => b.opportunityId === opportunity.id);
     if (existing) {
       existing.role = role;
       this.saveMyBuilds(myBuilds);
       return existing;
+    }
+
+    if (AccessControlService.getAccessLevel() === 'DEMO') {
+      const usage = demoWorkspaceService.getCategoryUsage('builds');
+      const isAlreadyCountedBuildOpp = usage.createdEntityIds.includes(opportunity.id);
+      if (!isAlreadyCountedBuildOpp && usage.isAtLimit) {
+        throw new Error('Demo limit reached');
+      }
     }
 
     const newItem: MyBuildItem = {
@@ -207,6 +317,11 @@ export const BuilderMatchService = {
 
   // 5. CAREER EVIDENCE CONVERSION (Requirement 13)
   convertBuildToEvidence(buildId: string, evidenceData: Omit<CareerEvidence, 'id' | 'verifiedAt' | 'readinessBoost'>): CareerEvidence {
+    if (!AccessControlService.can('canCreate')) {
+      const decision = AccessControlService.checkActionAllowed('create');
+      throw new Error(decision.message || 'Evidence creation is restricted in this access tier.');
+    }
+
     const myBuilds = this.getMyBuilds();
     const build = myBuilds.find(b => b.id === buildId);
 
@@ -240,12 +355,17 @@ export const BuilderMatchService = {
   },
 
   getAllCareerEvidence(): CareerEvidence[] {
+    const access = AccessControlService.getAccessLevel();
     try {
       const stored = localStorage.getItem(STORAGE_KEYS.CAREER_EVIDENCE);
-      if (stored) return JSON.parse(stored);
-      // Fallback: extract evidence from initial builds
-      const initial = INITIAL_MY_BUILDS.filter(b => b.careerEvidence).map(b => b.careerEvidence!);
-      return initial;
+      let list: CareerEvidence[] = stored ? JSON.parse(stored) : [];
+      if (!list || list.length === 0) {
+        list = INITIAL_MY_BUILDS.filter(b => b.careerEvidence).map(b => b.careerEvidence!);
+      }
+      if (access === 'PUBLIC') return list.slice(0, 1);
+      if (access === 'GUEST') return list.slice(0, 3);
+      if (access === 'DEMO') return list.slice(0, 5);
+      return list;
     } catch {
       return [];
     }
@@ -254,6 +374,11 @@ export const BuilderMatchService = {
   // 6. AI STRUCTURING ASSISTANT (Requirement 10 & 17)
   // Converts rough / incomplete user ideas into structured Build Opportunities
   aiStructureBuild(rawText: string, intent: BuildIntent = 'solve_challenge'): Partial<BuildOpportunity> {
+    if (!AccessControlService.can('canUseAI')) {
+      const decision = AccessControlService.checkActionAllowed('ai');
+      throw new Error(decision.message || 'AI features require Demo Workspace or Full Access.');
+    }
+
     const lower = rawText.toLowerCase();
 
     // Determine type
@@ -340,6 +465,15 @@ export const BuilderMatchService = {
     gaps: string[];
     recommendedMembers: BuilderProfile[];
   } {
+    if (!AccessControlService.can('canUseAI')) {
+      return {
+        fitScore: 0,
+        roleBreakdown: [],
+        strengths: [],
+        gaps: [],
+        recommendedMembers: []
+      };
+    }
     const allBuilders = this.getAllBuilders();
     const roleBreakdown = [
       { role: 'Product Lead', matchPercent: 94 },

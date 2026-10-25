@@ -10,6 +10,9 @@ import { BOOKS_DATA } from '../../../data/booksData';
 import { JobListing, RoleBlueprint } from '../../../types';
 import { getEvidenceStrengthDefinition } from '../taxonomy';
 import { CanonicalSkillRegistry } from '../../intelligence/services/canonicalSkillRegistry';
+import { curatedBetaData } from '../../../services/curatedBetaData';
+import { AccessControlService } from '../../../services/accessControlService';
+import { dataExposureGuard } from '../../../services/dataExposureGuardService';
 
 const STORAGE_KEY = 'career_os_sources_registry_v1';
 
@@ -761,6 +764,10 @@ class SourceStore {
 
   private load(): void {
     try {
+      if (!dataExposureGuard.canPersistFullCatalogToStorage()) {
+        this.sources = INITIAL_SEED_SOURCES.map(s => this.sanitizeSource(s));
+        return;
+      }
       const stored = localStorage.getItem(STORAGE_KEY);
       if (stored) {
         const parsed = JSON.parse(stored);
@@ -786,23 +793,42 @@ class SourceStore {
   }
 
   private save(): void {
-    try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(this.sources));
-    } catch (e) {
-      console.error('Failed to save sources to localStorage', e);
+    if (dataExposureGuard.canPersistFullCatalogToStorage()) {
+      try {
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(this.sources));
+      } catch (e) {
+        console.error('Failed to save sources to localStorage', e);
+      }
     }
     this.notify();
   }
 
   getSources(): NormalizedSource[] {
+    const tier = AccessControlService.getAccessLevel();
+    if (tier === 'PUBLIC') {
+      return dataExposureGuard.paginateAndProject('sources', this.sources.slice(0, 1), undefined, 'PUBLIC').items;
+    }
+    if (tier === 'GUEST') {
+      return dataExposureGuard.paginateAndProject('sources', this.sources.slice(0, 3), undefined, 'GUEST').items;
+    }
+    if (tier === 'DEMO') {
+      return dataExposureGuard.paginateAndProject('sources', this.sources.slice(0, 5), undefined, 'DEMO').items;
+    }
     return [...this.sources];
   }
 
   getSourceById(id: string): NormalizedSource | undefined {
-    return this.sources.find(s => s.id === id);
+    return dataExposureGuard.authorizeSingleRecordLookup('sources', id, this.getSources());
   }
 
   addSource(source: NormalizedSource): NormalizedSource {
+    const auth = dataExposureGuard.assertWriteAuthorized('sources', 'create');
+    if (!auth.allowed) {
+      throw new Error(auth.reason || 'Source creation is restricted in current access mode.');
+    }
+    if (!dataExposureGuard.checkDuplicateSubmit('sources', `add:${source.title}`)) {
+      return this.sources[0];
+    }
     const cleanSource = this.sanitizeSource(source);
     const existingIndex = this.sources.findIndex(s => s.id === cleanSource.id);
     if (existingIndex >= 0) {
@@ -819,6 +845,8 @@ class SourceStore {
   }
 
   updateSource(id: string, updates: Partial<NormalizedSource>): NormalizedSource | undefined {
+    const auth = dataExposureGuard.assertWriteAuthorized('sources', 'update');
+    if (!auth.allowed) return undefined;
     const index = this.sources.findIndex(s => s.id === id);
     if (index === -1) return undefined;
 
@@ -833,6 +861,8 @@ class SourceStore {
   }
 
   deleteSource(id: string): boolean {
+    const auth = dataExposureGuard.assertWriteAuthorized('sources', 'delete');
+    if (!auth.allowed) return false;
     const initialLen = this.sources.length;
     this.sources = this.sources.filter(s => s.id !== id);
     if (this.sources.length !== initialLen) {
@@ -862,8 +892,9 @@ class SourceStore {
       sources: NormalizedSource[];
     }>();
 
-    // Map skills from all sources with Canonical Multilingual Resolution
-    for (const src of this.sources) {
+    // Map skills only from tier-authorized sources with Canonical Multilingual Resolution
+    const authorizedSources = this.getSources();
+    for (const src of authorizedSources) {
       const allSkills = new Set([...src.confirmedSkills, ...src.inferredSkills]);
       for (const skill of allSkills) {
         const canonical = CanonicalSkillRegistry.resolve(skill);
@@ -1137,7 +1168,8 @@ class SourceStore {
     const demonstratedSkills = new Set<string>();
     const validatedSkills = new Set<string>();
 
-    for (const src of this.sources) {
+    const authorizedSources = this.getSources();
+    for (const src of authorizedSources) {
       switch (src.sourceFamily) {
         case 'learn': learningSources++; break;
         case 'credential': credentials++; break;
@@ -1164,11 +1196,11 @@ class SourceStore {
       });
     }
 
-    const totalSources = this.sources.length || 1;
+    const totalSources = authorizedSources.length || 1;
     const evidenceCoverage = Math.min(100, Math.round((validatedEvidence / totalSources) * 100));
 
     return {
-      totalSources: this.sources.length,
+      totalSources: authorizedSources.length,
       learningSources,
       credentials,
       knowledgeSources,

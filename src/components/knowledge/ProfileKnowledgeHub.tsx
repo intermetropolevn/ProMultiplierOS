@@ -31,6 +31,7 @@ import {
 import { KnowledgeStorageService } from '../../features/knowledge/services/knowledgeStorageService';
 import { applicationStore } from '../../features/applications/services/applicationStore';
 import { ContextualIntelligenceEngine } from '../../features/applications/services/contextualIntelligenceEngine';
+import { AccessControlService } from '../../services/accessControlService';
 import { EvidenceSection } from './EvidenceSection';
 import { StoryBankSection } from './StoryBankSection';
 import { AnswerBlueprintsSection } from './AnswerBlueprintsSection';
@@ -245,6 +246,11 @@ export const ProfileKnowledgeHub: React.FC<ProfileKnowledgeHubProps> = ({
 
   // Export / Import / Reset
   const handleExport = () => {
+    if (!AccessControlService.can('canExport')) {
+      const decision = AccessControlService.checkActionAllowed('export');
+      showNotification(decision.message || 'Data export requires Full Access tier.');
+      return;
+    }
     const jsonStr = KnowledgeStorageService.exportKnowledgeJson();
     const blob = new Blob([jsonStr], { type: 'application/json' });
     const url = URL.createObjectURL(blob);

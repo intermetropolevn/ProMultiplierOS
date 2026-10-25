@@ -14,6 +14,10 @@ import {
   UserCheck
 } from 'lucide-react';
 import { InterviewConfig, RoleCategory, SectorDomain, ExperienceLevel, QuestionType, QuestionSetId } from '../../types';
+import { useAccessControl } from '../../services/accessControlService';
+import { IntelligenceAccessBanner } from '../access/IntelligenceAccessBanner';
+import { LiveInterviewEcosystemService } from '../../services/liveInterviewEcosystemService';
+import { ConnectedEcosystemChainStrip } from './InterviewIntelligenceOutcomePanel';
 
 interface PracticeSetupProps {
   initialConfig?: Partial<InterviewConfig>;
@@ -24,6 +28,10 @@ export const PracticeSetup: React.FC<PracticeSetupProps> = ({
   initialConfig,
   onStartSession,
 }) => {
+  const { accessLevel } = useAccessControl();
+  const isGuest = accessLevel === 'PUBLIC' || accessLevel === 'GUEST';
+  const isDemo = accessLevel === 'DEMO';
+
   const [roleCategory, setRoleCategory] = useState<RoleCategory>(
     initialConfig?.roleCategory || 'Software Engineering'
   );
@@ -46,14 +54,23 @@ export const PracticeSetup: React.FC<PracticeSetupProps> = ({
     initialConfig?.enableVoiceReading ?? true
   );
   const [interviewMode, setInterviewMode] = useState<'mock' | 'live_intelligence'>(
-    initialConfig?.interviewMode || 'mock'
+    initialConfig?.interviewMode || 'live_intelligence'
   );
   const [mockExperienceType, setMockExperienceType] = useState<'realtime_ai' | 'classic' | 'timed_assignment'>(
     initialConfig?.mockExperienceType || 'realtime_ai'
   );
   const [questionSet, setQuestionSet] = useState<QuestionSetId>(
-    initialConfig?.questionSet || 'standard_curriculum'
+    initialConfig?.questionSet || 'architecture_scale'
   );
+
+  const upstreamContext = LiveInterviewEcosystemService.resolveUpstreamContext({
+    roleCategory,
+    domain,
+    level,
+    interviewType,
+    questionCount,
+    questionSet
+  });
 
   const roles: RoleCategory[] = [
     'Software Engineering',
@@ -112,13 +129,19 @@ export const PracticeSetup: React.FC<PracticeSetupProps> = ({
     }
   ];
 
+  const effectiveQuestionCount = isGuest
+    ? 1
+    : isDemo
+      ? Math.min(questionCount, 2)
+      : questionCount;
+
   const handleLaunch = () => {
     onStartSession({
       roleCategory,
       domain,
       level,
       interviewType,
-      questionCount,
+      questionCount: effectiveQuestionCount,
       timePerQuestionSeconds: timePerQuestion,
       enableVoiceReading,
       interviewMode,
@@ -128,18 +151,24 @@ export const PracticeSetup: React.FC<PracticeSetupProps> = ({
   };
 
   return (
-    <div className="max-w-4xl mx-auto space-y-8">
+    <div className="max-w-4xl mx-auto space-y-6">
+      {/* Subtle Intelligence Access Banner */}
+      <IntelligenceAccessBanner featureName="Interview Practice & Live Intelligence" />
+
+      {/* Connected CareerOS Intelligence Ecosystem Pipeline */}
+      <ConnectedEcosystemChainStrip activeStage="setup" upstream={upstreamContext} />
+
       {/* Studio Header */}
       <div className="text-center space-y-2">
         <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-blue-50 border border-blue-200/80 text-blue-700 text-xs font-bold uppercase tracking-wider">
           <Sparkles className="w-3.5 h-3.5 text-blue-600" />
-          Interactive Mock Interview Studio
+          Connected Live Interview &amp; Calibration Studio
         </div>
         <h2 className="text-3xl font-extrabold text-slate-900 tracking-tight">
           Configure Your Calibration Session
         </h2>
         <p className="text-sm text-slate-600 max-w-xl mx-auto leading-relaxed">
-          Simulate real-world hiring loops. Tailor your target role, industry sector, and question type with automated voice narration and STAR rubric evaluation.
+          Connected directly to your Target Role, Role Blueprint, Capability Model, and Q&amp;A Blueprints. Interview performance signals flow into Evidence, Readiness, and your Next Best Action.
         </p>
       </div>
 

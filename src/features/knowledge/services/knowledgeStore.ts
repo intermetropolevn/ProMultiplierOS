@@ -10,6 +10,8 @@ import {
 import { BOOKS_DATA } from '../../../data/booksData';
 import { KNOWLEDGE_UNITS_DATA } from '../../../data/knowledgeUnitsData';
 import { RESEARCH_PAPERS_DATA, ARTICLES_DATA, SYNTHESES_DATA } from '../../../data/researchPapersData';
+import { AccessControlService } from '../../../services/accessControlService';
+import { dataExposureGuard } from '../../../services/dataExposureGuardService';
 
 class KnowledgeStore {
   private units: KnowledgeUnit[] = [...KNOWLEDGE_UNITS_DATA];
@@ -18,16 +20,34 @@ class KnowledgeStore {
   private articles: ArticleSource[] = [...ARTICLES_DATA];
   private syntheses: CrossSourceSynthesis[] = [...SYNTHESES_DATA];
 
+  private sliceByTier<T>(resource: string, list: T[]): T[] {
+    const tier = AccessControlService.getAccessLevel();
+    if (tier === 'PUBLIC') {
+      return dataExposureGuard.paginateAndProject(resource, list.slice(0, 1), undefined, 'PUBLIC').items;
+    }
+    if (tier === 'GUEST') {
+      return dataExposureGuard.paginateAndProject(resource, list.slice(0, 3), undefined, 'GUEST').items;
+    }
+    if (tier === 'DEMO') {
+      return dataExposureGuard.paginateAndProject(resource, list.slice(0, 5), undefined, 'DEMO').items;
+    }
+    return [...list];
+  }
+
   // Knowledge Units
   getKnowledgeUnits(): KnowledgeUnit[] {
-    return [...this.units];
+    return this.sliceByTier('knowledge_units', this.units);
   }
 
   getKnowledgeUnitById(id: string): KnowledgeUnit | undefined {
-    return this.units.find(u => u.id === id);
+    return dataExposureGuard.authorizeSingleRecordLookup('knowledge_units', id, this.getKnowledgeUnits());
   }
 
   addKnowledgeUnit(unit: KnowledgeUnit): void {
+    const auth = dataExposureGuard.assertWriteAuthorized('knowledge_units', 'create');
+    if (!auth.allowed) {
+      throw new Error(auth.reason || 'Knowledge unit creation restricted by access tier.');
+    }
     const existingIdx = this.units.findIndex(u => u.id === unit.id);
     if (existingIdx >= 0) {
       this.units[existingIdx] = unit;
@@ -38,14 +58,18 @@ class KnowledgeStore {
 
   // Books
   getBooks(): Book[] {
-    return [...this.books];
+    return this.sliceByTier('books', this.books);
   }
 
   getBookById(id: string): Book | undefined {
-    return this.books.find(b => b.id === id);
+    return dataExposureGuard.authorizeSingleRecordLookup('books', id, this.getBooks());
   }
 
   addBook(book: Book): void {
+    const auth = dataExposureGuard.assertWriteAuthorized('books', 'create');
+    if (!auth.allowed) {
+      throw new Error(auth.reason || 'Book creation restricted by access tier.');
+    }
     const existingIdx = this.books.findIndex(b => b.id === book.id);
     if (existingIdx >= 0) {
       this.books[existingIdx] = book;
@@ -56,28 +80,28 @@ class KnowledgeStore {
 
   // Research Papers
   getResearchPapers(): ResearchPaper[] {
-    return [...this.research];
+    return this.sliceByTier('research_papers', this.research);
   }
 
   getResearchPaperById(id: string): ResearchPaper | undefined {
-    return this.research.find(r => r.id === id);
+    return dataExposureGuard.authorizeSingleRecordLookup('research_papers', id, this.getResearchPapers());
   }
 
   // Articles
   getArticles(): ArticleSource[] {
-    return [...this.articles];
+    return this.sliceByTier('articles', this.articles);
   }
 
   getArticleById(id: string): ArticleSource | undefined {
-    return this.articles.find(a => a.id === id);
+    return dataExposureGuard.authorizeSingleRecordLookup('articles', id, this.getArticles());
   }
 
   // Syntheses
   getSyntheses(): CrossSourceSynthesis[] {
-    return [...this.syntheses];
+    return this.sliceByTier('syntheses', this.syntheses);
   }
 
-  // Knowledge Graph Generator
+  // Knowledge Graph Generator (Scoped strictly to tier-authorized Knowledge Units)
   getKnowledgeGraph(): { nodes: KnowledgeGraphNode[]; links: KnowledgeGraphLink[] } {
     const nodes: KnowledgeGraphNode[] = [];
     const links: KnowledgeGraphLink[] = [];
@@ -90,8 +114,11 @@ class KnowledgeStore {
       }
     };
 
-    // 1. Add Knowledge Units as Nodes
-    for (const unit of this.units) {
+    const authorizedUnits = this.getKnowledgeUnits();
+    const authorizedUnitIds = new Set(authorizedUnits.map(u => u.id));
+
+    // 1. Add Authorized Knowledge Units as Nodes
+    for (const unit of authorizedUnits) {
       addNode({
         id: unit.id,
         label: unit.title,
@@ -167,15 +194,17 @@ class KnowledgeStore {
         });
       }
 
-      // Related concepts
+      // Related concepts (only link if target is also within authorized graph slice)
       if (unit.relatedConcepts) {
         for (const relatedId of unit.relatedConcepts) {
-          links.push({
-            source: unit.id,
-            target: relatedId,
-            relation: 'RELATED_TO',
-            label: 'related to'
-          });
+          if (authorizedUnitIds.has(relatedId)) {
+            links.push({
+              source: unit.id,
+              target: relatedId,
+              relation: 'RELATED_TO',
+              label: 'related to'
+            });
+          }
         }
       }
     }

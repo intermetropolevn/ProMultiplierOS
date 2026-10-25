@@ -15,11 +15,37 @@ import {
 } from 'lucide-react';
 import { EvidenceGraphData, EvidenceGraphNode } from '../../features/evidenceIntelligence/types';
 import { evidenceIntelligenceStore } from '../../features/evidenceIntelligence/services/evidenceIntelligenceStore';
+import { useAccessControl } from '../../services/accessControlService';
+import { CareerOSIntelligenceGate, IntelligenceModeBadge } from '../access/CareerOSIntelligenceGate';
 
 export const EvidenceGraphView: React.FC = () => {
-  const graphData = evidenceIntelligenceStore.getGraphData();
+  const { accessLevel, getIntelligenceAccess, consumeDemoIntelligenceSignal } = useAccessControl();
+  const rawGraphData = evidenceIntelligenceStore.getGraphData();
   const [selectedNodeId, setSelectedNodeId] = useState<string>('node-init-onboarding');
   const [activeGroupFilter, setActiveGroupFilter] = useState<string>('all');
+  const [isGateModalOpen, setIsGateModalOpen] = useState(false);
+
+  const isFullAccess = accessLevel === 'FULL_ACCESS';
+  const isGuest = accessLevel === 'PUBLIC_GUEST';
+  const intelAccess = getIntelligenceAccess('evidence_graph');
+
+  // Access-aware graph data: do not send hidden graph nodes to Guest/Demo DOM
+  const graphData: EvidenceGraphData = useMemo(() => {
+    if (isFullAccess) return rawGraphData;
+    const maxPerType = isGuest ? 1 : 2;
+    const typeCounts: Record<string, number> = {};
+    const visibleNodes = rawGraphData.nodes.filter(n => {
+      if (n.type === 'user') return true;
+      const limit = n.type === 'activity' || n.type === 'artifact' ? maxPerType + 1 : maxPerType;
+      typeCounts[n.type] = (typeCounts[n.type] || 0) + 1;
+      return typeCounts[n.type] <= limit;
+    });
+    const visibleIds = new Set(visibleNodes.map(n => n.id));
+    const visibleLinks = rawGraphData.links.filter(
+      l => visibleIds.has(l.source) && visibleIds.has(l.target)
+    );
+    return { nodes: visibleNodes, links: visibleLinks };
+  }, [rawGraphData, isFullAccess, isGuest]);
 
   const groups = [
     { id: 'all', label: 'Complete Lineage' },
@@ -36,13 +62,29 @@ export const EvidenceGraphView: React.FC = () => {
     return graphData.nodes.filter(n => n.group === activeGroupFilter || n.group === 'root');
   }, [graphData.nodes, activeGroupFilter]);
 
-  const selectedNode = graphData.nodes.find(n => n.id === selectedNodeId) || graphData.nodes[1];
+  const selectedNode = graphData.nodes.find(n => n.id === selectedNodeId) || graphData.nodes[0];
 
   const connectedLinks = useMemo(() => {
+    if (!selectedNode) return [];
     return graphData.links.filter(
-      l => l.source === selectedNodeId || l.target === selectedNodeId
+      l => l.source === selectedNode.id || l.target === selectedNode.id
     );
-  }, [graphData.links, selectedNodeId]);
+  }, [graphData.links, selectedNode]);
+
+  const handleSelectNode = (nodeId: string) => {
+    if (isGuest && nodeId !== selectedNodeId) {
+      setIsGateModalOpen(true);
+      return;
+    }
+    if (!isFullAccess && nodeId !== selectedNodeId) {
+      const allowed = consumeDemoIntelligenceSignal('evidence_graph', `node-${nodeId}`);
+      if (!allowed) {
+        setIsGateModalOpen(true);
+        return;
+      }
+    }
+    setSelectedNodeId(nodeId);
+  };
 
   const getNodeColor = (type: string) => {
     switch (type) {
@@ -64,10 +106,11 @@ export const EvidenceGraphView: React.FC = () => {
       {/* 1. Header Banner */}
       <div className="bg-white rounded-2xl border border-slate-200/90 shadow-2xs p-5 sm:p-6 space-y-4">
         <div className="space-y-1">
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 flex-wrap">
             <span className="text-[10px] font-black uppercase tracking-wider px-2 py-0.5 rounded bg-blue-50 text-blue-700 border border-blue-200">
               Evidence Graph
             </span>
+            <IntelligenceModeBadge capability="evidence_graph" />
             <span className="text-slate-300">·</span>
             <span className="text-xs text-slate-500 font-medium">End-to-End Lineage &amp; Grounding</span>
           </div>
@@ -99,7 +142,7 @@ export const EvidenceGraphView: React.FC = () => {
           </div>
 
           <span className="text-xs text-slate-400 font-mono shrink-0">
-            {filteredNodes.length} Nodes · {graphData.links.length} Relations
+            {isFullAccess ? `${filteredNodes.length} Nodes · ${graphData.links.length} Relations` : `Sample Lineage Preview`}
           </span>
         </div>
       </div>
@@ -109,11 +152,13 @@ export const EvidenceGraphView: React.FC = () => {
         
         {/* Left 8 Cols: Visual Lineage Matrix Canvas */}
         <div className="lg:col-span-8 bg-white rounded-2xl border border-slate-200/90 shadow-2xs p-5 sm:p-6 space-y-6">
-          <div className="flex items-center justify-between">
+          <div className="flex items-center justify-between flex-wrap gap-2">
             <span className="text-xs font-bold text-slate-900 uppercase tracking-wider">
-              Lineage Hierarchy (Click any node to trace lineage)
+              {isFullAccess ? 'Lineage Hierarchy (Click any node to trace lineage)' : 'Sample Lineage Hierarchy Preview'}
             </span>
-            <span className="text-[11px] text-slate-400">Section 13 signature visualization</span>
+            <span className="text-[11px] text-slate-400">
+              {isFullAccess ? 'Full Verified Proof Graph' : 'Curated Sample Branch'}
+            </span>
           </div>
 
           {/* Interactive Structured Step-down Pipeline Map */}
@@ -129,9 +174,9 @@ export const EvidenceGraphView: React.FC = () => {
                   <button
                     key={node.id}
                     type="button"
-                    onClick={() => setSelectedNodeId(node.id)}
+                    onClick={() => handleSelectNode(node.id)}
                     className={`px-3.5 py-1.5 rounded-xl border text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
-                      selectedNodeId === node.id 
+                      selectedNode?.id === node.id 
                         ? 'bg-rose-600 text-white border-rose-600 shadow-xs ring-2 ring-rose-400/20' 
                         : 'bg-white border-rose-200 text-rose-900 hover:bg-rose-50'
                     }`}
@@ -157,9 +202,9 @@ export const EvidenceGraphView: React.FC = () => {
                   <button
                     key={node.id}
                     type="button"
-                    onClick={() => setSelectedNodeId(node.id)}
+                    onClick={() => handleSelectNode(node.id)}
                     className={`px-3.5 py-1.5 rounded-xl border text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
-                      selectedNodeId === node.id 
+                      selectedNode?.id === node.id 
                         ? 'bg-indigo-600 text-white border-indigo-600 shadow-xs ring-2 ring-indigo-400/20' 
                         : 'bg-white border-indigo-200 text-indigo-900 hover:bg-indigo-50'
                     }`}
@@ -188,9 +233,9 @@ export const EvidenceGraphView: React.FC = () => {
                   <button
                     key={node.id}
                     type="button"
-                    onClick={() => setSelectedNodeId(node.id)}
+                    onClick={() => handleSelectNode(node.id)}
                     className={`px-3.5 py-1.5 rounded-xl border text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
-                      selectedNodeId === node.id 
+                      selectedNode?.id === node.id 
                         ? 'bg-purple-600 text-white border-purple-600 shadow-xs ring-2 ring-purple-400/20' 
                         : 'bg-white border-purple-200 text-purple-900 hover:bg-purple-50'
                     }`}
@@ -219,9 +264,9 @@ export const EvidenceGraphView: React.FC = () => {
                   <button
                     key={node.id}
                     type="button"
-                    onClick={() => setSelectedNodeId(node.id)}
+                    onClick={() => handleSelectNode(node.id)}
                     className={`px-3.5 py-1.5 rounded-xl border text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
-                      selectedNodeId === node.id 
+                      selectedNode?.id === node.id 
                         ? 'bg-blue-600 text-white border-blue-600 shadow-xs ring-2 ring-blue-400/20' 
                         : 'bg-white border-blue-200 text-blue-900 hover:bg-blue-50'
                     }`}
@@ -247,9 +292,9 @@ export const EvidenceGraphView: React.FC = () => {
                   <button
                     key={node.id}
                     type="button"
-                    onClick={() => setSelectedNodeId(node.id)}
+                    onClick={() => handleSelectNode(node.id)}
                     className={`px-3 py-1 rounded-lg border text-xs font-semibold transition-all cursor-pointer ${
-                      selectedNodeId === node.id 
+                      selectedNode?.id === node.id 
                         ? 'bg-slate-900 text-white border-slate-900' 
                         : 'bg-white border-slate-200 text-slate-700 hover:bg-slate-100'
                     }`}
@@ -265,47 +310,51 @@ export const EvidenceGraphView: React.FC = () => {
 
         {/* Right 4 Cols: Active Node Inspector & Lineage Traversal */}
         <div className="lg:col-span-4 bg-white rounded-2xl border border-slate-200/90 shadow-2xs p-5 space-y-4">
-          <div className="space-y-1">
-            <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block font-mono">
-              Node Inspector
-            </span>
-            <h3 className="text-base font-bold text-slate-900">
-              {selectedNode.label}
-            </h3>
-            <span className={`inline-block text-[10px] font-bold px-2 py-0.5 rounded border capitalize ${getNodeColor(selectedNode.type)}`}>
-              Type: {selectedNode.type.replace(/_/g, ' ')}
-            </span>
-          </div>
+          {selectedNode && (
+            <>
+              <div className="space-y-1">
+                <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block font-mono">
+                  Node Inspector
+                </span>
+                <h3 className="text-base font-bold text-slate-900">
+                  {selectedNode.label}
+                </h3>
+                <span className={`inline-block text-[10px] font-bold px-2 py-0.5 rounded border capitalize ${getNodeColor(selectedNode.type)}`}>
+                  Category: {selectedNode.type.replace(/_/g, ' ')}
+                </span>
+              </div>
 
-          {/* Connected Relationships in Graph */}
-          <div className="space-y-2 pt-2 border-t border-slate-100">
-            <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500 block">
-              Connected Lineage Paths ({connectedLinks.length})
-            </span>
+              {/* Connected Relationships in Graph */}
+              <div className="space-y-2 pt-2 border-t border-slate-100">
+                <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500 block">
+                  Connected Lineage Paths ({connectedLinks.length})
+                </span>
 
-            <div className="space-y-2 text-xs">
-              {connectedLinks.map((link, idx) => {
-                const isSource = link.source === selectedNodeId;
-                const otherNodeId = isSource ? link.target : link.source;
-                const otherNode = graphData.nodes.find(n => n.id === otherNodeId);
-                return (
-                  <div
-                    key={idx}
-                    onClick={() => setSelectedNodeId(otherNodeId)}
-                    className="p-3 bg-slate-50 rounded-xl border border-slate-200 hover:bg-blue-50/50 hover:border-blue-200 transition-all cursor-pointer space-y-1"
-                  >
-                    <div className="flex items-center justify-between text-[10px] font-mono font-bold text-blue-700">
-                      <span>{isSource ? '→ ' + link.relationship : '← ' + link.relationship}</span>
-                      {link.label && <span className="bg-blue-100/70 text-blue-800 px-1.5 py-0.2 rounded">{link.label}</span>}
-                    </div>
-                    <span className="font-bold text-slate-900 block truncate">
-                      {otherNode?.label || otherNodeId}
-                    </span>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
+                <div className="space-y-2 text-xs">
+                  {connectedLinks.map((link, idx) => {
+                    const isSource = link.source === selectedNode.id;
+                    const otherNodeId = isSource ? link.target : link.source;
+                    const otherNode = graphData.nodes.find(n => n.id === otherNodeId);
+                    return (
+                      <div
+                        key={idx}
+                        onClick={() => handleSelectNode(otherNodeId)}
+                        className="p-3 bg-slate-50 rounded-xl border border-slate-200 hover:bg-blue-50/50 hover:border-blue-200 transition-all cursor-pointer space-y-1"
+                      >
+                        <div className="flex items-center justify-between text-[10px] font-mono font-bold text-blue-700">
+                          <span>{isSource ? '→ Linked Signal' : '← Grounded In'}</span>
+                          {link.label && <span className="bg-blue-100/70 text-blue-800 px-1.5 py-0.2 rounded">{link.label}</span>}
+                        </div>
+                        <span className="font-bold text-slate-900 block truncate">
+                          {otherNode?.label || 'Verified Signal Node'}
+                        </span>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            </>
+          )}
 
           <div className="p-3 bg-slate-50 rounded-xl border border-slate-200 text-xs text-slate-500 leading-relaxed">
             <Info className="w-3.5 h-3.5 inline mr-1 text-slate-400" />
@@ -314,6 +363,27 @@ export const EvidenceGraphView: React.FC = () => {
         </div>
 
       </div>
+
+      {/* Intelligence Gate for Guest / Demo */}
+      {!isFullAccess && (
+        <CareerOSIntelligenceGate
+          capability="evidence_graph"
+          variant="inline"
+          sampleCountLabel={
+            isGuest
+              ? 'Showing 1 sample lineage path · Full multi-initiative Evidence Graph is protected'
+              : `Demo Preview · ${intelAccess.demoSignalsUsed} / ${intelAccess.demoSignalsLimit} graph lineage inspections used`
+          }
+        />
+      )}
+
+      {isGateModalOpen && (
+        <CareerOSIntelligenceGate
+          capability="evidence_graph"
+          variant="modal"
+          onClose={() => setIsGateModalOpen(false)}
+        />
+      )}
 
     </div>
   );

@@ -5,16 +5,14 @@ import {
   ArrowRight, 
   Bot, 
   CheckCircle2, 
-  FileText, 
-  Layers, 
   Lightbulb, 
-  TrendingUp, 
-  Mic2,
   RefreshCw,
   Copy,
   Check
 } from 'lucide-react';
 import { UserCareerProfile, InterviewQuestion } from '../../types';
+import { useAccessControl } from '../../services/accessControlService';
+import { CareerOSIntelligenceGate, IntelligenceModeBadge } from '../access/CareerOSIntelligenceGate';
 
 interface AIDashboardWorkspaceProps {
   profile: UserCareerProfile;
@@ -39,18 +37,22 @@ export const AIDashboardWorkspace: React.FC<AIDashboardWorkspaceProps> = ({
   profile,
   onStartPracticeQuestion,
   onNavigateToTab,
-  pinnedContextSummary,
   className = '',
 }) => {
+  const { getIntelligenceAccess, consumeDemoIntelligenceSignal } = useAccessControl();
   const [query, setQuery] = useState('');
   const [isGenerating, setIsGenerating] = useState(false);
   const [copiedId, setCopiedId] = useState<string | null>(null);
+  const [gateModalOpen, setGateModalOpen] = useState(false);
   const [activeResponse, setActiveResponse] = useState<{
     prompt: string;
     content: string;
     keyTakeaway: string;
     recommendedActions: string[];
   } | null>(null);
+
+  const insightsAccess = getIntelligenceAccess('ai_career_insights');
+  const isFull = insightsAccess.isFull;
 
   // Proactive Insights derived from user target calibration & pinned context
   const proactiveInsights: AIInsightCard[] = [
@@ -71,8 +73,8 @@ export const AIDashboardWorkspace: React.FC<AIDashboardWorkspaceProps> = ({
         type: 'Technical Architecture',
         context: 'High-throughput payment ingestion under concurrent duplicate triggers',
         rubricCriteria: [
-          { criterion: 'Idempotency Key Lifecycle & Storage', weight: 40, whatStrongCandidatesSay: 'References atomic set-if-not-exists with TTL and two-phase write ahead logging.', redFlags: 'Relies on application memory or non-atomic DB lookups.' },
-          { criterion: 'Failure Mode & Split-Brain Mitigation', weight: 60, whatStrongCandidatesSay: 'Outlines quorum reads, fencing tokens, and asynchronous reconciliation loops.', redFlags: 'Ignores partial network partitions.' }
+          { criterion: 'Idempotency Key Lifecycle & Storage', weight: 50, whatStrongCandidatesSay: 'References atomic set-if-not-exists with TTL and two-phase write ahead logging.', redFlags: 'Relies on application memory or non-atomic DB lookups.' },
+          { criterion: 'Failure Mode & Split-Brain Mitigation', weight: 50, whatStrongCandidatesSay: 'Outlines quorum reads, fencing tokens, and asynchronous reconciliation loops.', redFlags: 'Ignores partial network partitions.' }
         ],
         keywordsToMention: ['Idempotency Key', 'Redis SETNX with TTL', 'Fencing Tokens', 'Outbox Pattern', 'Debezium CDC'],
         exemplaryModelAnswer: 'A robust idempotent architecture uses unique client request tokens cached in a distributed in-memory store using atomic CAS operations, with transaction outbox patterns for asynchronous event dispatching.'
@@ -113,7 +115,24 @@ export const AIDashboardWorkspace: React.FC<AIDashboardWorkspaceProps> = ({
     }
   ];
 
+  const visibleInsights = isFull
+    ? proactiveInsights
+    : insightsAccess.isDemo
+    ? proactiveInsights.slice(0, 2)
+    : proactiveInsights.slice(0, 1);
+
   const handleRunInsight = (insight: AIInsightCard) => {
+    if (insightsAccess.isGuest) {
+      setGateModalOpen(true);
+      return;
+    }
+    if (insightsAccess.isDemo) {
+      const ok = consumeDemoIntelligenceSignal('ai_career_insights', insight.id);
+      if (!ok) {
+        setGateModalOpen(true);
+        return;
+      }
+    }
     if (insight.questionPayload && onStartPracticeQuestion) {
       onStartPracticeQuestion(insight.questionPayload);
     } else {
@@ -132,7 +151,19 @@ export const AIDashboardWorkspace: React.FC<AIDashboardWorkspaceProps> = ({
 
   const handleAskAI = (e: React.FormEvent) => {
     e.preventDefault();
+    if (insightsAccess.isGuest) {
+      setGateModalOpen(true);
+      return;
+    }
     if (!query.trim()) return;
+
+    if (insightsAccess.isDemo) {
+      const ok = consumeDemoIntelligenceSignal('ai_career_insights', `ask-${query.trim().slice(0, 24)}`);
+      if (!ok) {
+        setGateModalOpen(true);
+        return;
+      }
+    }
 
     setIsGenerating(true);
     setTimeout(() => {
@@ -170,10 +201,11 @@ export const AIDashboardWorkspace: React.FC<AIDashboardWorkspaceProps> = ({
             <Sparkles className="w-4 h-4 text-purple-600" />
           </div>
           <div>
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 flex-wrap">
               <h3 className="text-base font-bold text-slate-900 tracking-tight">
                 AI Career Intelligence Workspace
               </h3>
+              <IntelligenceModeBadge capability="ai_career_insights" />
               <span className="text-[10px] uppercase font-bold tracking-wider px-2 py-0.5 rounded-full bg-purple-50 text-purple-700 border border-purple-200/80">
                 Contextual Copilot
               </span>
@@ -198,7 +230,7 @@ export const AIDashboardWorkspace: React.FC<AIDashboardWorkspaceProps> = ({
 
       {/* Proactive Intelligence Cards Grid */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-3.5 relative z-10">
-        {proactiveInsights.map((insight) => (
+        {visibleInsights.map((insight) => (
           <div
             key={insight.id}
             className="p-4 rounded-xl border border-slate-200/80 hover:border-purple-300 bg-slate-50/50 hover:bg-white transition-all shadow-3xs hover:shadow-2xs flex flex-col justify-between group"
@@ -231,6 +263,16 @@ export const AIDashboardWorkspace: React.FC<AIDashboardWorkspaceProps> = ({
           </div>
         ))}
       </div>
+
+      {!isFull && (
+        <div className="relative z-10">
+          <CareerOSIntelligenceGate
+            capability="ai_career_insights"
+            variant="compact"
+            sampleCountLabel={`Showing ${visibleInsights.length} of ${proactiveInsights.length} AI career insights`}
+          />
+        </div>
+      )}
 
       {/* Active AI Response Preview if generated/clicked */}
       {activeResponse && (
@@ -311,18 +353,13 @@ export const AIDashboardWorkspace: React.FC<AIDashboardWorkspaceProps> = ({
             type="text"
             value={query}
             onChange={(e) => setQuery(e.target.value)}
-            placeholder={`Ask Career OS Copilot (e.g. "How should I frame Kafka consumer rebalance in my ${profile.targetRole || 'Software Engineering'} interview?")...`}
+            placeholder={`Ask CareerOS Copilot (e.g. "How should I frame Kafka consumer rebalance in my ${profile.targetRole || 'Software Engineering'} interview?")...`}
             className="w-full text-xs pl-10 pr-4 py-2.5 bg-slate-50/80 hover:bg-white focus:bg-white border border-slate-200 focus:border-purple-400 rounded-xl focus:outline-hidden focus:ring-2 focus:ring-purple-100 transition-all text-slate-800 placeholder:text-slate-400 shadow-3xs"
           />
         </div>
         <button
           type="submit"
-          disabled={!query.trim() || isGenerating}
-          className={`px-4 py-2.5 rounded-xl text-xs font-semibold flex items-center gap-1.5 transition-all shadow-3xs shrink-0 cursor-pointer ${
-            query.trim() && !isGenerating
-              ? 'bg-purple-600 hover:bg-purple-700 text-white'
-              : 'bg-slate-100 text-slate-400 cursor-not-allowed'
-          }`}
+          className="px-4 py-2.5 rounded-xl text-xs font-semibold flex items-center gap-1.5 transition-all shadow-3xs shrink-0 cursor-pointer bg-purple-600 hover:bg-purple-700 text-white"
         >
           {isGenerating ? (
             <RefreshCw className="w-3.5 h-3.5 animate-spin" />
@@ -332,6 +369,14 @@ export const AIDashboardWorkspace: React.FC<AIDashboardWorkspaceProps> = ({
           <span>Synthesize</span>
         </button>
       </form>
+
+      {gateModalOpen && (
+        <CareerOSIntelligenceGate
+          capability="ai_career_insights"
+          variant="modal"
+          onClose={() => setGateModalOpen(false)}
+        />
+      )}
     </div>
   );
 };

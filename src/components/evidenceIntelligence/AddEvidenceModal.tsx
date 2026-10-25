@@ -12,6 +12,8 @@ import {
 } from 'lucide-react';
 import { evidenceIntelligenceStore } from '../../features/evidenceIntelligence/services/evidenceIntelligenceStore';
 import { ContributionType, EvidenceItem, OutcomeMetric } from '../../features/evidenceIntelligence/types';
+import { useAccessControl } from '../../services/accessControlService';
+import { CareerOSIntelligenceGate, IntelligenceModeBadge } from '../access/CareerOSIntelligenceGate';
 
 interface AddEvidenceModalProps {
   isOpen: boolean;
@@ -24,7 +26,10 @@ export const AddEvidenceModal: React.FC<AddEvidenceModalProps> = ({
   onClose,
   onEvidenceCreated
 }) => {
-  const [rawText, setRawText] = useState('');
+  const { accessLevel, getIntelligenceAccess, consumeDemoIntelligenceSignal } = useAccessControl();
+  const [rawText, setRawText] = useState(
+    'Led cross-functional onboarding redesign with engineering and design to launch a 3-step activation wizard.'
+  );
   const [extractedData, setExtractedData] = useState<{
     suggestedTitle: string;
     suggestedInitiative: string;
@@ -38,11 +43,27 @@ export const AddEvidenceModal: React.FC<AddEvidenceModalProps> = ({
   const [outcomeMetricName, setOutcomeMetricName] = useState('');
   const [outcomeLift, setOutcomeLift] = useState('');
   const [isProcessing, setIsProcessing] = useState(false);
+  const [showGate, setShowGate] = useState(false);
 
   if (!isOpen) return null;
 
+  const isFullAccess = accessLevel === 'FULL_ACCESS';
+  const isGuest = accessLevel === 'PUBLIC_GUEST';
+  const intelAccess = getIntelligenceAccess('evidence_intelligence');
+
   const handleExtract = () => {
     if (!rawText.trim()) return;
+    if (isGuest) {
+      setShowGate(true);
+      return;
+    }
+    if (!isFullAccess) {
+      const allowed = consumeDemoIntelligenceSignal('evidence_intelligence');
+      if (!allowed) {
+        setShowGate(true);
+        return;
+      }
+    }
     setIsProcessing(true);
     setTimeout(() => {
       const extracted = evidenceIntelligenceStore.quickExtractFromText(rawText);
@@ -53,6 +74,10 @@ export const AddEvidenceModal: React.FC<AddEvidenceModalProps> = ({
 
   const handleConfirmAndSave = () => {
     if (!extractedData) return;
+    if (isGuest) {
+      setShowGate(true);
+      return;
+    }
 
     const outcomes: OutcomeMetric[] = [];
     if (hasOutcome && outcomeMetricName.trim() && outcomeLift.trim()) {
@@ -138,18 +163,21 @@ export const AddEvidenceModal: React.FC<AddEvidenceModalProps> = ({
         aria-hidden="true" 
       />
 
-      <div className="relative w-full max-w-xl bg-white rounded-2xl shadow-2xl border border-slate-200 overflow-hidden z-10 flex flex-col animate-in zoom-in-95 duration-150">
+      <div className="relative w-full max-w-xl bg-white rounded-2xl shadow-2xl border border-slate-200 overflow-hidden z-10 flex flex-col max-h-[90vh] animate-in zoom-in-95 duration-150">
         
         {/* Header */}
         <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between bg-slate-50/70">
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2.5">
             <div className="w-7 h-7 rounded-lg bg-blue-50 text-blue-600 flex items-center justify-center font-bold">
               <Sparkles className="w-4 h-4" />
             </div>
             <div>
-              <h2 className="text-base font-bold text-slate-900">
-                Quick Evidence Capture
-              </h2>
+              <div className="flex items-center gap-2">
+                <h2 className="text-base font-bold text-slate-900">
+                  Quick Evidence Capture
+                </h2>
+                <IntelligenceModeBadge capability="evidence_intelligence" />
+              </div>
               <p className="text-[11px] text-slate-500">
                 Write a quick summary. CareerOS extracts initiative, capabilities &amp; contribution.
               </p>
@@ -166,7 +194,7 @@ export const AddEvidenceModal: React.FC<AddEvidenceModalProps> = ({
         </div>
 
         {/* Content */}
-        <div className="p-6 space-y-5 text-xs">
+        <div className="p-6 space-y-5 text-xs overflow-y-auto">
           
           {/* Quick Capture Input */}
           <div className="space-y-1.5">
@@ -180,9 +208,13 @@ export const AddEvidenceModal: React.FC<AddEvidenceModalProps> = ({
               placeholder="e.g., I led the onboarding redesign and worked with design and engineering to launch a 3-step activation wizard that reduced user drop-off..."
               className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-slate-900 placeholder:text-slate-400 focus:outline-hidden focus:ring-2 focus:ring-blue-500 text-xs leading-relaxed"
             />
-            <div className="flex justify-between items-center pt-1">
+            <div className="flex justify-between items-center pt-1 flex-wrap gap-2">
               <span className="text-[11px] text-slate-400">
-                Lightweight capture · No lengthy HR forms
+                {isFullAccess
+                  ? 'Full Intelligence Signal Extraction Active'
+                  : isGuest
+                  ? 'Sample Intelligence Preview · Live extraction unlocks in Demo / Full Access'
+                  : `Demo Signal Extractions: ${intelAccess.demoSignalsUsed} / ${intelAccess.demoSignalsLimit} used`}
               </span>
               <button
                 type="button"
@@ -191,10 +223,36 @@ export const AddEvidenceModal: React.FC<AddEvidenceModalProps> = ({
                 className="px-3.5 py-1.5 bg-blue-600 hover:bg-blue-700 disabled:opacity-40 text-white font-bold rounded-xl transition-all shadow-3xs flex items-center gap-1.5 cursor-pointer"
               >
                 <Sparkles className="w-3.5 h-3.5" />
-                <span>{isProcessing ? 'Analyzing...' : 'Extract Signals'}</span>
+                <span>{isProcessing ? 'Synthesizing...' : 'Extract Signals'}</span>
               </button>
             </div>
           </div>
+
+          {/* Curated Sample Signal Preview for Guest */}
+          {isGuest && !showGate && (
+            <div className="p-4 bg-slate-50 rounded-xl border border-slate-200/80 space-y-2.5">
+              <div className="flex items-center justify-between">
+                <span className="text-[10px] font-black uppercase tracking-wider text-amber-700">
+                  Curated Sample Extraction Preview
+                </span>
+                <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-amber-100 text-amber-800">
+                  Sample Intelligence
+                </span>
+              </div>
+              <p className="text-xs text-slate-600 leading-relaxed">
+                Example output: <strong>Onboarding Activation Redesign</strong> → Attributed to <strong>Product Strategy</strong> &amp; <strong>Growth Experimentation</strong> (Primary Lead).
+              </p>
+            </div>
+          )}
+
+          {/* Intelligence Gate when Guest clicks Extract or Demo hits signal limit */}
+          {showGate && !isFullAccess && (
+            <CareerOSIntelligenceGate
+              capability="evidence_intelligence"
+              variant="compact"
+              onContinueWithDemo={() => setShowGate(false)}
+            />
+          )}
 
           {/* Extracted Structured Card */}
           {extractedData && (
@@ -204,7 +262,7 @@ export const AddEvidenceModal: React.FC<AddEvidenceModalProps> = ({
                   CareerOS Signal Extraction
                 </span>
                 <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-emerald-100 text-emerald-800">
-                  Confidence: {extractedData.confidenceScore}%
+                  Verified Attribution Signal
                 </span>
               </div>
 
@@ -232,7 +290,7 @@ export const AddEvidenceModal: React.FC<AddEvidenceModalProps> = ({
                 </div>
               </div>
 
-              {/* Measurable Outcome Prompt (Section 16 requirement) */}
+              {/* Measurable Outcome Prompt */}
               <div className="pt-2 border-t border-blue-200/60 space-y-2">
                 <div className="flex items-center justify-between">
                   <span className="font-bold text-slate-900 text-xs">

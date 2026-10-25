@@ -1,6 +1,8 @@
 import { WorkRelevantPathway } from '../types/workPathways';
 import { resolveProvenance } from '../types/provenance';
 import { WORK_RELEVANT_PATHWAYS } from '../data/workRelevantPathwaysData';
+import { AccessControlService } from '../../../services/accessControlService';
+import { dataExposureGuard } from '../../../services/dataExposureGuardService';
 
 const STORAGE_KEY = 'career_os_work_pathways_v3';
 
@@ -69,6 +71,10 @@ class WorkPathwaysStore {
 
   private loadFromStorage(): void {
     try {
+      if (!dataExposureGuard.canPersistFullCatalogToStorage()) {
+        this.pathways = WORK_RELEVANT_PATHWAYS.map(normalizePathway);
+        return;
+      }
       const stored = localStorage.getItem(STORAGE_KEY);
       if (stored) {
         const parsed = JSON.parse(stored);
@@ -85,12 +91,14 @@ class WorkPathwaysStore {
   }
 
   private saveToStorage(): void {
-    try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(this.pathways));
-      this.notifyListeners();
-    } catch (err) {
-      console.error('Failed to persist work pathways:', err);
+    if (dataExposureGuard.canPersistFullCatalogToStorage()) {
+      try {
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(this.pathways));
+      } catch (err) {
+        console.error('Failed to persist work pathways:', err);
+      }
     }
+    this.notifyListeners();
   }
 
   private notifyListeners(): void {
@@ -103,19 +111,46 @@ class WorkPathwaysStore {
   }
 
   public getPathways(): WorkRelevantPathway[] {
+    const access = AccessControlService.getAccessLevel();
+    if (access === 'PUBLIC') {
+      return dataExposureGuard.paginateAndProject('work_pathways', this.pathways.slice(0, 1), undefined, 'PUBLIC').items;
+    }
+    if (access === 'GUEST') {
+      return dataExposureGuard.paginateAndProject('work_pathways', this.pathways.slice(0, 3), undefined, 'GUEST').items;
+    }
+    if (access === 'DEMO') {
+      const custom = this.pathways.filter(p => !WORK_RELEVANT_PATHWAYS.some(init => init.id === p.id));
+      const curated = this.pathways.filter(p => WORK_RELEVANT_PATHWAYS.some(init => init.id === p.id)).slice(0, 5);
+      return dataExposureGuard.projectCollectionForTier([...custom.slice(0, 2), ...curated], 'DEMO');
+    }
     return [...this.pathways];
   }
 
   public getPathway(id: string): WorkRelevantPathway | undefined {
-    return this.pathways.find(p => p.id === id);
+    return dataExposureGuard.authorizeSingleRecordLookup('work_pathways', id, this.getPathways());
   }
 
   public addPathway(pathway: WorkRelevantPathway): void {
+    const auth = dataExposureGuard.assertWriteAuthorized('work_pathways', 'create');
+    if (!auth.allowed) {
+      throw new Error(auth.reason || 'Creation restricted by active access tier.');
+    }
+    const customCount = this.pathways.filter(p => !WORK_RELEVANT_PATHWAYS.some(init => init.id === p.id)).length;
+    const decision = AccessControlService.canCreateWorkflowItem('pathways', customCount);
+    if (!decision.allowed) {
+      console.warn('Pathway creation blocked by access control:', decision.reason);
+      throw new Error(decision.reason || 'Creation restricted by active access tier.');
+    }
+    if (!dataExposureGuard.checkDuplicateSubmit('work_pathways', `add:${pathway.title}`)) {
+      return;
+    }
     this.pathways.unshift(pathway);
     this.saveToStorage();
   }
 
   public updatePathway(id: string, updates: Partial<WorkRelevantPathway>): void {
+    const auth = dataExposureGuard.assertWriteAuthorized('work_pathways', 'update');
+    if (!auth.allowed) return;
     const index = this.pathways.findIndex(p => p.id === id);
     if (index === -1) return;
     this.pathways[index] = {
@@ -126,8 +161,17 @@ class WorkPathwaysStore {
   }
 
   public duplicatePathway(id: string): WorkRelevantPathway | null {
+    const auth = dataExposureGuard.assertWriteAuthorized('work_pathways', 'create');
+    if (!auth.allowed) return null;
     const existing = this.pathways.find(p => p.id === id);
     if (!existing) return null;
+
+    const customCount = this.pathways.filter(p => !WORK_RELEVANT_PATHWAYS.some(init => init.id === p.id)).length;
+    const decision = AccessControlService.canCreateWorkflowItem('pathways', customCount);
+    if (!decision.allowed) {
+      console.warn('Pathway duplication blocked by access control:', decision.reason);
+      throw new Error(decision.reason || 'Creation restricted by active access tier.');
+    }
 
     const duplicated: WorkRelevantPathway = {
       ...existing,
@@ -142,6 +186,8 @@ class WorkPathwaysStore {
   }
 
   public archivePathway(id: string): void {
+    const auth = dataExposureGuard.assertWriteAuthorized('work_pathways', 'update');
+    if (!auth.allowed) return;
     const index = this.pathways.findIndex(p => p.id === id);
     if (index === -1) return;
     this.pathways[index] = {
@@ -152,6 +198,8 @@ class WorkPathwaysStore {
   }
 
   public deletePathway(id: string): void {
+    const auth = dataExposureGuard.assertWriteAuthorized('work_pathways', 'delete');
+    if (!auth.allowed) return;
     this.pathways = this.pathways.filter(p => p.id !== id);
     this.saveToStorage();
   }

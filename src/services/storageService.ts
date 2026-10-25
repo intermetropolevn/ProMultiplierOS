@@ -3,12 +3,13 @@ import {
   JobListing, 
   MockInterviewSession, 
   UserCareerProfile, 
-  RoleCategory, 
   SectorDomain, 
-  ExperienceLevel,
   JobApplicationStatus
 } from '../types';
 import { JOBS_DATA } from '../data/jobsData';
+import { AccessControlService } from './accessControlService';
+import { demoWorkspaceService } from './demoWorkspaceService';
+import { dataExposureGuard } from './dataExposureGuardService';
 
 const STORAGE_KEYS = {
   WISHLIST: 'career_os_wishlist_v1',
@@ -32,42 +33,59 @@ const DEFAULT_PROFILE: UserCareerProfile = {
 
 export const StorageService = {
   getWishlist(): SavedJobApplication[] {
+    const tier = AccessControlService.getAccessLevel();
+    if (tier === 'DEMO') {
+      return dataExposureGuard.projectCollectionForTier(demoWorkspaceService.getWishlist(), 'DEMO');
+    }
+
+    // Seed initial saved jobs (without persisting private contacts in PUBLIC/GUEST localStorage)
+    const initialSaved: SavedJobApplication[] = [
+      {
+        id: 'saved-1',
+        jobId: JOBS_DATA[0].id,
+        job: dataExposureGuard.projectRecordForTier(JOBS_DATA[0], tier),
+        status: 'Applied',
+        savedAt: new Date(Date.now() - 3 * 24 * 60 * 60 * 1000).toISOString(),
+        appliedDate: new Date(Date.now() - 2 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+        notes: 'Emphasized Postgres high-throughput experience and Kafka idempotency.',
+        targetSalary: '$220,000 + Equity',
+        ...(tier === 'FULL' ? { referralContact: 'alex.chen@alumni.net' } : {})
+      },
+      {
+        id: 'saved-2',
+        jobId: JOBS_DATA[1].id,
+        job: dataExposureGuard.projectRecordForTier(JOBS_DATA[1], tier),
+        status: 'Wishlist',
+        savedAt: new Date(Date.now() - 1 * 24 * 60 * 60 * 1000).toISOString(),
+        notes: 'Check portfolio for design token case studies before submitting.',
+        targetSalary: '$190,000',
+      },
+    ];
+
+    if (tier === 'PUBLIC') {
+      return dataExposureGuard.projectCollectionForTier(initialSaved.slice(0, 1), 'PUBLIC');
+    }
+    if (tier === 'GUEST') {
+      return dataExposureGuard.projectCollectionForTier(initialSaved, 'GUEST');
+    }
+
     try {
       const data = localStorage.getItem(STORAGE_KEYS.WISHLIST);
       if (!data) {
-        // Seed initial saved jobs for realistic demo
-        const initialSaved: SavedJobApplication[] = [
-          {
-            id: 'saved-1',
-            jobId: JOBS_DATA[0].id,
-            job: JOBS_DATA[0],
-            status: 'Applied',
-            savedAt: new Date(Date.now() - 3 * 24 * 60 * 60 * 1000).toISOString(),
-            appliedDate: new Date(Date.now() - 2 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
-            notes: 'Referred by former colleague on Platform team. Emphasized Postgres high-throughput experience and Kafka idempotency.',
-            targetSalary: '$220,000 + Equity',
-            referralContact: 'alex.chen@alumni.net',
-          },
-          {
-            id: 'saved-2',
-            jobId: JOBS_DATA[1].id,
-            job: JOBS_DATA[1],
-            status: 'Wishlist',
-            savedAt: new Date(Date.now() - 1 * 24 * 60 * 60 * 1000).toISOString(),
-            notes: 'Check portfolio for design token case studies before submitting.',
-            targetSalary: '$190,000',
-          },
-        ];
         localStorage.setItem(STORAGE_KEYS.WISHLIST, JSON.stringify(initialSaved));
         return initialSaved;
       }
       return JSON.parse(data);
     } catch {
-      return [];
+      return initialSaved;
     }
   },
 
   saveJobToWishlist(job: JobListing, status: JobApplicationStatus = 'Wishlist'): SavedJobApplication[] {
+    const auth = dataExposureGuard.assertWriteAuthorized('wishlist', 'create');
+    if (!auth.allowed) {
+      return this.getWishlist();
+    }
     const list = this.getWishlist();
     const existingIndex = list.findIndex(item => item.jobId === job.id);
     if (existingIndex >= 0) {
@@ -82,21 +100,38 @@ export const StorageService = {
         notes: '',
       });
     }
+    if (AccessControlService.getAccessLevel() === 'DEMO') {
+      return demoWorkspaceService.saveWishlist(list);
+    }
     localStorage.setItem(STORAGE_KEYS.WISHLIST, JSON.stringify(list));
     return list;
   },
 
   removeJobFromWishlist(jobId: string): SavedJobApplication[] {
+    const auth = dataExposureGuard.assertWriteAuthorized('wishlist', 'delete');
+    if (!auth.allowed) {
+      return this.getWishlist();
+    }
     const list = this.getWishlist().filter(item => item.jobId !== jobId && item.id !== jobId);
+    if (AccessControlService.getAccessLevel() === 'DEMO') {
+      return demoWorkspaceService.saveWishlist(list);
+    }
     localStorage.setItem(STORAGE_KEYS.WISHLIST, JSON.stringify(list));
     return list;
   },
 
   updateJobApplication(id: string, updates: Partial<SavedJobApplication>): SavedJobApplication[] {
+    const auth = dataExposureGuard.assertWriteAuthorized('wishlist', 'update');
+    if (!auth.allowed) {
+      return this.getWishlist();
+    }
     const list = this.getWishlist();
     const index = list.findIndex(item => item.id === id || item.jobId === id);
     if (index >= 0) {
       list[index] = { ...list[index], ...updates };
+      if (AccessControlService.getAccessLevel() === 'DEMO') {
+        return demoWorkspaceService.saveWishlist(list);
+      }
       localStorage.setItem(STORAGE_KEYS.WISHLIST, JSON.stringify(list));
     }
     return list;
@@ -116,12 +151,19 @@ export const StorageService = {
   },
 
   getSessions(): MockInterviewSession[] {
+    const tier = AccessControlService.getAccessLevel();
+    if (tier === 'DEMO') {
+      return demoWorkspaceService.getSessions();
+    }
     try {
       const data = localStorage.getItem(STORAGE_KEYS.SESSIONS);
       if (!data) {
         return [];
       }
-      return JSON.parse(data);
+      const parsed: MockInterviewSession[] = JSON.parse(data);
+      if (tier === 'PUBLIC') return parsed.slice(0, 1);
+      if (tier === 'GUEST') return parsed.slice(0, 3);
+      return parsed;
     } catch {
       return [];
     }
@@ -131,11 +173,19 @@ export const StorageService = {
     const sessions = this.getSessions();
     const filtered = sessions.filter(s => s.id !== session.id);
     filtered.unshift(session);
-    localStorage.setItem(STORAGE_KEYS.SESSIONS, JSON.stringify(filtered));
+    if (AccessControlService.getAccessLevel() === 'DEMO') {
+      return demoWorkspaceService.saveSessions(filtered);
+    }
+    if (dataExposureGuard.canPersistFullCatalogToStorage()) {
+      localStorage.setItem(STORAGE_KEYS.SESSIONS, JSON.stringify(filtered));
+    }
     return filtered;
   },
 
   getBookmarks(): string[] {
+    if (AccessControlService.getAccessLevel() === 'DEMO') {
+      return demoWorkspaceService.getBookmarks();
+    }
     try {
       const data = localStorage.getItem(STORAGE_KEYS.BOOKMARKS);
       if (!data) {
@@ -152,12 +202,19 @@ export const StorageService = {
   },
 
   toggleBookmark(questionId: string): string[] {
+    const auth = dataExposureGuard.assertWriteAuthorized('bookmarks', 'update');
+    if (!auth.allowed) {
+      return this.getBookmarks();
+    }
     const bookmarks = this.getBookmarks();
     let updated: string[];
     if (bookmarks.includes(questionId)) {
       updated = bookmarks.filter(id => id !== questionId);
     } else {
       updated = [...bookmarks, questionId];
+    }
+    if (AccessControlService.getAccessLevel() === 'DEMO') {
+      return demoWorkspaceService.saveBookmarks(updated);
     }
     localStorage.setItem(STORAGE_KEYS.BOOKMARKS, JSON.stringify(updated));
     return updated;
@@ -168,13 +225,15 @@ export const StorageService = {
   },
 
   getProfile(): UserCareerProfile {
+    if (AccessControlService.getAccessLevel() === 'DEMO') {
+      return demoWorkspaceService.getProfile();
+    }
     try {
       const data = localStorage.getItem(STORAGE_KEYS.PROFILE);
       if (!data) {
         return DEFAULT_PROFILE;
       }
       const parsed = JSON.parse(data);
-      // Migration: Ensure targetIndustryDomains[] exists and preserves existing single domain
       let domains: SectorDomain[] = parsed.targetIndustryDomains || parsed.targetDomains;
       if (!domains || !Array.isArray(domains) || domains.length === 0) {
         if (parsed.targetDomain) {
@@ -206,6 +265,13 @@ export const StorageService = {
   },
 
   updateProfile(updates: Partial<UserCareerProfile>): UserCareerProfile {
+    const auth = dataExposureGuard.assertWriteAuthorized('profile', 'update');
+    if (!auth.allowed) {
+      return this.getProfile();
+    }
+    if (AccessControlService.getAccessLevel() === 'DEMO') {
+      return demoWorkspaceService.saveProfile(updates);
+    }
     const current = this.getProfile();
     const updated = { ...current, ...updates };
     localStorage.setItem(STORAGE_KEYS.PROFILE, JSON.stringify(updated));

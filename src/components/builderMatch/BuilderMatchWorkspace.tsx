@@ -34,6 +34,8 @@ import {
   CareerEvidence 
 } from '../../types/builderMatch';
 import { BuilderMatchService } from '../../services/builderMatchService';
+import { useAccessControl } from '../../services/accessControlService';
+import { CareerOSIntelligenceGate, IntelligenceModeBadge } from '../access/CareerOSIntelligenceGate';
 import { BuildCard } from './BuildCard';
 import { BuilderCard } from './BuilderCard';
 import { BuildTeamCard } from './BuildTeamCard';
@@ -58,6 +60,11 @@ export const BuilderMatchWorkspace: React.FC<BuilderMatchWorkspaceProps> = ({
   onNavigateToDiscover,
   onRequestFeedback
 }) => {
+  const { accessLevel, capabilities, recordMeaningfulInteraction, getIntelligenceAccess, consumeDemoIntelligenceSignal } = useAccessControl();
+  const builderMatchAccess = getIntelligenceAccess('advanced_builder_match');
+  const isFull = builderMatchAccess.isFull;
+  const [showGateModal, setShowGateModal] = useState(false);
+
   // Primary Tabs (Requirement 3: Explore, Find Builders, Build Teams, My Builds)
   const [activeTab, setActiveTab] = useState<BuilderMatchTab>('explore');
 
@@ -108,9 +115,11 @@ export const BuilderMatchWorkspace: React.FC<BuilderMatchWorkspaceProps> = ({
     const handleUpdate = () => reloadData();
     window.addEventListener('builder_match_updated', handleUpdate);
     window.addEventListener('career_evidence_updated', handleUpdate);
+    window.addEventListener('career_access_changed', handleUpdate);
     return () => {
       window.removeEventListener('builder_match_updated', handleUpdate);
       window.removeEventListener('career_evidence_updated', handleUpdate);
+      window.removeEventListener('career_access_changed', handleUpdate);
     };
   }, []);
 
@@ -175,16 +184,19 @@ export const BuilderMatchWorkspace: React.FC<BuilderMatchWorkspaceProps> = ({
   };
 
   const handleJoinBuild = (opp: BuildOpportunity, role: string) => {
+    recordMeaningfulInteraction('protected_action');
     BuilderMatchService.joinBuild(opp, role);
     reloadData();
   };
 
   const handleOpenStartBuild = (intent: BuildIntent = 'solve_challenge') => {
+    recordMeaningfulInteraction('creation_preview');
     setStartBuildInitialIntent(intent);
     setIsStartBuildOpen(true);
   };
 
   const handleOpenCreateTeam = (opp?: BuildOpportunity) => {
+    recordMeaningfulInteraction('creation_preview');
     setCreateTeamInitialOpp(opp || null);
     setIsCreateTeamOpen(true);
   };
@@ -199,13 +211,14 @@ export const BuilderMatchWorkspace: React.FC<BuilderMatchWorkspaceProps> = ({
         <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-5">
           
           <div className="space-y-2 max-w-2xl">
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 flex-wrap">
               <span className="text-2xs font-extrabold uppercase tracking-wider px-2 py-0.5 rounded-md bg-amber-50 text-amber-800 border border-amber-200 flex items-center gap-1">
                 <Hammer className="w-3 h-3 text-amber-600" />
                 Collaborative Innovation Network
               </span>
               <span aria-hidden="true" className="text-slate-300">·</span>
               <span className="text-2xs text-slate-500 font-medium">Beyond Job Boards</span>
+              <IntelligenceModeBadge capability="advanced_builder_match" />
             </div>
 
             <h1 className="text-xl sm:text-2xl font-black text-slate-900 tracking-tight leading-tight">
@@ -349,9 +362,14 @@ export const BuilderMatchWorkspace: React.FC<BuilderMatchWorkspaceProps> = ({
               <span className="text-2xs font-extrabold uppercase tracking-wider text-slate-400">
                 What do you want to do?
               </span>
-              <span className="text-2xs text-slate-500 font-medium">
-                Showing {filteredOpportunities.length} opportunities
-              </span>
+              <div className="flex items-center gap-2">
+                <span className="text-2xs text-slate-500 font-medium">
+                  Showing <strong className="font-bold text-slate-900">{filteredOpportunities.length}</strong> curated {filteredOpportunities.length === 1 ? 'build opportunity' : 'build opportunities'}
+                </span>
+                <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-blue-50 text-blue-700 border border-blue-200">
+                  Curated Beta Preview
+                </span>
+              </div>
             </div>
 
             {/* Interactive Intent Filter Buttons (clean segmented control) */}
@@ -432,6 +450,26 @@ export const BuilderMatchWorkspace: React.FC<BuilderMatchWorkspaceProps> = ({
             </div>
           </div>
 
+          {/* Results & Access Tier Indicator */}
+          <div className="flex flex-wrap items-center justify-between text-xs text-slate-500 px-1 gap-2">
+            <div className="flex items-center gap-2">
+              <span>
+                Showing <strong className="font-bold text-slate-900">{filteredOpportunities.length}</strong> {filteredOpportunities.length === 1 ? 'build opportunity' : 'build opportunities'}
+              </span>
+              <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${
+                accessLevel === 'FULL'
+                  ? 'bg-emerald-50 text-emerald-800 border-emerald-200'
+                  : accessLevel === 'DEMO'
+                  ? 'bg-amber-50 text-amber-800 border-amber-200'
+                  : accessLevel === 'GUEST'
+                  ? 'bg-blue-50 text-blue-700 border-blue-200'
+                  : 'bg-slate-100 text-slate-700 border-slate-200'
+              }`}>
+                {capabilities.tierBadgeLabel}
+              </span>
+            </div>
+          </div>
+
           {/* Cards Grid */}
           {filteredOpportunities.length === 0 ? (
             <div className="p-12 text-center bg-white rounded-3xl border border-slate-200 shadow-2xs space-y-3">
@@ -463,15 +501,33 @@ export const BuilderMatchWorkspace: React.FC<BuilderMatchWorkspaceProps> = ({
               </div>
             </div>
           ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-5">
-              {filteredOpportunities.map((opportunity) => (
-                <BuildCard
-                  key={opportunity.id}
-                  opportunity={opportunity}
-                  onSelect={(opp) => setSelectedOpportunity(opp)}
-                  onToggleSave={handleToggleSaveBuild}
+            <div className="space-y-6">
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-5">
+                {(isFull ? filteredOpportunities : builderMatchAccess.isDemo ? filteredOpportunities.slice(0, 4) : filteredOpportunities.slice(0, 3)).map((opportunity) => (
+                  <BuildCard
+                    key={opportunity.id}
+                    opportunity={opportunity}
+                    onSelect={(opp) => {
+                      if (builderMatchAccess.isDemo) {
+                        const allowed = consumeDemoIntelligenceSignal('advanced_builder_match', opp.id);
+                        if (!allowed) {
+                          setShowGateModal(true);
+                          return;
+                        }
+                      }
+                      setSelectedOpportunity(opp);
+                    }}
+                    onToggleSave={handleToggleSaveBuild}
+                  />
+                ))}
+              </div>
+              {!isFull && (
+                <CareerOSIntelligenceGate
+                  capability="advanced_builder_match"
+                  title="Unlock Full Builder Match & Squad Complementarity Network"
+                  subtitle="You are viewing a curated sample of build opportunities. Full Access unlocks complete challenge matching, complementary co-builder discovery, and squad readiness signals."
                 />
-              ))}
+              )}
             </div>
           )}
 
@@ -538,16 +594,40 @@ export const BuilderMatchWorkspace: React.FC<BuilderMatchWorkspaceProps> = ({
               </button>
             </div>
           ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-5">
-              {filteredBuilders.map((builder) => (
-                <BuilderCard
-                  key={builder.id}
-                  builder={builder}
-                  onSelect={(b) => setSelectedBuilder(b)}
-                  onInvite={(b) => setInviteTargetBuilder(b)}
-                  onToggleSave={handleToggleSaveBuilder}
+            <div className="space-y-6">
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-5">
+                {(isFull ? filteredBuilders : builderMatchAccess.isDemo ? filteredBuilders.slice(0, 4) : filteredBuilders.slice(0, 3)).map((builder) => (
+                  <BuilderCard
+                    key={builder.id}
+                    builder={builder}
+                    onSelect={(b) => {
+                      if (builderMatchAccess.isDemo) {
+                        const allowed = consumeDemoIntelligenceSignal('advanced_builder_match', b.id);
+                        if (!allowed) {
+                          setShowGateModal(true);
+                          return;
+                        }
+                      }
+                      setSelectedBuilder(b);
+                    }}
+                    onInvite={(b) => {
+                      if (!isFull && builderMatchAccess.isGuest) {
+                        setShowGateModal(true);
+                        return;
+                      }
+                      setInviteTargetBuilder(b);
+                    }}
+                    onToggleSave={handleToggleSaveBuilder}
+                  />
+                ))}
+              </div>
+              {!isFull && (
+                <CareerOSIntelligenceGate
+                  capability="advanced_builder_match"
+                  title="Unlock Advanced Co-Builder & Complementarity Matching"
+                  subtitle="Inspect full builder capability graphs, verified shipped evidence, and AI complementarity scores across the complete network."
                 />
-              ))}
+              )}
             </div>
           )}
 
@@ -609,7 +689,11 @@ export const BuilderMatchWorkspace: React.FC<BuilderMatchWorkspaceProps> = ({
                 team={team}
                 onSelect={(t) => {}}
                 onJoinTeam={(t) => {
-                  alert(`You applied to join ${t.name}! The squad lead has been notified.`);
+                  if (!isFull) {
+                    setShowGateModal(true);
+                    return;
+                  }
+                  recordMeaningfulInteraction('protected_action');
                 }}
               />
             ))}
@@ -829,7 +913,7 @@ export const BuilderMatchWorkspace: React.FC<BuilderMatchWorkspaceProps> = ({
                           {build.hasCareerEvidence && (
                             <span className="text-[10px] font-bold text-blue-700 bg-blue-50 px-2 py-0.5 rounded border border-blue-200 flex items-center gap-1">
                               <Award className="w-3 h-3 text-blue-600" />
-                              Career Evidence Certified (+8%)
+                              Career Evidence Certified
                             </span>
                           )}
                         </div>
@@ -994,6 +1078,15 @@ export const BuilderMatchWorkspace: React.FC<BuilderMatchWorkspaceProps> = ({
           }
         }}
       />
+
+      {showGateModal && (
+        <CareerOSIntelligenceGate
+          capability="advanced_builder_match"
+          variant="modal"
+          onClose={() => setShowGateModal(false)}
+          onContinueDemo={() => setShowGateModal(false)}
+        />
+      )}
 
     </div>
   );

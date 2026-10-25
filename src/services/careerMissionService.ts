@@ -6,6 +6,8 @@ import {
   GrowthLoopStage
 } from '../types/careerMission';
 import { INITIAL_CAREER_MISSIONS } from '../data/careerMissionData';
+import { curatedBetaData } from './curatedBetaData';
+import { AccessControlService } from './accessControlService';
 
 const MISSIONS_STORAGE_KEY = 'career_os_missions_v1';
 const ACTIVE_MISSION_ID_KEY = 'career_os_active_mission_id_v1';
@@ -15,6 +17,25 @@ export class CareerMissionService {
    * Retrieve all missions from localStorage or initialize with seed data
    */
   public static getAllMissions(): CareerMission[] {
+    const access = AccessControlService.getAccessLevel();
+
+    if (curatedBetaData.isCuratedBetaActive()) {
+      const curated = curatedBetaData.getCareerMissions();
+      if (access === 'DEMO') {
+        try {
+          const data = localStorage.getItem(MISSIONS_STORAGE_KEY);
+          if (data) {
+            const parsed: CareerMission[] = JSON.parse(data);
+            const userCreated = parsed.filter(item => !INITIAL_CAREER_MISSIONS.some(init => init.id === item.id));
+            return [...userCreated.slice(0, 2), ...curated];
+          }
+        } catch {
+          // Ignore
+        }
+      }
+      return curated;
+    }
+
     try {
       const data = localStorage.getItem(MISSIONS_STORAGE_KEY);
       if (data) {
@@ -84,6 +105,12 @@ export class CareerMissionService {
    */
   public static createMission(payload: CreateMissionPayload): CareerMission {
     const missions = this.getAllMissions();
+    const userCreatedCount = missions.filter(m => !INITIAL_CAREER_MISSIONS.some(init => init.id === m.id)).length;
+    const decision = AccessControlService.canCreateWorkflowItem('missions', userCreatedCount);
+    if (!decision.allowed) {
+      console.warn('Mission creation blocked by access control:', decision.reason);
+      throw new Error(decision.reason || 'Creation restricted by active access tier.');
+    }
     
     // Auto-diagnose gaps if not fully provided
     const diagnosis = this.diagnoseGapsForRole(payload.targetRoleTitle, payload.targetDomain);

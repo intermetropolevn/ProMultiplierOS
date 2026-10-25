@@ -14,23 +14,17 @@ import { ProfileKnowledgeHub } from './components/knowledge/ProfileKnowledgeHub'
 import { MyProfileDashboard } from './components/profile/MyProfileDashboard';
 import { PlatformAdminWorkspace, PlatformAdminTab } from './components/admin/PlatformAdminWorkspace';
 import { PlatformHelpModal } from './components/common/PlatformHelpModal';
-import { PersistentPins } from './components/workspace/PersistentPins';
-import { AIChatLauncher } from './components/workspace/AIChatLauncher';
-import { YourPinsAssistantDrawer } from './components/workspace/YourPinsAssistantDrawer';
 import { BusinessEnglishWorkspace } from './components/businessEnglish/BusinessEnglishWorkspace';
 import { BuilderMatchWorkspace } from './components/builderMatch/BuilderMatchWorkspace';
 import { PracticeActionType } from './components/practice/PracticeActionGroup';
 import { StorageService } from './services/storageService';
-import { UnifiedTaskService } from './services/unifiedTaskService';
 import { CareerMissionService } from './services/careerMissionService';
 import { ActiveMissionBanner } from './components/mission/ActiveMissionBanner';
 import { MissionControlModal } from './components/mission/MissionControlModal';
 import { CreateMissionModal } from './components/mission/CreateMissionModal';
 import { GetExpertFeedbackModal } from './components/feedback/GetExpertFeedbackModal';
-import { FeedbackWorkspaceModal } from './components/feedback/FeedbackWorkspaceModal';
-import { ExpertNetworkDirectoryModal } from './components/feedback/ExpertNetworkDirectoryModal';
 import { ExpertFeedbackService } from './services/expertFeedbackService';
-import { FeedbackContext, ExpertProfile } from './types/expertFeedback';
+import { FeedbackContext } from './types/expertFeedback';
 import { CareerMission, GrowthLoopStep } from './types';
 import { 
   JobListing, 
@@ -48,7 +42,12 @@ import { CASES_DATA } from './data/casesData';
 import { LibraryHub } from './components/library/LibraryHub';
 import { KnowledgeSystemWorkspace } from './components/knowledge/KnowledgeSystemWorkspace';
 import { CapabilityActivationModal } from './components/intelligence/activation/CapabilityActivationModal';
-import { PanelLeftClose, PanelLeft, Sparkles, Pin, X } from 'lucide-react';
+import { FirstSessionGuestPrompt, FirstSessionContextBar } from './components/access/FirstSessionGuestPrompt';
+import { ProtectedPreviewOverlay, ProtectedFrameworkAttribution } from './components/access/ProtectedPreviewOverlay';
+import { ShowcaseModeController } from './components/access/ShowcaseModeController';
+import { InternalBetaQAChecklistPanel } from './components/access/InternalBetaQAChecklistPanel';
+import { RequestSeatModal } from './components/access/RequestSeatModal';
+import { AccessControlService } from './services/accessControlService';
 
 export default function App() {
   // Navigation State
@@ -61,16 +60,11 @@ export default function App() {
   const [isActivationModalOpen, setIsActivationModalOpen] = useState(false);
   const [selectedApplicationId, setSelectedApplicationId] = useState<string | null>(null);
 
-  // Workspace Sidebar State (Your Pins + AI Chat Drawer)
-  const [isSidebarVisible, setIsSidebarVisible] = useState(false);
-  const [isPinsDrawerOpen, setIsPinsDrawerOpen] = useState(false);
-
   // Persistence State
   const [wishlist, setWishlist] = useState(StorageService.getWishlist());
   const [sessions, setSessions] = useState(StorageService.getSessions());
   const [bookmarkedQuestionIds, setBookmarkedQuestionIds] = useState(StorageService.getBookmarkedQuestions());
   const [profile, setProfile] = useState(StorageService.getUserProfile());
-  const [pinsCount, setPinsCount] = useState(() => UnifiedTaskService.getAllPinnedItems(wishlist).length);
 
   // Career Mission & Growth Loop State
   const [activeMission, setActiveMission] = useState<CareerMission | null>(() => CareerMissionService.getActiveMission());
@@ -80,29 +74,32 @@ export default function App() {
   const [missionInitialRole, setMissionInitialRole] = useState('');
   const [missionInitialDomain, setMissionInitialDomain] = useState('');
 
-  // Expert Feedback & Expert Network State
+  // Canonical Career Feedback Session State
   const [isGetFeedbackOpen, setIsGetFeedbackOpen] = useState(false);
-  const [isFeedbackWorkspaceOpen, setIsFeedbackWorkspaceOpen] = useState(false);
-  const [isExpertNetworkOpen, setIsExpertNetworkOpen] = useState(false);
   const [feedbackContext, setFeedbackContext] = useState<Partial<FeedbackContext> | undefined>();
   const [feedbackTargetExpertId, setFeedbackTargetExpertId] = useState<string | undefined>();
   const [activeFeedbackRequestId, setActiveFeedbackRequestId] = useState<string | null>(null);
+  const [feedbackInitialStep, setFeedbackInitialStep] = useState<'help_type' | 'ai_eval' | 'expert_selection' | 'feedback_result'>('help_type');
 
   useEffect(() => {
-    const handlePinsChange = () => {
-      setPinsCount(UnifiedTaskService.getAllPinnedItems(wishlist).length);
-    };
     const handleMissionChange = () => {
       setActiveMission(CareerMissionService.getActiveMission());
       setAllMissions(CareerMissionService.getAllMissions());
     };
-    window.addEventListener('career_pins_updated', handlePinsChange);
-    window.addEventListener('career_tasks_updated', handlePinsChange);
+    const handleWorkspaceSync = () => {
+      const nextWishlist = StorageService.getWishlist();
+      setWishlist(nextWishlist);
+      setSessions(StorageService.getSessions());
+      setBookmarkedQuestionIds(StorageService.getBookmarkedQuestions());
+      setProfile(StorageService.getUserProfile());
+    };
     window.addEventListener('career_mission_updated', handleMissionChange);
+    window.addEventListener('career_access_changed', handleWorkspaceSync);
+    window.addEventListener('career_demo_workspace_updated', handleWorkspaceSync);
     return () => {
-      window.removeEventListener('career_pins_updated', handlePinsChange);
-      window.removeEventListener('career_tasks_updated', handlePinsChange);
       window.removeEventListener('career_mission_updated', handleMissionChange);
+      window.removeEventListener('career_access_changed', handleWorkspaceSync);
+      window.removeEventListener('career_demo_workspace_updated', handleWorkspaceSync);
     };
   }, [wishlist]);
 
@@ -183,6 +180,7 @@ export default function App() {
 
   // Launch Practice Simulator from any source
   const handleStartPracticeSession = (config: InterviewConfig) => {
+    AccessControlService.recordMeaningfulInteraction('protected_action');
     setPracticeConfig(config);
 
     // Filter relevant questions following selected: Role, Sector, Domain, Level, Question Set
@@ -475,17 +473,22 @@ export default function App() {
     setIsCreateMissionOpen(true);
   };
 
-  // Expert Feedback Handlers
+  // Expert Feedback Handlers (Unified Canonical Flow)
   const handleOpenGetFeedback = (ctx?: Partial<FeedbackContext>, expertId?: string) => {
     const defaultContext: Partial<FeedbackContext> = {
-      careerGoal: activeMission?.title || 'Become a Senior Product Manager',
+      careerGoal: activeMission?.title || 'Become an AI Product Manager',
       targetRole: activeMission?.targetRoleTitle || profile.targetRole || 'Senior Product Manager',
+      targetDomain: activeMission?.targetDomain || 'AI Product & Enterprise SaaS',
       roleBlueprintId: 'role-senior-pm',
       relevantCapability: activeMission?.capabilityGaps[0]?.capability || 'Product Strategy',
-      workSubmittedTitle: 'Product Strategy & Trial Activation Case',
+      workSubmittedTitle: 'Product Strategy & Strategic Trade-offs',
       workSubmittedContent: `We observed that trial-to-active workspace completion dropped from 31% to 19% after releasing multi-workspace permissions.\n\nMy proposed intervention:\n1. Progressive Permission Staging: teams explore features in a sandbox without SOC2 IT admin blockers.\n2. Automated 2-minute compliance audit export for IT procurement officers.\n3. Defined checkpoints: Day-3 collaborative invite rate, Day-7 workspace completion, Day-14 contract signed.`,
-      sourceType: 'practice',
-      readinessScore: activeMission?.currentReadiness || 76,
+      supportingEvidence: [
+        'Sandbox Trial Activation Defense',
+        'Multi-Workspace Permission Staging Spec'
+      ],
+      sourceType: 'readiness',
+      readinessScore: 68,
       knownSkillGaps: activeMission?.capabilityGaps.map(g => g.capability) || [
         'AI Model Evaluation & System Quality Benchmarking',
         'Executive Strategic Trade-offs & Scope Elimination'
@@ -493,6 +496,7 @@ export default function App() {
     };
     setFeedbackContext({ ...defaultContext, ...ctx });
     setFeedbackTargetExpertId(expertId);
+    setFeedbackInitialStep('help_type');
     setIsGetFeedbackOpen(true);
   };
 
@@ -503,17 +507,9 @@ export default function App() {
       const all = ExpertFeedbackService.getAllRequests();
       setActiveFeedbackRequestId(all[0]?.id || null);
     }
-    setIsFeedbackWorkspaceOpen(true);
+    setFeedbackInitialStep('feedback_result');
+    setIsGetFeedbackOpen(true);
   };
-
-  const handleOpenExpertNetwork = () => {
-    setIsExpertNetworkOpen(true);
-  };
-
-  // Determine if the persistent left column (Your Pins + AI Chat) should be visible:
-  // Must NOT be shown during immersive live interview simulation to prioritize zero-distraction live dialogue!
-  const isImmersiveExperience = activeTab === 'practice' && practiceMode === 'simulating';
-  const showPersistentSidebar = isSidebarVisible && !isImmersiveExperience && !isPlatformAdminOpen;
 
   return (
     <div className="min-h-screen flex flex-col bg-[#fafbfc] text-slate-900 selection:bg-blue-500 selection:text-white font-sans antialiased">
@@ -524,6 +520,7 @@ export default function App() {
         onTabChange={(tab) => {
           setIsPlatformAdminOpen(false);
           setActiveTab(tab);
+          AccessControlService.recordMeaningfulInteraction('navigation');
         }}
         savedJobsCount={wishlist.length}
         onOpenCommand={() => setIsCommandOpen(true)}
@@ -532,13 +529,6 @@ export default function App() {
         onSelectPracticeAction={handleSelectPracticeAction}
         activePracticeAction={activePracticeAction}
         isPlatformAdminOpen={isPlatformAdminOpen}
-        onTogglePins={() => setIsPinsDrawerOpen(prev => !prev)}
-        pinsCount={pinsCount}
-        onOpenMissionControl={() => setIsMissionControlOpen(true)}
-        activeMissionTitle={activeMission?.title}
-        activeMissionReadiness={activeMission?.currentReadiness}
-        onOpenFeedbackWorkspace={() => handleOpenFeedbackWorkspace()}
-        onOpenExpertNetwork={handleOpenExpertNetwork}
       />
 
       {/* Main Workspace Layout Shell */}
@@ -557,9 +547,26 @@ export default function App() {
             {/* MAIN CONTENT WORKSPACE AREA */}
             <main className="w-full">
               
+              {/* FIRST-SESSION GUEST / DEMO CONTEXT BAR */}
+              <FirstSessionContextBar />
+
+              {/* SHOWCASE MODE CONTROLLER (DETERMINISTIC 12-STAGE DEMO NARRATIVE) */}
+              <ShowcaseModeController
+                activeTab={activeTab}
+                onNavigateTab={(tab) => {
+                  setIsPlatformAdminOpen(false);
+                  if (tab === 'practice') {
+                    setPracticeMode('setup');
+                  }
+                  setActiveTab(tab);
+                }}
+                onStartLiveInterview={() => handleSelectPracticeAction('live')}
+                onOpenMissionControl={() => setIsMissionControlOpen(true)}
+              />
+
               {/* 0. ACTIVE CAREER MISSION & GROWTH LOOP BANNER */}
               {activeMission && (
-                <div className="mb-6 animate-in fade-in slide-in-from-top-2 duration-200">
+                <div className="mb-3 animate-in fade-in slide-in-from-top-2 duration-200">
                   <ActiveMissionBanner
                     mission={activeMission}
                     onOpenMissionControl={() => setIsMissionControlOpen(true)}
@@ -573,6 +580,7 @@ export default function App() {
               {activeTab === 'profile' && (
                 <MyProfileDashboard
                   profile={profile}
+                  activeMission={activeMission}
                   onUpdateProfile={(updates) => {
                     const updated = StorageService.saveUserProfile(updates);
                     setProfile(updated);
@@ -598,6 +606,7 @@ export default function App() {
                     setMissionInitialDomain('');
                     setIsCreateMissionOpen(true);
                   }}
+                  onExecuteMissionStep={handleExecuteMissionStep}
                   onGetExpertFeedback={handleOpenGetFeedback}
                 />
               )}
@@ -623,7 +632,10 @@ export default function App() {
 
               {/* 2.5 BUILDER MATCH (Innovation & Collaborative Network) */}
               {activeTab === 'builder_match' && (
-                <div className="space-y-6 animate-in fade-in duration-150">
+                <div
+                  data-protected-ip="Advanced Builder Match & Collaborative Capability Intelligence"
+                  className="space-y-6 animate-in fade-in duration-150"
+                >
                   <BuilderMatchWorkspace
                     onNavigateToKnowledge={(query) => {
                       setActiveTab('knowledge');
@@ -637,6 +649,10 @@ export default function App() {
                       relevantCapability: buildData.capability,
                       sourceType: 'build'
                     })}
+                  />
+                  <ProtectedFrameworkAttribution
+                    areaLabel="Advanced Builder Match & Capability Synergy Signals"
+                    variant="minimal"
                   />
                 </div>
               )}
@@ -687,6 +703,7 @@ export default function App() {
                       <LiveInterviewWorkspace
                         config={practiceConfig}
                         onExit={() => setPracticeMode('setup')}
+                        onOpenMissionControl={() => setIsMissionControlOpen(true)}
                       />
                     ) : (
                       <MockInterviewWorkspace
@@ -710,6 +727,7 @@ export default function App() {
                       }}
                       onGoToTracker={() => setActiveTab('tracker')}
                       onGoToDiscover={() => setActiveTab('discover')}
+                      onOpenMissionControl={() => setIsMissionControlOpen(true)}
                       onGetFeedback={(sessionData) => handleOpenGetFeedback({
                         workSubmittedTitle: sessionData.title,
                         workSubmittedContent: sessionData.content,
@@ -763,27 +781,6 @@ export default function App() {
           </div>
         )}
       </div>
-
-      {/* Slide-Over Drawer: Your Pins & Assistant (One Unified Header & Dedicated Layout) */}
-      <YourPinsAssistantDrawer
-        isOpen={isPinsDrawerOpen}
-        onClose={() => setIsPinsDrawerOpen(false)}
-        profile={profile}
-        savedJobs={wishlist}
-        onOpenApplication={(appId) => {
-          setSelectedApplicationId(appId);
-          setActiveTab('tracker');
-          setIsPinsDrawerOpen(false);
-        }}
-        onNavigateToJob={() => {
-          setActiveTab('discover');
-          setIsPinsDrawerOpen(false);
-        }}
-        onNavigateToKnowledge={() => {
-          setActiveTab('knowledge');
-          setIsPinsDrawerOpen(false);
-        }}
-      />
 
       {/* Global Quick Command Palette (Cmd+K) */}
       <QuickCommandModal
@@ -845,31 +842,26 @@ export default function App() {
         }}
       />
 
-      {/* Get Expert Feedback Flow Modal */}
+      {/* Unified Canonical Career Feedback Flow Modal */}
       <GetExpertFeedbackModal
         isOpen={isGetFeedbackOpen}
         onClose={() => setIsGetFeedbackOpen(false)}
         initialContext={feedbackContext}
         initialExpertId={feedbackTargetExpertId}
+        initialSessionId={activeFeedbackRequestId}
+        initialStep={feedbackInitialStep}
         onFeedbackRequested={(requestId) => {
-          handleOpenFeedbackWorkspace(requestId);
+          setActiveFeedbackRequestId(requestId);
         }}
-      />
-
-      {/* Feedback Workspace Modal */}
-      <FeedbackWorkspaceModal
-        isOpen={isFeedbackWorkspaceOpen}
-        onClose={() => setIsFeedbackWorkspaceOpen(false)}
-        requestId={activeFeedbackRequestId}
         onNavigateToBuilderMatch={() => {
-          setIsFeedbackWorkspaceOpen(false);
+          setIsGetFeedbackOpen(false);
           setActiveTab('builder_match');
         }}
         onNavigateToKnowledge={() => {
-          setIsFeedbackWorkspaceOpen(false);
+          setIsGetFeedbackOpen(false);
           setActiveTab('knowledge');
         }}
-        onAddToCareerEvidence={(evidenceData) => {
+        onAddToCareerEvidence={() => {
           if (activeMission) {
             CareerMissionService.linkEvidence(activeMission.id, `ev-${Date.now()}`);
             setActiveMission(CareerMissionService.getActiveMission());
@@ -877,17 +869,23 @@ export default function App() {
         }}
       />
 
-      {/* Expert Network Directory Modal */}
-      <ExpertNetworkDirectoryModal
-        isOpen={isExpertNetworkOpen}
-        onClose={() => setIsExpertNetworkOpen(false)}
-        onRequestFeedbackForExpert={(expert) => {
-          handleOpenGetFeedback(undefined, expert.id);
-        }}
-      />
+      {/* Contextual First-Session Guest Prompt */}
+      <FirstSessionGuestPrompt />
+
+      {/* Canonical CareerOS Seat Request Modal (with User Simulation support) */}
+      <RequestSeatModal />
+
+      {/* Internal Beta QA & Readiness Checklist Panel (Hidden from normal Guest users) */}
+      <InternalBetaQAChecklistPanel mode="floating" />
+
+      {/* Lightweight Public Beta IP & Product Protection Overlay */}
+      <ProtectedPreviewOverlay />
 
       {/* Footer */}
-      <Footer onNavigate={(tab) => setActiveTab(tab)} />
+      <Footer onNavigate={(tab) => {
+        setActiveTab(tab);
+        AccessControlService.recordMeaningfulInteraction('navigation');
+      }} />
     </div>
   );
 }

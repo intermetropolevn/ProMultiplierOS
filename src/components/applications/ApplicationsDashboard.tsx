@@ -53,6 +53,7 @@ import { applicationStore } from '../../features/applications/services/applicati
 import { TrackNewParticipationModal } from '../tracker/TrackNewParticipationModal';
 import { ImportParticipationModal } from '../tracker/ImportParticipationModal';
 import { StageTransitionModal } from '../tracker/StageTransitionModal';
+import { useAccessControl } from '../../services/accessControlService';
 import { AddTestAssignmentModal } from '../tracker/AddTestAssignmentModal';
 import { ScheduleInterviewModal } from '../tracker/ScheduleInterviewModal';
 import { UpcomingDeadlinesWidget } from '../tracker/UpcomingDeadlinesWidget';
@@ -69,6 +70,7 @@ export const ApplicationsDashboard: React.FC<ApplicationsDashboardProps> = ({
   onSelectApplication,
   onNavigateToTab
 }) => {
+  const { accessLevel, capabilities, recordMeaningfulInteraction } = useAccessControl();
   const [applications, setApplications] = useState<JobApplication[]>(() => 
     applicationStore.getApplications()
   );
@@ -115,7 +117,11 @@ export const ApplicationsDashboard: React.FC<ApplicationsDashboardProps> = ({
   useEffect(() => {
     const handleUpdate = () => reloadData();
     window.addEventListener('career_applications_updated', handleUpdate);
-    return () => window.removeEventListener('career_applications_updated', handleUpdate);
+    window.addEventListener('career_access_changed', handleUpdate);
+    return () => {
+      window.removeEventListener('career_applications_updated', handleUpdate);
+      window.removeEventListener('career_access_changed', handleUpdate);
+    };
   }, []);
 
   // Helper: Determine if item is Saved, Completed, or Upcoming
@@ -446,12 +452,14 @@ export const ApplicationsDashboard: React.FC<ApplicationsDashboardProps> = ({
         {/* ROW 1: Title, Subtitle, and Primary Actions */}
         <div className="flex flex-col md:flex-row md:items-start md:justify-between gap-4">
           <div className="space-y-1">
-            <div className="flex items-center gap-2">
+            <div className="flex flex-wrap items-center gap-2">
               <span className="text-[10px] font-black uppercase tracking-wider px-2 py-0.5 rounded-full bg-blue-50 text-blue-700 border border-blue-200">
                 Participation Tracker
               </span>
-              <span className="text-slate-300">·</span>
-              <span className="text-2xs text-slate-500 font-medium">Career Activities &amp; Engagements</span>
+              <span className="text-slate-300 hidden sm:inline">·</span>
+              <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-slate-100 text-slate-700 border border-slate-200">
+                Showing {applications.length} sample participation records (Curated Beta Preview)
+              </span>
             </div>
             <h1 className="text-xl sm:text-2xl font-black tracking-tight text-slate-900">
               Participation Tracker
@@ -499,7 +507,10 @@ export const ApplicationsDashboard: React.FC<ApplicationsDashboardProps> = ({
             <button
               id="btn-add-participation-primary"
               type="button"
-              onClick={() => setIsTrackNewModalOpen(true)}
+              onClick={() => {
+                recordMeaningfulInteraction('creation_preview');
+                setIsTrackNewModalOpen(true);
+              }}
               className="flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-bold bg-blue-600 hover:bg-blue-700 text-white transition-all shadow-xs cursor-pointer"
             >
               <Plus className="w-4 h-4 text-white stroke-[2.5]" />
@@ -976,6 +987,26 @@ export const ApplicationsDashboard: React.FC<ApplicationsDashboardProps> = ({
           </div>
         )}
 
+      </div>
+
+      {/* Results & Beta Indicator */}
+      <div className="flex flex-wrap items-center justify-between text-xs text-slate-500 px-1 gap-2">
+        <div className="flex items-center gap-2">
+          <span>
+            Showing <strong className="font-bold text-slate-900">{filteredItems.length}</strong> participation {filteredItems.length === 1 ? 'record' : 'records'}
+          </span>
+          <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${
+            accessLevel === 'FULL'
+              ? 'bg-emerald-50 text-emerald-800 border-emerald-200'
+              : accessLevel === 'DEMO'
+              ? 'bg-amber-50 text-amber-800 border-amber-200'
+              : accessLevel === 'GUEST'
+              ? 'bg-blue-50 text-blue-700 border-blue-200'
+              : 'bg-slate-100 text-slate-700 border-slate-200'
+          }`}>
+            {capabilities.tierBadgeLabel}
+          </span>
+        </div>
       </div>
 
       {/* ==================================================

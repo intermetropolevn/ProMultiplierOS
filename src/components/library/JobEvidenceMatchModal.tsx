@@ -3,6 +3,8 @@ import { JobListing } from '../../types';
 import { sourceStore } from '../../features/sources/services/sourceStore';
 import { getEvidenceStrengthDefinition } from '../../features/sources/taxonomy';
 import { SkillWhyEvidenceModal } from '../knowledge/SkillWhyEvidenceModal';
+import { useAccessControl } from '../../services/accessControlService';
+import { CareerOSIntelligenceGate, IntelligenceModeBadge } from '../access/CareerOSIntelligenceGate';
 import { 
   X, 
   ShieldCheck, 
@@ -30,8 +32,13 @@ export const JobEvidenceMatchModal: React.FC<JobEvidenceMatchModalProps> = ({
   onClose,
   onOpenSourceDetail
 }) => {
+  const { getIntelligenceAccess, consumeDemoIntelligenceSignal } = useAccessControl();
+  const matchAccess = getIntelligenceAccess('intelligent_matching');
+  const isFull = matchAccess.isFull;
   const [inspectingSkill, setInspectingSkill] = useState<string | null>(null);
+  const [showGateModal, setShowGateModal] = useState(false);
   const matchReport = sourceStore.getJobEvidenceMatch(job);
+  const visibleRequirements = isFull ? matchReport.requirements : matchReport.requirements.slice(0, 2);
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs overflow-y-auto animate-in fade-in duration-150">
@@ -40,12 +47,13 @@ export const JobEvidenceMatchModal: React.FC<JobEvidenceMatchModalProps> = ({
         {/* Header */}
         <div className="p-6 border-b border-slate-100 bg-slate-50/60 flex items-start justify-between gap-4">
           <div className="space-y-1">
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 flex-wrap">
               <span className="p-1 rounded-md bg-blue-100 text-blue-800 text-[10px] font-black uppercase tracking-wider">
                 Job Requirement vs User Evidence
               </span>
               <span className="text-xs text-slate-500 font-semibold">•</span>
               <span className="text-xs font-bold text-slate-700">{matchReport.company}</span>
+              <IntelligenceModeBadge capability="intelligent_matching" />
             </div>
             <h2 className="text-xl sm:text-2xl font-black text-slate-900 tracking-tight">
               Evidence Match: {matchReport.jobTitle}
@@ -124,7 +132,7 @@ export const JobEvidenceMatchModal: React.FC<JobEvidenceMatchModalProps> = ({
               />
             </div>
             <p className="text-[11px] text-purple-800">
-              Weighted by verified output tier.
+              Verified output tier across career artifacts.
             </p>
           </div>
         </div>
@@ -134,13 +142,20 @@ export const JobEvidenceMatchModal: React.FC<JobEvidenceMatchModalProps> = ({
           
           {/* Requirement Breakdown Table / Cards */}
           <div className="space-y-3">
-            <h3 className="text-xs font-black uppercase tracking-wider text-slate-800 flex items-center gap-1.5">
-              <Target className="w-4 h-4 text-blue-600" />
-              <span>Skill Requirement vs User Evidence Breakdown</span>
-            </h3>
+            <div className="flex items-center justify-between gap-2">
+              <h3 className="text-xs font-black uppercase tracking-wider text-slate-800 flex items-center gap-1.5">
+                <Target className="w-4 h-4 text-blue-600" />
+                <span>Skill Requirement vs User Evidence Breakdown</span>
+              </h3>
+              {!isFull && (
+                <span className="text-[11px] font-bold text-amber-700 bg-amber-50 border border-amber-200 px-2.5 py-0.5 rounded-full">
+                  Showing {visibleRequirements.length} sample requirements
+                </span>
+              )}
+            </div>
 
             <div className="space-y-3">
-              {matchReport.requirements.map(req => {
+              {visibleRequirements.map(req => {
                 const strengthInfo = getEvidenceStrengthDefinition(req.userEvidenceStrength);
                 return (
                   <div 
@@ -164,7 +179,20 @@ export const JobEvidenceMatchModal: React.FC<JobEvidenceMatchModalProps> = ({
                           </span>
                         )}
                         <button
-                          onClick={() => setInspectingSkill(req.skill)}
+                          onClick={() => {
+                            if (matchAccess.isGuest) {
+                              setShowGateModal(true);
+                              return;
+                            }
+                            if (matchAccess.isDemo) {
+                              const allowed = consumeDemoIntelligenceSignal('intelligent_matching', `${job.id}_${req.skill}`);
+                              if (!allowed) {
+                                setShowGateModal(true);
+                                return;
+                              }
+                            }
+                            setInspectingSkill(req.skill);
+                          }}
                           className="inline-flex items-center gap-1 text-[11px] font-bold text-blue-600 hover:text-blue-800 hover:underline px-2 py-0.5 rounded-md bg-blue-50/60 hover:bg-blue-100/60 cursor-pointer transition-colors"
                           title="View 'Why do you think I have this?' transparent evidence ledger"
                         >
@@ -225,40 +253,48 @@ export const JobEvidenceMatchModal: React.FC<JobEvidenceMatchModalProps> = ({
           </div>
 
           {/* Evidence Gaps & Actionable Recommendations */}
-          {matchReport.demonstratedGaps.length > 0 && (
-            <div className="p-4 rounded-2xl bg-amber-50/70 border border-amber-200/90 space-y-3">
-              <div className="flex items-center gap-2">
-                <AlertCircle className="w-4 h-4 text-amber-700" />
-                <h4 className="text-xs font-black text-amber-950 uppercase tracking-wider">
-                  Identified Evidence Gaps
-                </h4>
-              </div>
-
-              <ul className="space-y-1 text-xs text-amber-900">
-                {matchReport.demonstratedGaps.map((gap, i) => (
-                  <li key={i} className="flex items-start gap-1.5">
-                    <span>•</span>
-                    <span>{gap}</span>
-                  </li>
-                ))}
-              </ul>
-
-              {matchReport.recommendedActions.length > 0 && (
-                <div className="pt-2 border-t border-amber-200/60">
-                  <span className="text-[11px] font-bold text-amber-950 uppercase tracking-wider block mb-1">
-                    Recommended Gap-Closing Actions:
-                  </span>
-                  <ul className="space-y-1 text-xs text-amber-800">
-                    {matchReport.recommendedActions.map((act, i) => (
-                      <li key={i} className="flex items-center gap-1.5 font-medium">
-                        <Sparkles className="w-3 h-3 text-amber-600 shrink-0" />
-                        <span>{act}</span>
-                      </li>
-                    ))}
-                  </ul>
+          {isFull ? (
+            matchReport.demonstratedGaps.length > 0 && (
+              <div className="p-4 rounded-2xl bg-amber-50/70 border border-amber-200/90 space-y-3">
+                <div className="flex items-center gap-2">
+                  <AlertCircle className="w-4 h-4 text-amber-700" />
+                  <h4 className="text-xs font-black text-amber-950 uppercase tracking-wider">
+                    Identified Evidence Gaps
+                  </h4>
                 </div>
-              )}
-            </div>
+
+                <ul className="space-y-1 text-xs text-amber-900">
+                  {matchReport.demonstratedGaps.map((gap, i) => (
+                    <li key={i} className="flex items-start gap-1.5">
+                      <span>•</span>
+                      <span>{gap}</span>
+                    </li>
+                  ))}
+                </ul>
+
+                {matchReport.recommendedActions.length > 0 && (
+                  <div className="pt-2 border-t border-amber-200/60">
+                    <span className="text-[11px] font-bold text-amber-950 uppercase tracking-wider block mb-1">
+                      Recommended Gap-Closing Actions:
+                    </span>
+                    <ul className="space-y-1 text-xs text-amber-800">
+                      {matchReport.recommendedActions.map((act, i) => (
+                        <li key={i} className="flex items-center gap-1.5 font-medium">
+                          <Sparkles className="w-3 h-3 text-amber-600 shrink-0" />
+                          <span>{act}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+              </div>
+            )
+          ) : (
+            <CareerOSIntelligenceGate
+              capability="intelligent_matching"
+              title="Complete Job vs. Evidence Matching & Gap Analysis"
+              subtitle="Unlock full multi-requirement match scoring, verified gap diagnostics, and personalized gap-closing build plans."
+            />
           )}
 
         </div>
@@ -284,6 +320,15 @@ export const JobEvidenceMatchModal: React.FC<JobEvidenceMatchModalProps> = ({
             setInspectingSkill(null);
             if (onOpenSourceDetail) onOpenSourceDetail(sourceId);
           }}
+        />
+      )}
+
+      {showGateModal && (
+        <CareerOSIntelligenceGate
+          capability="intelligent_matching"
+          variant="modal"
+          onClose={() => setShowGateModal(false)}
+          onContinueDemo={() => setShowGateModal(false)}
         />
       )}
     </div>

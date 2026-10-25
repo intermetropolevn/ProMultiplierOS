@@ -10,6 +10,10 @@ import {
 } from '../types';
 import { QUESTIONS_DATA } from '../../../data/questionsData';
 import { InterviewQuestion } from '../../../types';
+import { curatedBetaData } from '../../../services/curatedBetaData';
+import { AccessControlService } from '../../../services/accessControlService';
+import { demoWorkspaceService } from '../../../services/demoWorkspaceService';
+import { dataExposureGuard } from '../../../services/dataExposureGuardService';
 
 const STORAGE_KEYS = {
   EVIDENCE: 'career_os_profile_evidence_v2',
@@ -736,6 +740,16 @@ export const INITIAL_METRICS: MetricLedgerItem[] = [
 export class KnowledgeStorageService {
   // Evidence CRUD
   public static getEvidence(): EvidenceItem[] {
+    const access = AccessControlService.getAccessLevel();
+
+    if (access === 'DEMO') {
+      return demoWorkspaceService.getEvidenceItems();
+    }
+
+    if (curatedBetaData.isCuratedBetaActive()) {
+      return curatedBetaData.getEvidenceItems();
+    }
+
     try {
       const data = localStorage.getItem(STORAGE_KEYS.EVIDENCE);
       if (data) {
@@ -749,6 +763,12 @@ export class KnowledgeStorageService {
   }
 
   public static saveEvidence(items: EvidenceItem[]): void {
+    if (AccessControlService.getAccessLevel() === 'DEMO') {
+      demoWorkspaceService.saveEvidenceItems(items, true);
+      return;
+    }
+    const auth = dataExposureGuard.assertWriteAuthorized('evidence', 'update');
+    if (!auth.allowed) return;
     try {
       localStorage.setItem(STORAGE_KEYS.EVIDENCE, JSON.stringify(items));
     } catch (e) {
@@ -759,6 +779,36 @@ export class KnowledgeStorageService {
   public static addOrUpdateEvidence(item: EvidenceItem): EvidenceItem[] {
     const list = this.getEvidence();
     const existingIndex = list.findIndex(i => i.id === item.id);
+
+    if (existingIndex < 0) {
+      let customCount = 0;
+      const isDemo = AccessControlService.getAccessLevel() === 'DEMO';
+      if (isDemo) {
+        // Only check project limit when creating a Project item directly
+        if (item.category === 'Projects') {
+          const decision = demoWorkspaceService.canCreateEntity('projects');
+          if (!decision.allowed) {
+            console.warn('Project creation blocked by Demo Workspace limit:', decision.reason);
+            throw new Error(decision.reason || 'Demo Workspace limit reached for Projects (2 / 2).');
+          }
+        }
+      } else {
+        try {
+          const data = localStorage.getItem(STORAGE_KEYS.EVIDENCE);
+          if (data) {
+            const storedList: EvidenceItem[] = JSON.parse(data);
+            customCount = storedList.filter(i => !INITIAL_EVIDENCE.some(init => init.id === i.id)).length;
+          }
+        } catch {}
+
+        const decision = AccessControlService.canCreateWorkflowItem('evidence', customCount);
+        if (!decision.allowed) {
+          console.warn('Evidence creation blocked by access control:', decision.reason);
+          throw new Error(decision.reason || 'Creation restricted by active access tier.');
+        }
+      }
+    }
+
     let updated: EvidenceItem[];
     const now = new Date().toISOString();
     
@@ -780,6 +830,16 @@ export class KnowledgeStorageService {
 
   // Stories CRUD
   public static getStories(): CandidateStory[] {
+    const tier = AccessControlService.getAccessLevel();
+    if (tier === 'PUBLIC') {
+      return dataExposureGuard.paginateAndProject('stories', INITIAL_STORIES.slice(0, 1), undefined, 'PUBLIC').items;
+    }
+    if (tier === 'GUEST') {
+      return dataExposureGuard.paginateAndProject('stories', INITIAL_STORIES.slice(0, 3), undefined, 'GUEST').items;
+    }
+    if (tier === 'DEMO') {
+      return dataExposureGuard.paginateAndProject('stories', INITIAL_STORIES.slice(0, 5), undefined, 'DEMO').items;
+    }
     try {
       const data = localStorage.getItem(STORAGE_KEYS.STORIES);
       if (data) {
@@ -793,6 +853,9 @@ export class KnowledgeStorageService {
   }
 
   public static saveStories(stories: CandidateStory[]): void {
+    const auth = dataExposureGuard.assertWriteAuthorized('stories', 'update');
+    if (!auth.allowed) return;
+    if (!dataExposureGuard.canPersistFullCatalogToStorage()) return;
     try {
       localStorage.setItem(STORAGE_KEYS.STORIES, JSON.stringify(stories));
     } catch (e) {
@@ -801,6 +864,10 @@ export class KnowledgeStorageService {
   }
 
   public static addOrUpdateStory(story: CandidateStory): CandidateStory[] {
+    const auth = dataExposureGuard.assertWriteAuthorized('stories', 'create');
+    if (!auth.allowed) {
+      return this.getStories();
+    }
     const list = this.getStories();
     const existingIndex = list.findIndex(s => s.id === story.id);
     let updated: CandidateStory[];
@@ -817,6 +884,8 @@ export class KnowledgeStorageService {
   }
 
   public static deleteStory(id: string): CandidateStory[] {
+    const auth = dataExposureGuard.assertWriteAuthorized('stories', 'delete');
+    if (!auth.allowed) return this.getStories();
     const list = this.getStories().filter(s => s.id !== id);
     this.saveStories(list);
     return list;
@@ -824,6 +893,16 @@ export class KnowledgeStorageService {
 
   // Blueprints CRUD
   public static getBlueprints(): StructuredAnswerBlueprint[] {
+    const access = AccessControlService.getAccessLevel();
+
+    if (access === 'DEMO') {
+      return demoWorkspaceService.getQaBlueprints();
+    }
+
+    if (curatedBetaData.isCuratedBetaActive()) {
+      return curatedBetaData.getBlueprints();
+    }
+
     try {
       const data = localStorage.getItem(STORAGE_KEYS.BLUEPRINTS);
       if (data) {
@@ -872,6 +951,14 @@ export class KnowledgeStorageService {
   }
 
   public static saveBlueprints(blueprints: StructuredAnswerBlueprint[]): void {
+    if (AccessControlService.getAccessLevel() === 'DEMO') {
+      demoWorkspaceService.saveQaBlueprints(blueprints, true);
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent('career_blueprints_updated'));
+      }
+      return;
+    }
+
     try {
       localStorage.setItem(STORAGE_KEYS.BLUEPRINTS, JSON.stringify(blueprints));
       if (typeof window !== 'undefined') {
@@ -885,6 +972,28 @@ export class KnowledgeStorageService {
   public static addOrUpdateBlueprint(blueprint: StructuredAnswerBlueprint): StructuredAnswerBlueprint[] {
     const list = this.getBlueprints();
     const existingIndex = list.findIndex(b => b.id === blueprint.id);
+
+    if (existingIndex < 0) {
+      let customCount = 0;
+      if (AccessControlService.getAccessLevel() === 'DEMO') {
+        customCount = demoWorkspaceService.getCategoryUsage('qa_blueprints').used;
+      } else {
+        try {
+          const data = localStorage.getItem(STORAGE_KEYS.BLUEPRINTS);
+          if (data) {
+            const parsed: StructuredAnswerBlueprint[] = JSON.parse(data);
+            customCount = parsed.filter(i => !INITIAL_BLUEPRINTS.some(init => init.id === i.id)).length;
+          }
+        } catch {}
+      }
+
+      const decision = AccessControlService.canCreateWorkflowItem('blueprints', customCount);
+      if (!decision.allowed) {
+        console.warn('Blueprint creation blocked by access control:', decision.reason);
+        throw new Error(decision.reason || 'Creation restricted by active access tier.');
+      }
+    }
+
     let updated: StructuredAnswerBlueprint[];
     const now = new Date().toISOString();
 
@@ -943,6 +1052,16 @@ export class KnowledgeStorageService {
 
   // Metrics Ledger CRUD
   public static getMetrics(): MetricLedgerItem[] {
+    const tier = AccessControlService.getAccessLevel();
+    if (tier === 'PUBLIC') {
+      return dataExposureGuard.paginateAndProject('metrics', INITIAL_METRICS.slice(0, 1), undefined, 'PUBLIC').items;
+    }
+    if (tier === 'GUEST') {
+      return dataExposureGuard.paginateAndProject('metrics', INITIAL_METRICS.slice(0, 3), undefined, 'GUEST').items;
+    }
+    if (tier === 'DEMO') {
+      return dataExposureGuard.paginateAndProject('metrics', INITIAL_METRICS.slice(0, 5), undefined, 'DEMO').items;
+    }
     try {
       const data = localStorage.getItem(STORAGE_KEYS.METRICS);
       if (data) {
@@ -956,6 +1075,9 @@ export class KnowledgeStorageService {
   }
 
   public static saveMetrics(metrics: MetricLedgerItem[]): void {
+    const auth = dataExposureGuard.assertWriteAuthorized('metrics', 'update');
+    if (!auth.allowed) return;
+    if (!dataExposureGuard.canPersistFullCatalogToStorage()) return;
     try {
       localStorage.setItem(STORAGE_KEYS.METRICS, JSON.stringify(metrics));
     } catch (e) {
@@ -964,6 +1086,8 @@ export class KnowledgeStorageService {
   }
 
   public static addOrUpdateMetric(metric: MetricLedgerItem): MetricLedgerItem[] {
+    const auth = dataExposureGuard.assertWriteAuthorized('metrics', 'create');
+    if (!auth.allowed) return this.getMetrics();
     const list = this.getMetrics();
     const existingIndex = list.findIndex(m => m.id === metric.id);
     let updated: MetricLedgerItem[];
@@ -979,6 +1103,8 @@ export class KnowledgeStorageService {
   }
 
   public static deleteMetric(id: string): MetricLedgerItem[] {
+    const auth = dataExposureGuard.assertWriteAuthorized('metrics', 'delete');
+    if (!auth.allowed) return this.getMetrics();
     const list = this.getMetrics().filter(m => m.id !== id);
     this.saveMetrics(list);
     return list;
@@ -1040,6 +1166,10 @@ export class KnowledgeStorageService {
   }
 
   public static exportKnowledgeJson(): string {
+    const exportAuth = dataExposureGuard.assertWriteAuthorized('knowledge', 'export');
+    if (!exportAuth.allowed) {
+      throw new Error(exportAuth.reason || 'Knowledge export requires Full Access.');
+    }
     const payload = {
       evidence: this.getEvidence(),
       stories: this.getStories(),
@@ -1052,6 +1182,10 @@ export class KnowledgeStorageService {
   }
 
   public static importKnowledgeJson(jsonStr: string): boolean {
+    const importAuth = dataExposureGuard.assertWriteAuthorized('knowledge', 'import');
+    if (!importAuth.allowed) {
+      return false;
+    }
     try {
       const parsed = JSON.parse(jsonStr);
       if (parsed.evidence && Array.isArray(parsed.evidence)) {

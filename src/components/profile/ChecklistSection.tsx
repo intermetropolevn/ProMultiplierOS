@@ -15,8 +15,6 @@ import {
 } from 'lucide-react';
 import { UnifiedTaskService, CareerTask, TaskPriority } from '../../services/unifiedTaskService';
 import { CareerMissionService } from '../../services/careerMissionService';
-import { CareerMission } from '../../types/careerMission';
-import { Target, Zap, ArrowRight } from 'lucide-react';
 
 interface ChecklistSectionProps {
   onOpenMissionControl?: () => void;
@@ -25,14 +23,8 @@ interface ChecklistSectionProps {
 }
 
 export const ChecklistSection: React.FC<ChecklistSectionProps> = ({
-  onOpenMissionControl,
-  onOpenCreateMission,
   onGetExpertFeedback,
 }) => {
-  const [activeMission, setActiveMission] = useState<CareerMission | null>(() => {
-    return CareerMissionService.getActiveMission();
-  });
-
   const [tasks, setTasks] = useState<CareerTask[]>(() => {
     return UnifiedTaskService.getTasks().filter(t => t.source === 'readiness' || t.category === 'practice' || t.category === 'evidence' || t.category === 'target');
   });
@@ -47,14 +39,9 @@ export const ChecklistSection: React.FC<ChecklistSectionProps> = ({
     const handleUpdate = () => {
       setTasks(UnifiedTaskService.getTasks().filter(t => t.source === 'readiness' || t.category === 'practice' || t.category === 'evidence' || t.category === 'target'));
     };
-    const handleMissionUpdate = () => {
-      setActiveMission(CareerMissionService.getActiveMission());
-    };
     window.addEventListener('career_tasks_updated', handleUpdate);
-    window.addEventListener('career_mission_updated', handleMissionUpdate);
     return () => {
       window.removeEventListener('career_tasks_updated', handleUpdate);
-      window.removeEventListener('career_mission_updated', handleMissionUpdate);
     };
   }, []);
 
@@ -100,79 +87,6 @@ export const ChecklistSection: React.FC<ChecklistSectionProps> = ({
   return (
     <div className="bg-white rounded-2xl border border-slate-200/90 shadow-2xs p-5 transition-all space-y-5">
       
-      {/* 0. ACTIVE CAREER MISSION & GROWTH LOOP CARD */}
-      {activeMission ? (
-        <div className="p-4 bg-gradient-to-r from-blue-900 to-indigo-900 rounded-xl text-white space-y-3 shadow-md border border-blue-500/30">
-          <div className="flex items-center justify-between gap-2">
-            <div className="flex items-center gap-2">
-              <div className="w-6 h-6 rounded-lg bg-blue-600 flex items-center justify-center text-white">
-                <Target className="w-3.5 h-3.5" />
-              </div>
-              <div>
-                <span className="text-[10px] font-extrabold uppercase tracking-wider text-blue-200 block">
-                  Active Career Mission
-                </span>
-                <span className="text-xs font-bold text-white">
-                  {activeMission.title}
-                </span>
-              </div>
-            </div>
-
-            <span className="text-[10px] font-extrabold uppercase px-2 py-0.5 rounded-full bg-amber-400/20 text-amber-300 border border-amber-400/30 shrink-0">
-              Phase: {activeMission.currentStage}
-            </span>
-          </div>
-
-          <div className="text-xs text-blue-100/90 flex flex-col sm:flex-row sm:items-center justify-between gap-2 pt-1 border-t border-white/10">
-            <div>
-              You have <strong className="text-white">{activeMission.capabilityGaps.length} capability gaps</strong> preventing stronger readiness for {activeMission.targetRoleTitle}.
-            </div>
-            <div className="flex items-center gap-2 shrink-0">
-              {onOpenCreateMission && (
-                <button
-                  type="button"
-                  onClick={onOpenCreateMission}
-                  className="text-2xs text-blue-200 hover:text-white underline cursor-pointer"
-                >
-                  Create a Mission
-                </button>
-              )}
-              {onOpenMissionControl && (
-                <button
-                  type="button"
-                  onClick={onOpenMissionControl}
-                  className="px-3 py-1 bg-blue-600 hover:bg-blue-500 text-white font-bold rounded-lg text-2xs transition-all flex items-center gap-1 cursor-pointer shadow-xs"
-                >
-                  <span>Growth Loop Control</span>
-                  <ArrowRight className="w-3 h-3" />
-                </button>
-              )}
-            </div>
-          </div>
-        </div>
-      ) : (
-        <div className="p-4 bg-blue-50/70 border border-blue-200 rounded-xl flex items-center justify-between gap-3">
-          <div className="space-y-0.5">
-            <div className="text-xs font-bold text-blue-900 flex items-center gap-1.5">
-              <Target className="w-4 h-4 text-blue-600" />
-              <span>No Active Career Mission</span>
-            </div>
-            <p className="text-2xs text-blue-700">
-              Turn your career goals into an actionable 8-stage Growth Loop
-            </p>
-          </div>
-          {onOpenCreateMission && (
-            <button
-              type="button"
-              onClick={onOpenCreateMission}
-              className="px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold rounded-lg transition-all shadow-xs cursor-pointer shrink-0"
-            >
-              Create a Mission
-            </button>
-          )}
-        </div>
-      )}
-
       {/* 1. INTERVIEW READINESS PROGRESS BAR & ACTIONABLE BENCHMARK */}
       <div className="p-4 bg-slate-50/80 rounded-xl border border-slate-200/70">
         <div className="flex items-center justify-between mb-2">
@@ -218,7 +132,7 @@ export const ChecklistSection: React.FC<ChecklistSectionProps> = ({
         </div>
       </div>
 
-      {/* 1.5 EXTERNAL VALIDATION UNCERTAINTY CALLOUT (Requirement 2: From Readiness) */}
+      {/* 1.5 EXTERNAL VALIDATION UNCERTAINTY CALLOUT (Canonical Contextual Entry Point) */}
       {onGetExpertFeedback && (
         <div className="p-4 rounded-2xl bg-gradient-to-r from-amber-50 via-orange-50 to-amber-50/70 border border-amber-200/90 shadow-2xs flex flex-col sm:flex-row sm:items-center justify-between gap-3.5 text-xs">
           <div className="flex items-start gap-3">
@@ -231,7 +145,7 @@ export const ChecklistSection: React.FC<ChecklistSectionProps> = ({
                   Readiness Confidence Signal
                 </span>
                 <span className="font-bold text-slate-900 text-xs">
-                  Product Strategy · 68% Calibration
+                  Product Strategy — 68% Calibration
                 </span>
               </div>
               <p className="text-slate-700 text-xs font-medium leading-relaxed">
@@ -243,16 +157,27 @@ export const ChecklistSection: React.FC<ChecklistSectionProps> = ({
           <button
             type="button"
             id="btn-readiness-get-expert-feedback"
-            onClick={() => onGetExpertFeedback({
-              relevantCapability: 'Product Strategy',
-              careerGoal: activeMission?.title || 'Become a Senior Product Manager',
-              targetRole: activeMission?.targetRoleTitle || 'Senior Product Manager',
-              workSubmittedTitle: 'Product Strategy & Sandbox Trial Activation Defense',
-              workSubmittedContent: `Observed trial activation drop from 31% to 19% after permissions launch.\nProposed progressive permission staging with automated compliance exports for IT stakeholders.`,
-              sourceType: 'readiness',
-              readinessScore: 68,
-              knownSkillGaps: ['Enterprise Multi-tenant Governance', 'Executive Strategic Trade-offs']
-            })}
+            onClick={() => {
+              const currentMission = CareerMissionService.getActiveMission();
+              onGetExpertFeedback({
+                relevantCapability: 'Product Strategy',
+                careerGoal: currentMission?.title || 'Become an AI Product Manager',
+                targetRole: currentMission?.targetRoleTitle || 'Senior Product Manager',
+                targetDomain: currentMission?.targetDomain || 'AI Product & Enterprise SaaS',
+                workSubmittedTitle: 'Product Strategy & Strategic Trade-offs',
+                workSubmittedContent: `Observed trial activation drop from 31% to 19% after releasing multi-workspace enterprise permission gates.\n\nProposed intervention:\n1. Progressive Permission Staging sandbox so trial teams explore core features without immediate SOC2 IT Admin blockers.\n2. 1-click compliance governance export report auditable in under 2 minutes.\n3. Checkpoints: Day-3 collaborative invite rate, Day-7 active workspace threshold, Day-14 conversion contract signed.`,
+                supportingEvidence: [
+                  'Sandbox Trial Activation Defense',
+                  'Multi-Workspace Permission Staging Spec'
+                ],
+                sourceType: 'readiness',
+                readinessScore: 68,
+                knownSkillGaps: currentMission?.capabilityGaps.map(g => g.capability) || [
+                  'Enterprise Multi-tenant Governance',
+                  'Executive Strategic Trade-offs'
+                ]
+              });
+            }}
             className="px-4 py-2 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-slate-900 font-extrabold text-xs rounded-xl shadow-xs transition shrink-0 flex items-center justify-center gap-1.5 cursor-pointer whitespace-nowrap"
           >
             <Sparkles className="w-3.5 h-3.5 fill-slate-900" />

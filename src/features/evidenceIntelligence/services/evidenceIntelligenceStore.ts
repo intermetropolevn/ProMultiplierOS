@@ -19,6 +19,7 @@ import {
   SEED_EVIDENCE_GRAPH_DATA, 
   SEED_ROLE_READINESS_CHECK 
 } from '../data/evidenceIntelligenceData';
+import { curatedBetaData } from '../../../services/curatedBetaData';
 
 class EvidenceIntelligenceStore {
   private initiatives: WorkInitiative[] = [];
@@ -55,6 +56,9 @@ class EvidenceIntelligenceStore {
 
   // --- Initiatives ---
   getInitiatives(): WorkInitiative[] {
+    if (curatedBetaData.isCuratedBetaActive()) {
+      return this.initiatives.slice(0, 3);
+    }
     return this.initiatives;
   }
 
@@ -69,11 +73,15 @@ class EvidenceIntelligenceStore {
 
   // --- Inbox Operations ---
   getInboxItems(): EvidenceItem[] {
-    return this.inbox.filter(item => item.validationStatus === 'Suggested' || item.validationStatus === 'Detected');
+    const raw = this.inbox.filter(item => item.validationStatus === 'Suggested' || item.validationStatus === 'Detected');
+    if (curatedBetaData.isCuratedBetaActive()) {
+      return raw.slice(0, 3);
+    }
+    return raw;
   }
 
   getConfirmedEvidenceCount(): number {
-    return this.timelineEvidence.length;
+    return this.getAllEvidence().length;
   }
 
   confirmEvidence(id: string, updates?: Partial<EvidenceItem>): EvidenceItem | undefined {
@@ -164,6 +172,9 @@ class EvidenceIntelligenceStore {
 
   // --- Timeline & Search ---
   getAllEvidence(): EvidenceItem[] {
+    if (curatedBetaData.isCuratedBetaActive()) {
+      return this.timelineEvidence.slice(0, 3);
+    }
     return this.timelineEvidence;
   }
 

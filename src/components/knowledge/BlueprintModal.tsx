@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { X, Check, Sparkles, Layers, BookOpen, Clock, AlertCircle } from 'lucide-react';
+import React, { useState, useRef } from 'react';
+import { X, Check, Sparkles, Layers, BookOpen, Clock, AlertCircle, Lock } from 'lucide-react';
 import { 
   StructuredAnswerBlueprint, 
   BlueprintFramework, 
@@ -7,6 +7,10 @@ import {
   StructuredAnswerComponents 
 } from '../../features/knowledge/types';
 import { QUESTIONS_DATA } from '../../data/questionsData';
+import { AccessCreationBanner } from '../access/AccessCreationBanner';
+import { ProgressiveCreationSection } from '../access/ProgressiveCreationSection';
+import { DemoQuotaGate } from '../access/DemoQuotaGate';
+import { useAccessControl } from '../../services/accessControlService';
 
 interface BlueprintModalProps {
   isOpen: boolean;
@@ -33,6 +37,8 @@ export const BlueprintModal: React.FC<BlueprintModalProps> = ({
   preselectedStory
 }) => {
   const isEditing = !!initialBlueprint;
+  const { capabilities, canCreate, openContextualPrompt } = useAccessControl();
+  const isSubmittingRef = useRef(false);
 
   const defaultStory = preselectedStory || (initialBlueprint ? stories.find(s => s.id === initialBlueprint.storyId) : stories[0]);
   const defaultQuestion = initialBlueprint 
@@ -41,6 +47,8 @@ export const BlueprintModal: React.FC<BlueprintModalProps> = ({
 
   const [framework, setFramework] = useState<BlueprintFramework>(initialBlueprint?.framework || 'STAR');
   const [title, setTitle] = useState(initialBlueprint?.title || '');
+  const [targetRole, setTargetRole] = useState(initialBlueprint?.targetRole || defaultQuestion?.roleCategory || 'Software Engineering');
+  const [difficulty, setDifficulty] = useState('Senior');
   const [selectedQuestionId, setSelectedQuestionId] = useState(initialBlueprint?.questionId || defaultQuestion?.id || 'q-star-disagreement');
   const [customQuestionText, setCustomQuestionText] = useState(initialBlueprint?.questionText || defaultQuestion?.question || '');
   const [selectedStoryId, setSelectedStoryId] = useState(initialBlueprint?.storyId || defaultStory?.id || stories[0]?.id || '');
@@ -111,6 +119,15 @@ export const BlueprintModal: React.FC<BlueprintModalProps> = ({
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+    if (isSubmittingRef.current) return;
+    if (!capabilities.canCreate) {
+      openContextualPrompt();
+      return;
+    }
+    if (!isEditing && !canCreate('blueprints')) {
+      return;
+    }
+    isSubmittingRef.current = true;
 
     const chosenStory = stories.find(s => s.id === selectedStoryId);
     const resolvedTitle = title.trim() || `${framework} Blueprint: ${chosenStory?.title || 'Answer'}`;
@@ -199,87 +216,15 @@ export const BlueprintModal: React.FC<BlueprintModalProps> = ({
         </div>
 
         {/* Form Body */}
+        <DemoQuotaGate workflowKey="blueprints" isEditing={isEditing} onViewExistingItems={onClose}>
         <form onSubmit={handleSubmit} className="overflow-y-auto p-6 space-y-6 flex-1 text-sm">
-          
-          {/* Framework Selector Tabs */}
-          <div className="space-y-1.5">
-            <label className="block text-xs font-bold text-slate-800 uppercase tracking-wider">
-              Answer Framework
-            </label>
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-              {FRAMEWORKS.map(fw => {
-                const isSelected = framework === fw;
-                return (
-                  <button
-                    key={fw}
-                    type="button"
-                    onClick={() => setFramework(fw)}
-                    className={`py-2.5 px-3 rounded-xl border text-xs font-bold transition-all cursor-pointer text-center ${
-                      isSelected
-                        ? 'bg-blue-600 border-blue-600 text-white shadow-xs'
-                        : 'bg-slate-50 hover:bg-slate-100 border-slate-200 text-slate-700'
-                    }`}
-                  >
-                    {fw}
-                  </button>
-                );
-              })}
-            </div>
-          </div>
+          <AccessCreationBanner workflowKey="blueprints" workflowLabel="Q&A Blueprints" />
 
-          {/* Blueprint Title */}
-          <div className="space-y-1.5">
-            <label className="block text-xs font-bold text-slate-800 uppercase tracking-wider">
-              Blueprint Title
-            </label>
-            <input
-              type="text"
-              value={title}
-              onChange={e => setTitle(e.target.value)}
-              placeholder={`e.g. ${framework} Blueprint: Tech Lead Disagreement`}
-              className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 focus:outline-hidden focus:ring-2 focus:ring-blue-500 text-slate-900 placeholder:text-slate-400 font-bold"
-            />
-          </div>
-
-          {/* Story & Question Association */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 p-4 rounded-2xl bg-slate-50 border border-slate-200/80">
-            {/* Story Selector */}
+          {/* BASIC SECTION: Question, Role, Category, Difficulty */}
+          <div className="space-y-4">
             <div className="space-y-1.5">
               <label className="block text-xs font-bold text-slate-800 uppercase tracking-wider">
-                Select Base Story (from Story Bank)
-              </label>
-              <select
-                value={selectedStoryId}
-                onChange={e => handleStoryChange(e.target.value)}
-                className="w-full px-3 py-2 rounded-xl border border-slate-300 focus:outline-hidden focus:ring-2 focus:ring-blue-500 text-slate-900 bg-white font-medium cursor-pointer"
-              >
-                {stories.map(s => (
-                  <option key={s.id} value={s.id}>{s.title}</option>
-                ))}
-              </select>
-            </div>
-
-            {/* Target Duration */}
-            <div className="space-y-1.5">
-              <label className="block text-xs font-bold text-slate-800 uppercase tracking-wider">
-                Target Speaking Time
-              </label>
-              <select
-                value={targetDuration}
-                onChange={e => setTargetDuration(Number(e.target.value))}
-                className="w-full px-3 py-2 rounded-xl border border-slate-300 focus:outline-hidden focus:ring-2 focus:ring-blue-500 text-slate-900 bg-white font-medium cursor-pointer"
-              >
-                <option value={90}>1:30 min (Elevator/Concise)</option>
-                <option value={120}>2:00 min (Standard Response)</option>
-                <option value={150}>2:30 min (Deep Dive)</option>
-                <option value={180}>3:00 min (Staff/Principal Level)</option>
-              </select>
-            </div>
-
-            {/* Question Selector */}
-            <div className="sm:col-span-2 space-y-1.5">
-              <label className="block text-xs font-bold text-slate-800 uppercase tracking-wider">
-                Target Interview Question
+                Target Interview Question *
               </label>
               <select
                 value={selectedQuestionId}
@@ -293,7 +238,103 @@ export const BlueprintModal: React.FC<BlueprintModalProps> = ({
                 ))}
               </select>
             </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3.5">
+              <div>
+                <label className="block text-xs font-bold text-slate-800 uppercase tracking-wider mb-1">
+                  Role
+                </label>
+                <input
+                  type="text"
+                  value={targetRole}
+                  onChange={e => setTargetRole(e.target.value)}
+                  className="w-full px-3 py-2 rounded-xl border border-slate-300 text-slate-900 bg-white font-medium text-xs"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-800 uppercase tracking-wider mb-1">
+                  Category / Framework
+                </label>
+                <select
+                  value={framework}
+                  onChange={e => setFramework(e.target.value as BlueprintFramework)}
+                  className="w-full px-3 py-2 rounded-xl border border-slate-300 text-slate-900 bg-white font-medium text-xs cursor-pointer"
+                >
+                  {FRAMEWORKS.map(fw => (
+                    <option key={fw} value={fw}>{fw}</option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-800 uppercase tracking-wider mb-1">
+                  Difficulty
+                </label>
+                <select
+                  value={difficulty}
+                  onChange={e => setDifficulty(e.target.value)}
+                  className="w-full px-3 py-2 rounded-xl border border-slate-300 text-slate-900 bg-white font-medium text-xs cursor-pointer"
+                >
+                  <option value="Foundational">Foundational</option>
+                  <option value="Intermediate">Intermediate</option>
+                  <option value="Senior">Senior</option>
+                  <option value="Staff / Principal">Staff / Principal</option>
+                </select>
+              </div>
+            </div>
           </div>
+
+          <ProgressiveCreationSection workflowKey="blueprints">
+            {/* Blueprint Title */}
+            <div className="space-y-1.5">
+              <label className="block text-xs font-bold text-slate-800 uppercase tracking-wider">
+                Blueprint Title
+              </label>
+              <input
+                type="text"
+                value={title}
+                onChange={e => setTitle(e.target.value)}
+                placeholder={`e.g. ${framework} Blueprint: Tech Lead Disagreement`}
+                className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 focus:outline-hidden focus:ring-2 focus:ring-blue-500 text-slate-900 placeholder:text-slate-400 font-bold"
+              />
+            </div>
+
+            {/* Story & Speaking Time Association */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 p-4 rounded-2xl bg-slate-50 border border-slate-200/80">
+              {/* Story Selector */}
+              <div className="space-y-1.5">
+                <label className="block text-xs font-bold text-slate-800 uppercase tracking-wider">
+                  Select Base Story (from Story Bank)
+                </label>
+                <select
+                  value={selectedStoryId}
+                  onChange={e => handleStoryChange(e.target.value)}
+                  className="w-full px-3 py-2 rounded-xl border border-slate-300 focus:outline-hidden focus:ring-2 focus:ring-blue-500 text-slate-900 bg-white font-medium cursor-pointer"
+                >
+                  {stories.map(s => (
+                    <option key={s.id} value={s.id}>{s.title}</option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Target Duration */}
+              <div className="space-y-1.5">
+                <label className="block text-xs font-bold text-slate-800 uppercase tracking-wider">
+                  Target Speaking Time
+                </label>
+                <select
+                  value={targetDuration}
+                  onChange={e => setTargetDuration(Number(e.target.value))}
+                  className="w-full px-3 py-2 rounded-xl border border-slate-300 focus:outline-hidden focus:ring-2 focus:ring-blue-500 text-slate-900 bg-white font-medium cursor-pointer"
+                >
+                  <option value={90}>1:30 min (Elevator/Concise)</option>
+                  <option value={120}>2:00 min (Standard Response)</option>
+                  <option value={150}>2:30 min (Deep Dive)</option>
+                  <option value={180}>3:00 min (Staff/Principal Level)</option>
+                </select>
+              </div>
+            </div>
 
           {/* Opening Hook */}
           <div className="space-y-1.5">
@@ -556,6 +597,7 @@ export const BlueprintModal: React.FC<BlueprintModalProps> = ({
               />
             </div>
           </div>
+          </ProgressiveCreationSection>
 
           {/* Footer Buttons */}
           <div className="pt-4 border-t border-slate-200 flex items-center justify-end gap-3">
@@ -566,14 +608,26 @@ export const BlueprintModal: React.FC<BlueprintModalProps> = ({
             >
               Cancel
             </button>
-            <button
-              type="submit"
-              className="px-5 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold shadow-xs cursor-pointer"
-            >
-              {isEditing ? 'Save Blueprint' : 'Create Blueprint'}
-            </button>
+            {!capabilities.canCreate ? (
+              <button
+                type="button"
+                onClick={() => openContextualPrompt()}
+                className="px-5 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold shadow-xs cursor-pointer inline-flex items-center gap-1.5"
+              >
+                <Lock className="w-3.5 h-3.5" />
+                <span>Unlock in Demo</span>
+              </button>
+            ) : (
+              <button
+                type="submit"
+                className="px-5 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold shadow-xs cursor-pointer"
+              >
+                {isEditing ? 'Save Blueprint' : 'Create Blueprint'}
+              </button>
+            )}
           </div>
         </form>
+        </DemoQuotaGate>
 
       </div>
     </div>

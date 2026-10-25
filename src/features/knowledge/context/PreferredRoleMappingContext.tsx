@@ -3,6 +3,7 @@ import { RoleBlueprint, UserCareerProfile, SectorDomain } from '../../../types';
 import { RoleBlueprintService } from '../../../services/roleBlueprintService';
 import { StorageService } from '../../../services/storageService';
 import { CANONICAL_DOMAINS } from '../../../data/jobTaxonomies';
+import { curatedBetaData } from '../../../services/curatedBetaData';
 
 export interface PreferredRoleMappingContextType {
   preferredRoleBlueprintId: string;
@@ -90,17 +91,20 @@ export const PreferredRoleMappingProvider: React.FC<PreferredRoleMappingProvider
 
   // 3. Multi-Select Target Domains state: synchronized with profile.targetIndustryDomains
   const profileDomains = useMemo(() => {
+    if (curatedBetaData.isCuratedBetaActive()) {
+      return curatedBetaData.getFeaturedDomains();
+    }
     if (profile?.targetIndustryDomains && profile.targetIndustryDomains.length > 0) {
       return profile.targetIndustryDomains;
     }
     if (profile?.targetDomain) {
       return [profile.targetDomain];
     }
-    return ['E-Commerce & Retail', 'AdTech & MarTech'];
+    return ['Enterprise SaaS', 'Fintech & Payments', 'AI & Machine Learning'];
   }, [profile?.targetIndustryDomains, profile?.targetDomain]);
 
   const [targetDomains, setTargetDomainsState] = useState<string[]>(profileDomains);
-  const [activeDomain, setActiveDomain] = useState<string>(profileDomains[0] || 'E-Commerce & Retail');
+  const [activeDomain, setActiveDomain] = useState<string>(profileDomains[0] || 'Enterprise SaaS');
 
   useEffect(() => {
     setTargetDomainsState(profileDomains);

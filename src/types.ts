@@ -640,6 +640,10 @@ export * from './types/builderMatch';
 export * from './types/careerMission';
 
 // ==================================================
-// EXPERT FEEDBACK & EXPERT NETWORK TYPES
-// ==================================================
 export * from './types/expertFeedback';
+
+// ==================================================
+// CAREEROS BETA BASELINE ACCESS & EXPOSURE CONFIG
+// ==================================================
+export * from './config/careerOsBaseline';
+

@@ -14,6 +14,9 @@ import { RoleProfileView } from './RoleProfileView';
 import { RoleReadinessModal } from './RoleReadinessModal';
 import { RoleGraphModal } from './RoleGraphModal';
 import { UserCareerProfile } from '../../types';
+import { IntelligenceAccessBanner } from '../access/IntelligenceAccessBanner';
+import { CareerOSIntelligenceGate, IntelligenceModeBadge } from '../access/CareerOSIntelligenceGate';
+import { useAccessControl } from '../../services/accessControlService';
 import { 
   Sliders, 
   GitBranch, 
@@ -55,13 +58,16 @@ export const RoleIntelligenceWorkspace: React.FC<RoleIntelligenceWorkspaceProps>
   onNavigateToOpportunities,
   onNavigateToParticipation
 }) => {
+  const { recordMeaningfulInteraction, getIntelligenceAccess, consumeDemoIntelligenceSignal } = useAccessControl();
   const [activeSubTab, setActiveSubTab] = useState<RoleIntelligenceSubTab>(initialSubTab);
   const [selectedRoleId, setSelectedRoleId] = useState<string>(initialRoleId);
   const [roleSearchQuery, setRoleSearchQuery] = useState<string>('');
   const [isReadinessOpen, setIsReadinessOpen] = useState(false);
   const [isRoleGraphOpen, setIsRoleGraphOpen] = useState(false);
   const [viewingProfile, setViewingProfile] = useState(false);
+  const [gateModalOpen, setGateModalOpen] = useState(false);
 
+  const roleIntelAccess = getIntelligenceAccess('role_intelligence_evaluation');
   const roles = roleIntelligenceStore.getRoles();
   const filteredRoles = roleSearchQuery.trim()
     ? roles.filter(r => 
@@ -95,10 +101,11 @@ export const RoleIntelligenceWorkspace: React.FC<RoleIntelligenceWorkspaceProps>
         {/* Top Bar: Module Title & Role Selector */}
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
           <div className="space-y-1">
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 flex-wrap">
               <span className="text-[10px] font-black uppercase tracking-wider px-2 py-0.5 rounded bg-blue-50 text-blue-700 border border-blue-200">
                 Career Intelligence
               </span>
+              <IntelligenceModeBadge capability="role_intelligence_evaluation" />
               <span className="text-slate-300">·</span>
               <span className="text-xs text-slate-500 font-medium">Product × Tech × BizOps Architecture</span>
             </div>
@@ -116,7 +123,7 @@ export const RoleIntelligenceWorkspace: React.FC<RoleIntelligenceWorkspaceProps>
                 <Search className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-2.5" />
                 <input
                   type="text"
-                  placeholder="Search 12 roles..."
+                  placeholder={`Search ${roles.length} roles...`}
                   value={roleSearchQuery}
                   onChange={(e) => setRoleSearchQuery(e.target.value)}
                   className="bg-slate-50 border border-slate-200/90 rounded-xl pl-8 pr-2.5 py-1.5 text-xs text-slate-800 placeholder:text-slate-400 focus:outline-hidden focus:ring-1 focus:ring-blue-500 w-32 sm:w-40"
@@ -126,8 +133,17 @@ export const RoleIntelligenceWorkspace: React.FC<RoleIntelligenceWorkspaceProps>
               <select
                 value={selectedRoleId}
                 onChange={(e) => {
-                  setSelectedRoleId(e.target.value);
+                  const nextRoleId = e.target.value;
+                  if (roleIntelAccess.isDemo) {
+                    const allowed = consumeDemoIntelligenceSignal('role_intelligence_evaluation', nextRoleId);
+                    if (!allowed) {
+                      setGateModalOpen(true);
+                      return;
+                    }
+                  }
+                  setSelectedRoleId(nextRoleId);
                   setViewingProfile(false);
+                  recordMeaningfulInteraction('detail_open');
                 }}
                 className="bg-slate-50 border border-slate-200/90 rounded-xl px-3 py-1.5 text-xs font-bold text-slate-800 cursor-pointer shadow-3xs hover:bg-slate-100/70 transition-all max-w-[200px] truncate"
               >
@@ -142,7 +158,10 @@ export const RoleIntelligenceWorkspace: React.FC<RoleIntelligenceWorkspaceProps>
             {/* Quick Readiness Trigger */}
             <button
               type="button"
-              onClick={() => setIsReadinessOpen(true)}
+              onClick={() => {
+                recordMeaningfulInteraction('detail_open');
+                setIsReadinessOpen(true);
+              }}
               className="px-3.5 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-bold transition-all shadow-xs flex items-center gap-1.5 cursor-pointer"
             >
               <Target className="w-3.5 h-3.5" />
@@ -152,7 +171,10 @@ export const RoleIntelligenceWorkspace: React.FC<RoleIntelligenceWorkspaceProps>
             {/* Role Graph Trigger */}
             <button
               type="button"
-              onClick={() => setIsRoleGraphOpen(true)}
+              onClick={() => {
+                recordMeaningfulInteraction('detail_open');
+                setIsRoleGraphOpen(true);
+              }}
               className="px-3.5 py-2 bg-purple-50 hover:bg-purple-100 text-purple-700 border border-purple-200 rounded-xl text-xs font-bold transition-all shadow-3xs flex items-center gap-1.5 cursor-pointer"
             >
               <GitBranch className="w-3.5 h-3.5 text-purple-600" />
@@ -204,6 +226,9 @@ export const RoleIntelligenceWorkspace: React.FC<RoleIntelligenceWorkspaceProps>
         </div>
 
       </div>
+
+      {/* Intelligence Access Banner for Public/Guest/Demo tiers */}
+      <IntelligenceAccessBanner featureName="Role Intelligence" className="mb-4" />
 
       {/* ==================================================
           2. WORKSPACE CONTENT BODY
@@ -291,6 +316,14 @@ export const RoleIntelligenceWorkspace: React.FC<RoleIntelligenceWorkspaceProps>
           setIsRoleGraphOpen(false);
         }}
       />
+
+      {gateModalOpen && (
+        <CareerOSIntelligenceGate
+          capability="role_intelligence_evaluation"
+          variant="modal"
+          onClose={() => setGateModalOpen(false)}
+        />
+      )}
 
     </div>
   );

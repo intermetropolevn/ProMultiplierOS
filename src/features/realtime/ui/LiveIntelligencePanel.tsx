@@ -52,7 +52,7 @@ export const LiveIntelligencePanel: React.FC<LiveIntelligencePanelProps> = ({
   currentInterviewQuestion,
   onIntelligenceUpdate,
 }) => {
-  const [speechState, setSpeechState] = useState<SpeechState>('LISTENING');
+  const [speechState, setSpeechState] = useState<SpeechState>('IDLE');
   const [recentTranscript, setRecentTranscript] = useState<string>("Okay, let's move on to...");
   const [detectedResult, setDetectedResult] = useState<DetectedQuestionResult | null>(null);
   const [guidance, setGuidance] = useState<AnswerGuidanceOutput | null>(null);
@@ -73,7 +73,7 @@ export const LiveIntelligencePanel: React.FC<LiveIntelligencePanelProps> = ({
 
   const coordinatorRef = useRef<RealtimePipelineCoordinator | null>(null);
 
-  // Initialize pipeline coordinator
+  // Initialize pipeline coordinator passively without requesting microphone on mount
   useEffect(() => {
     const coordinator = new RealtimePipelineCoordinator(
       {
@@ -95,9 +95,6 @@ export const LiveIntelligencePanel: React.FC<LiveIntelligencePanelProps> = ({
     );
 
     coordinatorRef.current = coordinator;
-
-    // Start in active listening mode by default
-    coordinator.startListening().catch(() => {});
 
     return () => {
       coordinator.stopListening();

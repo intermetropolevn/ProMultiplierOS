@@ -25,6 +25,10 @@ import { JobService } from '../../services/jobService';
 import { JobInputHistoryService, JobHistoryEntry, JobHistoryField } from '../../services/jobInputHistoryService';
 import { JobSemanticExtractor, addOneCalendarMonth } from '../../features/intelligence/services/jobSemanticExtractor';
 import { ClassificationMemoryService } from '../../features/intelligence/services/classificationMemoryService';
+import { AccessCreationBanner } from '../access/AccessCreationBanner';
+import { ProgressiveCreationSection } from '../access/ProgressiveCreationSection';
+import { DemoQuotaGate } from '../access/DemoQuotaGate';
+import { useAccessControl } from '../../services/accessControlService';
 import { 
   Briefcase, 
   Building2, 
@@ -44,7 +48,8 @@ import {
   Cpu,
   Maximize2,
   Minimize2,
-  Sparkles
+  Sparkles,
+  Lock
 } from 'lucide-react';
 
 interface AddJobModalProps {
@@ -65,6 +70,8 @@ export const AddJobModal: React.FC<AddJobModalProps> = ({
   mode = 'create',
 }) => {
   const isEditMode = mode === 'edit' && Boolean(initialJob);
+  const { capabilities, canCreate, openContextualPrompt } = useAccessControl();
+  const isSubmittingRef = useRef(false);
 
   // Core Form State (Primary Source of Truth)
   const [title, setTitle] = useState('');
@@ -141,6 +148,7 @@ export const AddJobModal: React.FC<AddJobModalProps> = ({
   // Pre-fill fields when modal opens or initialJob changes
   useEffect(() => {
     if (isOpen) {
+      isSubmittingRef.current = false;
       setFieldErrors({});
       setSubmitError(null);
       setIsSubmitting(false);
@@ -274,6 +282,7 @@ export const AddJobModal: React.FC<AddJobModalProps> = ({
 
   // Run Semantic Extraction from Brief Overview & Core Info with Context-Aware Priority Ranking
   const performSemanticExtraction = (overviewText: string, currentTitle = title, currentCompany = company) => {
+    if (!capabilities.canViewIntelligence) return;
     if (!overviewText.trim() && !currentTitle.trim()) return;
 
     setIsExtracting(true);
@@ -634,6 +643,14 @@ export const AddJobModal: React.FC<AddJobModalProps> = ({
   // Form submission with explicit, actionable validation and loading state
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+    if (isSubmittingRef.current || isSubmitting) return;
+    if (!capabilities.canCreate) {
+      openContextualPrompt();
+      return;
+    }
+    if (!isEditMode && !canCreate('jobs')) {
+      return;
+    }
 
     const errors: Record<string, string> = {};
 
@@ -663,6 +680,7 @@ export const AddJobModal: React.FC<AddJobModalProps> = ({
       return;
     }
 
+    isSubmittingRef.current = true;
     setIsSubmitting(true);
     setSubmitError(null);
 
@@ -746,6 +764,7 @@ export const AddJobModal: React.FC<AddJobModalProps> = ({
       console.error('Failed to create/update job opportunity:', err);
       setSubmitError(err?.message || 'Could not save job opportunity. Please verify input data.');
     } finally {
+      isSubmittingRef.current = false;
       setIsSubmitting(false);
     }
   };
@@ -760,6 +779,7 @@ export const AddJobModal: React.FC<AddJobModalProps> = ({
       title={isEditMode ? "Edit Job Opportunity" : "Add Job Opportunity"} 
       maxWidth="5xl"
     >
+      <DemoQuotaGate workflowKey="jobs" isEditing={isEditMode} onViewExistingItems={onClose}>
       <form onSubmit={handleSubmit} noValidate className="space-y-5 text-left">
         
         {/* Actionable Error Banner if validation fails */}
@@ -778,6 +798,13 @@ export const AddJobModal: React.FC<AddJobModalProps> = ({
             </button>
           </div>
         )}
+
+        {/* Beta Access Tier Creation Policy Banner */}
+        <AccessCreationBanner 
+          workflowKey="jobs" 
+          workflowLabel="job opportunities" 
+          currentCount={JobService.getCustomJobs().length} 
+        />
 
         {/* ========================================================================= */}
         {/* 1. CORE JOB INFORMATION (PRIMARY SOURCE OF TRUTH)                          */}
@@ -919,15 +946,43 @@ export const AddJobModal: React.FC<AddJobModalProps> = ({
             </div>
           </div>
 
-          {/* Job Posting URL with Platform Auto-detection & Override */}
-          <div className="p-4 bg-slate-50/90 rounded-2xl border border-slate-200/80 space-y-3">
+          {/* Location & Job Posting URL (Basic Fields) */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            {/* Location */}
+            <div>
+              <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
+                Location
+              </label>
+              <div className="relative">
+                <MapPin className="w-4 h-4 text-slate-400 absolute left-3 top-3" />
+                <input
+                  type="text"
+                  value={isGlobalLocation ? 'Global / Remote' : customLocation}
+                  onChange={e => {
+                    const val = e.target.value;
+                    if (val.toLowerCase() === 'global' || val.toLowerCase() === 'global / remote') {
+                      setIsGlobalLocation(true);
+                      setCustomLocation('');
+                    } else {
+                      setIsGlobalLocation(false);
+                      handleFieldChangeWithHistory('location', val, setCustomLocation);
+                    }
+                    markFieldEdited('location');
+                  }}
+                  placeholder="e.g. San Francisco, CA, Ho Chi Minh City, or Global"
+                  className="w-full pl-9 pr-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm text-slate-900 focus:bg-white focus:outline-hidden focus:ring-2 focus:ring-blue-500 transition-all"
+                />
+              </div>
+            </div>
+
+            {/* Job Posting URL */}
             <div>
               <div className="flex items-center justify-between mb-1.5">
                 <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider">
-                  Job Posting URL
+                  URL
                 </label>
                 <span className="text-[11px] text-blue-600 font-medium">
-                  Auto-normalizes protocols & detects platform
+                  Job Posting Link
                 </span>
               </div>
               <div className="relative">
@@ -946,7 +1001,7 @@ export const AddJobModal: React.FC<AddJobModalProps> = ({
                     }
                   }}
                   placeholder="e.g. linkedin.com/jobs/view/... or https://jobsgo.vn/job/..."
-                  className={`w-full pl-9 pr-3 py-2 bg-white border rounded-xl text-sm text-slate-900 focus:outline-hidden focus:ring-2 transition-all ${
+                  className={`w-full pl-9 pr-3 py-2 bg-slate-50 border rounded-xl text-sm text-slate-900 focus:bg-white focus:outline-hidden focus:ring-2 transition-all ${
                     fieldErrors.url ? 'border-rose-400 focus:ring-rose-500 bg-rose-50/30' : 'border-slate-200 focus:ring-blue-500'
                   }`}
                 />
@@ -958,14 +1013,12 @@ export const AddJobModal: React.FC<AddJobModalProps> = ({
                 </p>
               )}
             </div>
+          </div>
 
-            {/* Platform Auto-Detection & Explicit Manual Override */}
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-1 border-t border-slate-200/60">
-              <div className="flex flex-wrap items-center gap-2 text-xs text-slate-600">
-                <span>Platform Source:</span>
-                <strong className="text-slate-900">{detectedSource}</strong>
-
-                {isOverridden ? (
+          <div className="hidden">
+            <div>
+              <div>
+              {isOverridden ? (
                   <div className="flex items-center gap-1.5">
                     <span className="text-amber-800 bg-amber-50 px-2 py-0.5 rounded-md text-[11px] font-bold border border-amber-200">
                       Manual override: {selectedSource?.name}
@@ -1123,14 +1176,16 @@ export const AddJobModal: React.FC<AddJobModalProps> = ({
         </div>
 
         {/* ========================================================================= */}
-        {/* 2. STRUCTURED FIELDS (USER REVIEWS & OVERRIDES)                            */}
+        {/* 2. ADVANCED SECTION: Required Core Skills, Salary Intelligence,           */}
+        {/*    Role Fit Signals, Market Signals, Opportunity Intelligence             */}
         {/* ========================================================================= */}
+        <ProgressiveCreationSection workflowKey="jobs">
         <div className="pt-2">
           <div className="flex items-center justify-between pb-3 mb-4 border-b border-slate-200">
             <div className="flex items-center gap-2">
               <Cpu className="w-4 h-4 text-slate-500" />
               <span className="text-xs font-bold text-slate-700 uppercase tracking-wider">
-                Classified Structure & Details
+                Classified Structure &amp; Opportunity Intelligence
               </span>
             </div>
             <span className="text-[11px] text-slate-500">
@@ -1631,6 +1686,7 @@ export const AddJobModal: React.FC<AddJobModalProps> = ({
             </div>
           </div>
         </div>
+        </ProgressiveCreationSection>
 
         {/* Actions - Exactly ONE plus icon in [+ Add Job Opportunity] */}
         <div className="flex items-center justify-end gap-3 pt-3 border-t border-slate-100">
@@ -1642,30 +1698,42 @@ export const AddJobModal: React.FC<AddJobModalProps> = ({
           >
             Cancel
           </button>
-          <button
-            type="submit"
-            disabled={isSubmitting}
-            className="px-5 py-2.5 text-xs font-bold uppercase tracking-wider bg-blue-600 hover:bg-blue-700 active:bg-blue-800 text-white rounded-xl shadow-xs transition-all flex items-center gap-1.5 cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed"
-          >
-            {isSubmitting ? (
-              <>
-                <Loader2 className="w-4 h-4 animate-spin" />
-                <span>{isEditMode ? 'Saving Changes…' : 'Creating…'}</span>
-              </>
-            ) : isEditMode ? (
-              <>
-                <Check className="w-4 h-4" />
-                <span>Save Changes</span>
-              </>
-            ) : (
-              <>
-                <Plus className="w-4 h-4" />
-                <span>Add Job Opportunity</span>
-              </>
-            )}
-          </button>
+          {!capabilities.canCreate ? (
+            <button
+              type="button"
+              onClick={() => openContextualPrompt()}
+              className="px-5 py-2.5 text-xs font-bold uppercase tracking-wider bg-blue-600 hover:bg-blue-700 text-white rounded-xl shadow-xs transition-all flex items-center gap-1.5 cursor-pointer"
+            >
+              <Lock className="w-4 h-4" />
+              <span>Unlock in Demo</span>
+            </button>
+          ) : (
+            <button
+              type="submit"
+              disabled={isSubmitting}
+              className="px-5 py-2.5 text-xs font-bold uppercase tracking-wider bg-blue-600 hover:bg-blue-700 active:bg-blue-800 text-white rounded-xl shadow-xs transition-all flex items-center gap-1.5 cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed"
+            >
+              {isSubmitting ? (
+                <>
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                  <span>{isEditMode ? 'Saving Changes…' : 'Creating…'}</span>
+                </>
+              ) : isEditMode ? (
+                <>
+                  <Check className="w-4 h-4" />
+                  <span>Save Changes</span>
+                </>
+              ) : (
+                <>
+                  <Plus className="w-4 h-4" />
+                  <span>Add Job Opportunity</span>
+                </>
+              )}
+            </button>
+          )}
         </div>
       </form>
+      </DemoQuotaGate>
     </Modal>
   );
 };

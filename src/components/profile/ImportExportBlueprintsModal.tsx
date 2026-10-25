@@ -33,6 +33,7 @@ import {
   CsvValidationResult,
   BLUEPRINT_CSV_FIELD_DEFINITIONS
 } from '../../features/knowledge/services/blueprintCsvService';
+import { AccessControlService, useAccessControl } from '../../services/accessControlService';
 
 interface ImportExportBlueprintsModalProps {
   isOpen: boolean;
@@ -78,7 +79,15 @@ export const ImportExportBlueprintsModal: React.FC<ImportExportBlueprintsModalPr
     triggerCsvDownload(csv, 'career_qa_blueprints_template.csv');
   };
 
+  const [exportNotice, setExportNotice] = useState<string | null>(null);
+
   const handleExportSelected = () => {
+    if (!AccessControlService.can('canExport')) {
+      const decision = AccessControlService.checkActionAllowed('export');
+      setExportNotice(decision.message || 'Exporting blueprints requires Full Access tier. Switch to Full Access in the top header.');
+      return;
+    }
+    setExportNotice(null);
     if (selectedBlueprints.length === 0) return;
     const csv = exportBlueprintsToCsv(selectedBlueprints);
     const timestamp = new Date().toISOString().slice(0, 10);
@@ -86,12 +95,24 @@ export const ImportExportBlueprintsModal: React.FC<ImportExportBlueprintsModalPr
   };
 
   const handleExportFiltered = () => {
+    if (!AccessControlService.can('canExport')) {
+      const decision = AccessControlService.checkActionAllowed('export');
+      setExportNotice(decision.message || 'Exporting blueprints requires Full Access tier. Switch to Full Access in the top header.');
+      return;
+    }
+    setExportNotice(null);
     const csv = exportBlueprintsToCsv(filteredBlueprints);
     const timestamp = new Date().toISOString().slice(0, 10);
     triggerCsvDownload(csv, `blueprints_filtered_${timestamp}.csv`);
   };
 
   const handleExportAll = () => {
+    if (!AccessControlService.can('canExport')) {
+      const decision = AccessControlService.checkActionAllowed('export');
+      setExportNotice(decision.message || 'Exporting blueprints requires Full Access tier. Switch to Full Access in the top header.');
+      return;
+    }
+    setExportNotice(null);
     const csv = exportBlueprintsToCsv(allBlueprints);
     const timestamp = new Date().toISOString().slice(0, 10);
     triggerCsvDownload(csv, `blueprints_all_library_${timestamp}.csv`);
@@ -783,6 +804,18 @@ export const ImportExportBlueprintsModal: React.FC<ImportExportBlueprintsModalPr
           {/* ============================================================ */}
           {activeTab === 'export' && (
             <div className="space-y-6 animate-in fade-in">
+              {exportNotice && (
+                <div className="p-3 bg-amber-50 border border-amber-200 text-amber-900 text-xs rounded-xl font-medium flex items-center justify-between gap-2">
+                  <span>{exportNotice}</span>
+                  <button
+                    type="button"
+                    onClick={() => AccessControlService.setAccessLevel('FULL')}
+                    className="px-2.5 py-1 bg-amber-600 hover:bg-amber-700 text-white font-bold rounded-lg text-[11px] shrink-0 cursor-pointer"
+                  >
+                    Switch to Full Access
+                  </button>
+                </div>
+              )}
               <div className="p-4 rounded-xl bg-blue-50/70 border border-blue-200 text-xs text-blue-900 leading-relaxed">
                 <span className="font-bold block mb-1">
                   💡 Bulk Edit Workflow via CSV Export:

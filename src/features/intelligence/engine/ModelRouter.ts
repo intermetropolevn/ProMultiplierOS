@@ -12,7 +12,7 @@ import {
 
 export class ModelRouter {
   /**
-   * Selects model and hyper-parameters dynamically based on task constraints
+   * Selects synthesis profile dynamically based on task constraints
    */
   public static selectModel(
     taskType: CareerTaskType,
@@ -25,12 +25,12 @@ export class ModelRouter {
     if (requiresCode || taskType === 'data_analysis') {
       return {
         profile: 'coding',
-        modelId: 'gemini-2.5-flash',
+        modelId: 'careeros-quantitative-tier',
         temperature: 0.1,
         maxOutputTokens: 2048,
         enableCodeExecution: true,
         enableSearchGrounding: false,
-        rationale: 'Routed to code execution model with deterministic low temperature for quantitative rigor.',
+        rationale: 'Routed to quantitative synthesis profile for structured analytical verification.',
       };
     }
 
@@ -38,13 +38,13 @@ export class ModelRouter {
     if (requiresResearch || taskType === 'deep_research' || taskType === 'company_research') {
       return {
         profile: 'research',
-        modelId: 'gemini-2.5-flash',
+        modelId: 'careeros-research-tier',
         temperature: 0.2,
         maxOutputTokens: 4096,
         enableSearchGrounding: true,
         enableCodeExecution: false,
         reasoningEffort: complexity === 'very_high' ? 'high' : 'medium',
-        rationale: 'Routed to research model with web search grounding and cross-source synthesis.',
+        rationale: 'Routed to grounded research synthesis profile with cross-source verification.',
       };
     }
 
@@ -52,13 +52,13 @@ export class ModelRouter {
     if (complexity === 'high' || complexity === 'very_high' || taskType === 'case_analysis') {
       return {
         profile: 'reasoning',
-        modelId: 'gemini-2.5-flash',
+        modelId: 'careeros-reasoning-tier',
         temperature: 0.3,
         maxOutputTokens: 3072,
         reasoningEffort: 'high',
         enableSearchGrounding: false,
         enableCodeExecution: false,
-        rationale: 'Routed to high-reasoning model for multi-step structured problem solving.',
+        rationale: 'Routed to multi-step reasoning profile for structured capability evaluation.',
       };
     }
 
@@ -66,26 +66,26 @@ export class ModelRouter {
     if (budgetTier === 'low' || complexity === 'low') {
       return {
         profile: 'cheap_fast',
-        modelId: 'gemini-2.5-flash-lite',
+        modelId: 'careeros-fast-tier',
         temperature: 0.2,
         maxOutputTokens: 1024,
         reasoningEffort: 'low',
         enableSearchGrounding: false,
         enableCodeExecution: false,
-        rationale: 'Routed to low-latency fast model to conserve tokens and minimize latency.',
+        rationale: 'Routed to low-latency synthesis profile for rapid career signal feedback.',
       };
     }
 
     // Default general reasoning
     return {
       profile: 'reasoning',
-      modelId: 'gemini-2.5-flash',
+      modelId: 'careeros-standard-tier',
       temperature: 0.2,
       maxOutputTokens: 2048,
       reasoningEffort: 'medium',
       enableSearchGrounding: false,
       enableCodeExecution: false,
-      rationale: 'Standard reasoning profile for contextual career analysis.',
+      rationale: 'Standard synthesis profile for contextual career analysis.',
     };
   }
 }

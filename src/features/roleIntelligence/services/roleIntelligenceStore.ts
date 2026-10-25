@@ -13,6 +13,7 @@ import {
   ROLE_GRAPH_DATA 
 } from '../data/rolesIntelligenceData';
 import { UserCareerProfile } from '../../../types';
+import { AccessControlService } from '../../../services/accessControlService';
 
 class RoleIntelligenceStore {
   private roles: RoleIntelligenceItem[] = [];
@@ -24,11 +25,16 @@ class RoleIntelligenceStore {
   }
 
   getRoles(): RoleIntelligenceItem[] {
+    const level = AccessControlService.getAccessLevel();
+    if (level === 'PUBLIC') return this.roles.slice(0, 1);
+    if (level === 'GUEST') return this.roles.slice(0, 3);
+    if (level === 'DEMO') return this.roles.slice(0, 5);
     return this.roles;
   }
 
   getRoleById(id: string): RoleIntelligenceItem | undefined {
-    return this.roles.find(r => r.id === id);
+    const visible = this.getRoles();
+    return visible.find(r => r.id === id) || visible[0];
   }
 
   getFrameworks(): FrameworkMetadata[] {

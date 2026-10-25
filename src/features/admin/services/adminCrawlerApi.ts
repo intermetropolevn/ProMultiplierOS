@@ -9,6 +9,7 @@ import {
   CrawlerPermission 
 } from '../types';
 import { crawlerStore } from './crawlerEngine';
+import { dataExposureGuard } from '../../../services/dataExposureGuardService';
 
 // Current active session state (Admin by default with option to test Candidate role)
 const DEFAULT_ADMIN_USER: AdminUser = {
@@ -112,10 +113,19 @@ export const AdminCrawlerApi = {
     return { verified: false, error: 'Invalid administrator credentials. Please check your password.' };
   },
 
+  buildHeaders(includeJson = false): Record<string, string> {
+    const user = this.getCurrentUser();
+    return {
+      ...dataExposureGuard.getSecurityHeaders(),
+      'X-CareerOS-Admin-Role': user.role,
+      ...(includeJson ? { 'Content-Type': 'application/json' } : {})
+    };
+  },
+
   // Sources API
   async getSources(): Promise<Source[]> {
     try {
-      const res = await fetch('/api/crawler/sources');
+      const res = await fetch('/api/crawler/sources', { headers: this.buildHeaders() });
       if (res.ok) return await res.json();
     } catch {}
     return crawlerStore.getSources();
@@ -123,7 +133,7 @@ export const AdminCrawlerApi = {
 
   async getSource(id: string): Promise<Source | null> {
     try {
-      const res = await fetch(`/api/crawler/sources/${id}`);
+      const res = await fetch(`/api/crawler/sources/${id}`, { headers: this.buildHeaders() });
       if (res.ok) return await res.json();
     } catch {}
     return crawlerStore.getSource(id) || null;
@@ -136,7 +146,7 @@ export const AdminCrawlerApi = {
     try {
       const res = await fetch('/api/crawler/sources', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: this.buildHeaders(true),
         body: JSON.stringify(source)
       });
       if (res.ok) return await res.json();
@@ -158,7 +168,10 @@ export const AdminCrawlerApi = {
       throw new Error('403 Forbidden: Missing crawler.manage_sources permission');
     }
     try {
-      const res = await fetch(`/api/crawler/sources/${id}`, { method: 'DELETE' });
+      const res = await fetch(`/api/crawler/sources/${id}`, {
+        method: 'DELETE',
+        headers: this.buildHeaders()
+      });
       if (res.ok) return true;
     } catch {}
 

@@ -1,5 +1,8 @@
 import { CareerOpportunity, TrackedRadarOpportunity } from '../types';
 import { INITIAL_OPPORTUNITIES } from '../data/opportunitiesData';
+import { curatedBetaData } from './curatedBetaData';
+import { AccessControlService } from './accessControlService';
+import { demoWorkspaceService } from './demoWorkspaceService';
 
 const STORAGE_KEYS = {
   OPPORTUNITIES: 'career_os_opportunities_v2',
@@ -19,6 +22,15 @@ export const OpportunityService = {
 
   // 1. OPPORTUNITIES CRUD
   getAllOpportunities(): CareerOpportunity[] {
+    if (AccessControlService.getAccessLevel() === 'DEMO') {
+      return demoWorkspaceService.getOpportunities();
+    }
+
+    // In Public Beta mode (PUBLIC / GUEST): return curated 3-item signals and programs
+    if (curatedBetaData.isCuratedBetaActive()) {
+      return curatedBetaData.getOpportunities();
+    }
+
     try {
       const stored = localStorage.getItem(STORAGE_KEYS.OPPORTUNITIES);
       if (stored) {
@@ -45,6 +57,12 @@ export const OpportunityService = {
   },
 
   saveOpportunities(opportunities: CareerOpportunity[]): CareerOpportunity[] {
+    if (AccessControlService.getAccessLevel() === 'DEMO') {
+      demoWorkspaceService.saveOpportunities(opportunities, true);
+      this.notifyOpportunities();
+      return opportunities;
+    }
+
     try {
       localStorage.setItem(STORAGE_KEYS.OPPORTUNITIES, JSON.stringify(opportunities));
     } catch (e) {
@@ -59,6 +77,11 @@ export const OpportunityService = {
   },
 
   createOpportunity(opportunityData: Omit<CareerOpportunity, 'id' | 'createdAt' | 'updatedAt'>): CareerOpportunity {
+    const decision = AccessControlService.canCreateWorkflowItem('opportunities', 0);
+    if (!decision.allowed) {
+      throw new Error(decision.reason || 'Creation restricted by active access tier.');
+    }
+
     const list = this.getAllOpportunities();
     const newOpportunity: CareerOpportunity = {
       ...opportunityData,

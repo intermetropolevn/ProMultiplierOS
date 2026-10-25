@@ -26,6 +26,9 @@ import {
 import { JobListing } from '../../../types';
 import { ContextualIntelligenceEngine } from './contextualIntelligenceEngine';
 import { CareerSemanticParser } from '../../intelligence/services/careerSemanticParser';
+import { curatedBetaData } from '../../../services/curatedBetaData';
+import { AccessControlService } from '../../../services/accessControlService';
+import { demoWorkspaceService } from '../../../services/demoWorkspaceService';
 
 const STORAGE_KEYS = {
   APPLICATIONS: 'career_os_applications_v1',
@@ -1256,6 +1259,25 @@ const SEED_SAVED_BOOTCAMP_1: JobApplication = {
   status: 'WISHLIST'
 };
 
+export const SEED_DEFAULT_APPLICATIONS: JobApplication[] = [
+  SEED_APPLICATION, 
+  SEED_APPLICATION_2, 
+  SEED_APPLICATION_3, 
+  SEED_APPLICATION_4, 
+  SEED_APPLICATION_5,
+  SEED_HACKATHON_1,
+  SEED_BUILDER_MATCH_1,
+  SEED_MENTORSHIP_1,
+  SEED_CREDENTIAL_1,
+  SEED_LEARNING_PROG_1,
+  SEED_WORKSHOP_1,
+  SEED_CONFERENCE_1,
+  SEED_MEETING_1,
+  SEED_WEBINAR_1,
+  SEED_VOLUNTEER_1,
+  SEED_SAVED_BOOTCAMP_1
+];
+
 class ApplicationStore {
   private applications: JobApplication[] = [];
   private assessments: ApplicationAssessment[] = [];
@@ -1275,24 +1297,7 @@ class ApplicationStore {
       const storedTasks = localStorage.getItem(STORAGE_KEYS.TASKS);
       const storedEv = localStorage.getItem(STORAGE_KEYS.EVIDENCE);
 
-      const defaultApps: JobApplication[] = [
-        SEED_APPLICATION, 
-        SEED_APPLICATION_2, 
-        SEED_APPLICATION_3, 
-        SEED_APPLICATION_4, 
-        SEED_APPLICATION_5,
-        SEED_HACKATHON_1,
-        SEED_BUILDER_MATCH_1,
-        SEED_MENTORSHIP_1,
-        SEED_CREDENTIAL_1,
-        SEED_LEARNING_PROG_1,
-        SEED_WORKSHOP_1,
-        SEED_CONFERENCE_1,
-        SEED_MEETING_1,
-        SEED_WEBINAR_1,
-        SEED_VOLUNTEER_1,
-        SEED_SAVED_BOOTCAMP_1
-      ];
+      const defaultApps: JobApplication[] = SEED_DEFAULT_APPLICATIONS;
 
       if (storedApps) {
         const parsed: JobApplication[] = JSON.parse(storedApps);
@@ -1376,18 +1381,37 @@ class ApplicationStore {
 
   // --- Applications API ---
   getApplications(): JobApplication[] {
+    const access = AccessControlService.getAccessLevel();
+    if (access === 'DEMO') {
+      return demoWorkspaceService.getParticipations();
+    }
+    if (access === 'PUBLIC') {
+      return this.applications.slice(0, 1);
+    }
+    if (access === 'GUEST') {
+      return this.applications.slice(0, 3);
+    }
     return [...this.applications];
   }
 
   getApplicationById(id: string): JobApplication | undefined {
+    if (AccessControlService.getAccessLevel() === 'DEMO') {
+      return demoWorkspaceService.getParticipations().find(a => a.id === id) || this.applications.find(a => a.id === id);
+    }
     return this.applications.find(a => a.id === id);
   }
 
   getApplicationByJobOpportunityId(jobOpportunityId: string): JobApplication | undefined {
+    if (AccessControlService.getAccessLevel() === 'DEMO') {
+      return demoWorkspaceService.getParticipations().find(a => a.jobOpportunityId === jobOpportunityId);
+    }
     return this.applications.find(a => a.jobOpportunityId === jobOpportunityId);
   }
 
   isJobTracked(jobOpportunityId: string): boolean {
+    if (AccessControlService.getAccessLevel() === 'DEMO') {
+      return demoWorkspaceService.getParticipations().some(a => a.jobOpportunityId === jobOpportunityId);
+    }
     return this.applications.some(a => a.jobOpportunityId === jobOpportunityId);
   }
 
@@ -1395,6 +1419,16 @@ class ApplicationStore {
     const existing = this.getApplicationByJobOpportunityId(job.id);
     if (existing) {
       return existing;
+    }
+
+    const isDemo = AccessControlService.getAccessLevel() === 'DEMO';
+    const customApps = isDemo
+      ? demoWorkspaceService.getParticipations().filter(a => a.createdByDemoUser)
+      : this.applications.filter(a => a.id.startsWith('app-') || a.id.startsWith('track-'));
+    const decision = AccessControlService.canCreateWorkflowItem('applications', customApps.length);
+    if (!decision.allowed) {
+      console.warn('Application creation blocked by access control:', decision.reason);
+      throw new Error(decision.reason || 'Creation restricted by active access tier.');
     }
 
     const { primary, sub } = mapLegacyStatusToPipelineState(initialStatus);
@@ -1460,6 +1494,10 @@ class ApplicationStore {
       updatedAt: new Date().toISOString()
     };
 
+    if (isDemo) {
+      return demoWorkspaceService.saveParticipation(newApp, true);
+    }
+
     this.saveApplication(newApp);
     return newApp;
   }
@@ -1469,6 +1507,16 @@ class ApplicationStore {
   }
 
   trackNewParticipation(item: Partial<JobApplication>): JobApplication {
+    const isDemo = AccessControlService.getAccessLevel() === 'DEMO';
+    const customApps = isDemo
+      ? demoWorkspaceService.getParticipations().filter(a => a.createdByDemoUser)
+      : this.applications.filter(a => a.id.startsWith('app-') || a.id.startsWith('track-'));
+    const decision = AccessControlService.canCreateWorkflowItem('applications', customApps.length);
+    if (!decision.allowed) {
+      console.warn('Application tracking blocked by access control:', decision.reason);
+      throw new Error(decision.reason || 'Creation restricted by active access tier.');
+    }
+
     const pType: ParticipationType = item.participationType || 'career_opportunity';
     const lifecycle = PARTICIPATION_LIFECYCLES[pType];
     const initialStage = lifecycle.stages[0];
@@ -1513,6 +1561,10 @@ class ApplicationStore {
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString()
     };
+
+    if (isDemo) {
+      return demoWorkspaceService.saveParticipation(newItem, true);
+    }
 
     this.saveApplication(newItem);
     return newItem;
@@ -1737,6 +1789,10 @@ class ApplicationStore {
   }
 
   saveApplication(app: JobApplication): JobApplication {
+    if (AccessControlService.getAccessLevel() === 'DEMO') {
+      return demoWorkspaceService.saveParticipation(app, false);
+    }
+
     const idx = this.applications.findIndex(a => a.id === app.id);
     if (idx >= 0) {
       this.applications[idx] = { ...app, updatedAt: new Date().toISOString() };
@@ -1752,6 +1808,10 @@ class ApplicationStore {
   }
 
   deleteApplication(id: string): boolean {
+    if (AccessControlService.getAccessLevel() === 'DEMO') {
+      return demoWorkspaceService.deleteParticipation(id);
+    }
+
     const initialLen = this.applications.length;
     this.applications = this.applications.filter(a => a.id !== id);
     this.assessments = this.assessments.filter(ass => ass.applicationId !== id);

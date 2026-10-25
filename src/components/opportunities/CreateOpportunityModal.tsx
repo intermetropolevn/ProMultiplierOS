@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import { 
   X, 
   Plus, 
@@ -11,7 +11,8 @@ import {
   ChevronDown, 
   ChevronUp, 
   Sparkles,
-  Award
+  Award,
+  Lock
 } from 'lucide-react';
 import { 
   CareerOpportunity, 
@@ -21,6 +22,10 @@ import {
   OpportunitySponsorshipBadge 
 } from '../../types';
 import { OpportunityService } from '../../services/opportunityService';
+import { AccessCreationBanner } from '../access/AccessCreationBanner';
+import { ProgressiveCreationSection } from '../access/ProgressiveCreationSection';
+import { DemoQuotaGate } from '../access/DemoQuotaGate';
+import { useAccessControl } from '../../services/accessControlService';
 
 interface CreateOpportunityModalProps {
   isOpen: boolean;
@@ -33,6 +38,8 @@ export const CreateOpportunityModal: React.FC<CreateOpportunityModalProps> = ({
   onClose,
   onCreated,
 }) => {
+  const { capabilities, canCreate, openContextualPrompt } = useAccessControl();
+  const isSubmittingRef = useRef(false);
   // Core Fields
   const [title, setTitle] = useState('');
   const [type, setType] = useState<OpportunityType>('challenge');
@@ -68,7 +75,16 @@ export const CreateOpportunityModal: React.FC<CreateOpportunityModalProps> = ({
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+    if (isSubmittingRef.current) return;
+    if (!capabilities.canCreate) {
+      openContextualPrompt();
+      return;
+    }
+    if (!canCreate('opportunities')) {
+      return;
+    }
     if (!title.trim() || !organization.trim()) return;
+    isSubmittingRef.current = true;
 
     const parsedSkills = skills.split(',').map(s => s.trim()).filter(Boolean);
     const parsedTags = tags.split(',').map(t => t.trim()).filter(Boolean);
@@ -144,7 +160,9 @@ export const CreateOpportunityModal: React.FC<CreateOpportunityModalProps> = ({
         </div>
 
         {/* Scrollable Form */}
+        <DemoQuotaGate workflowKey="opportunities" isEditing={false} onViewExistingItems={onClose}>
         <form onSubmit={handleSubmit} className="flex-1 overflow-y-auto p-5 sm:p-6 space-y-4 text-xs">
+          <AccessCreationBanner workflowKey="opportunities" workflowLabel="Career Opportunities" />
           
           {/* Opportunity Type Select Buttons */}
           <div>
@@ -247,6 +265,31 @@ export const CreateOpportunityModal: React.FC<CreateOpportunityModalProps> = ({
             </div>
           </div>
 
+          {/* Location & Application URL (Basic) */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div>
+              <label className="block text-slate-700 font-semibold mb-1">Location</label>
+              <input
+                type="text"
+                value={location}
+                onChange={(e) => setLocation(e.target.value)}
+                placeholder="e.g. Remote · Global, SF"
+                className="w-full px-3 py-1.5 border border-slate-300 rounded-lg text-slate-900"
+              />
+            </div>
+
+            <div>
+              <label className="block text-slate-700 font-semibold mb-1">URL</label>
+              <input
+                type="url"
+                value={applicationUrl}
+                onChange={(e) => setApplicationUrl(e.target.value)}
+                placeholder="https://..."
+                className="w-full px-3 py-1.5 border border-slate-300 rounded-lg text-slate-900"
+              />
+            </div>
+          </div>
+
           {/* Short Description */}
           <div>
             <label className="block text-slate-700 font-semibold mb-1">Short Description *</label>
@@ -260,8 +303,10 @@ export const CreateOpportunityModal: React.FC<CreateOpportunityModalProps> = ({
             />
           </div>
 
-          {/* Reward & Deadline */}
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+          {/* ADVANCED SECTION: Required Core Skills, Salary & Reward Intelligence, Role Fit Signals, Market Signals, Opportunity Intelligence */}
+          <ProgressiveCreationSection workflowKey="opportunities">
+          {/* Reward, Deadline, CTA & Industry */}
+          <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
             <div>
               <label className="block text-slate-700 font-semibold mb-1">Reward / Prize / Benefit</label>
               <input
@@ -285,31 +330,6 @@ export const CreateOpportunityModal: React.FC<CreateOpportunityModalProps> = ({
             </div>
 
             <div>
-              <label className="block text-slate-700 font-semibold mb-1">Primary CTA Label</label>
-              <input
-                type="text"
-                value={ctaText}
-                onChange={(e) => setCtaText(e.target.value)}
-                placeholder="e.g. Register, Apply, Claim Offer"
-                className="w-full px-3 py-1.5 border border-slate-300 rounded-lg text-slate-900 font-medium"
-              />
-            </div>
-          </div>
-
-          {/* Location, Industry, and Application URL */}
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-            <div>
-              <label className="block text-slate-700 font-semibold mb-1">Location</label>
-              <input
-                type="text"
-                value={location}
-                onChange={(e) => setLocation(e.target.value)}
-                placeholder="e.g. Remote · Global, SF"
-                className="w-full px-3 py-1.5 border border-slate-300 rounded-lg text-slate-900"
-              />
-            </div>
-
-            <div>
               <label className="block text-slate-700 font-semibold mb-1">Industry</label>
               <input
                 type="text"
@@ -321,13 +341,13 @@ export const CreateOpportunityModal: React.FC<CreateOpportunityModalProps> = ({
             </div>
 
             <div>
-              <label className="block text-slate-700 font-semibold mb-1">Application / Source URL</label>
+              <label className="block text-slate-700 font-semibold mb-1">Primary CTA Label</label>
               <input
-                type="url"
-                value={applicationUrl}
-                onChange={(e) => setApplicationUrl(e.target.value)}
-                placeholder="https://..."
-                className="w-full px-3 py-1.5 border border-slate-300 rounded-lg text-slate-900"
+                type="text"
+                value={ctaText}
+                onChange={(e) => setCtaText(e.target.value)}
+                placeholder="e.g. Register, Apply, Claim Offer"
+                className="w-full px-3 py-1.5 border border-slate-300 rounded-lg text-slate-900 font-medium"
               />
             </div>
           </div>
@@ -504,6 +524,7 @@ export const CreateOpportunityModal: React.FC<CreateOpportunityModalProps> = ({
               </div>
             )}
           </div>
+          </ProgressiveCreationSection>
 
           {/* Footer Submit */}
           <div className="flex items-center justify-end gap-2.5 pt-4 border-t border-slate-100">
@@ -514,15 +535,27 @@ export const CreateOpportunityModal: React.FC<CreateOpportunityModalProps> = ({
             >
               Cancel
             </button>
-            <button
-              type="submit"
-              className="px-5 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-bold transition-all shadow-xs cursor-pointer"
-            >
-              Publish Opportunity
-            </button>
+            {!capabilities.canCreate ? (
+              <button
+                type="button"
+                onClick={() => openContextualPrompt()}
+                className="px-5 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-bold transition-all shadow-xs cursor-pointer inline-flex items-center gap-1.5"
+              >
+                <Lock className="w-3.5 h-3.5" />
+                <span>Unlock in Demo</span>
+              </button>
+            ) : (
+              <button
+                type="submit"
+                className="px-5 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-bold transition-all shadow-xs cursor-pointer"
+              >
+                Publish Opportunity
+              </button>
+            )}
           </div>
 
         </form>
+        </DemoQuotaGate>
 
       </div>
     </div>

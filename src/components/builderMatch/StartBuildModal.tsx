@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import { 
   X, 
   Sparkles, 
@@ -10,10 +10,15 @@ import {
   HeartHandshake, 
   Layers, 
   Clock, 
-  Users 
+  Users,
+  Lock
 } from 'lucide-react';
 import { BuildIntent, BuildOpportunity, BuildOpportunityType } from '../../types/builderMatch';
 import { BuilderMatchService } from '../../services/builderMatchService';
+import { AccessCreationBanner } from '../access/AccessCreationBanner';
+import { ProgressiveCreationSection } from '../access/ProgressiveCreationSection';
+import { DemoQuotaGate } from '../access/DemoQuotaGate';
+import { useAccessControl } from '../../services/accessControlService';
 
 interface StartBuildModalProps {
   isOpen: boolean;
@@ -53,11 +58,15 @@ export const StartBuildModal: React.FC<StartBuildModalProps> = ({
     { id: 'social_impact', label: 'Social Impact', icon: HeartHandshake },
   ];
 
+  const { accessLevel, can, canCreate, capabilities, openAccessModal } = useAccessControl();
+  const [accessError, setAccessError] = useState<string | null>(null);
+  const isSubmittingRef = useRef(false);
+
   const handleAiStructure = () => {
     if (!roughConcept.trim()) return;
-    setIsAiStructuring(true);
-
-    setTimeout(() => {
+    setAccessError(null);
+    try {
+      setIsAiStructuring(true);
       const structured = BuilderMatchService.aiStructureBuild(roughConcept, intent);
       if (structured.title) setTitle(structured.title);
       if (structured.domain) setDomain(structured.domain);
@@ -70,12 +79,20 @@ export const StartBuildModal: React.FC<StartBuildModalProps> = ({
       if (structured.idealBuilderProfile?.capabilities) {
         setCapabilitiesNeeded(structured.idealBuilderProfile.capabilities.join(', '));
       }
+    } catch (err: any) {
+      setAccessError(err.message || 'AI assistant is not available in current tier.');
+    } finally {
       setIsAiStructuring(false);
-    }, 600);
+    }
   };
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+    if (isSubmittingRef.current) return;
+    if (!canCreate('builds')) {
+      return;
+    }
+    isSubmittingRef.current = true;
 
     const capabilities = capabilitiesNeeded.split(',').map(s => s.trim()).filter(Boolean);
     const outcomes = expectedOutcome.split('\n').map(s => s.trim()).filter(Boolean);
@@ -151,12 +168,17 @@ export const StartBuildModal: React.FC<StartBuildModalProps> = ({
       deadline: 'Rolling'
     };
 
-    BuilderMatchService.saveBuildOpportunity(newOpportunity);
-    // Also add to My Builds
-    BuilderMatchService.joinBuild(newOpportunity, 'Squad Lead / Creator');
+    try {
+      BuilderMatchService.saveBuildOpportunity(newOpportunity);
+      // Also add to My Builds
+      BuilderMatchService.joinBuild(newOpportunity, 'Squad Lead / Creator');
 
-    onBuildCreated(newOpportunity);
-    onClose();
+      onBuildCreated(newOpportunity);
+      onClose();
+    } catch (err: any) {
+      isSubmittingRef.current = false;
+      setAccessError(err.message || 'Creation restricted by current access tier.');
+    }
   };
 
   return (
@@ -183,9 +205,22 @@ export const StartBuildModal: React.FC<StartBuildModalProps> = ({
         </div>
 
         {/* Form Body */}
+        <DemoQuotaGate workflowKey="builds" isEditing={false} onViewExistingItems={onClose}>
         <form onSubmit={handleSubmit} className="p-6 sm:p-7 overflow-y-auto space-y-5 text-xs">
           
-          {/* Step 1: Build Intent Selector (Requirement 5 & 10) */}
+          {/* Access Control Tier Banner */}
+          <AccessCreationBanner 
+            workflowKey="builds" 
+            workflowLabel="builds" 
+          />
+
+          {accessError && (
+            <div className="p-3 bg-rose-50 border border-rose-200 text-rose-800 text-xs rounded-xl font-medium">
+              {accessError}
+            </div>
+          )}
+
+          {/* Step 1: Build Intent Selector */}
           <div className="space-y-2">
             <label className="font-bold text-slate-800 text-xs block">
               1. What do you want to do?
@@ -213,41 +248,11 @@ export const StartBuildModal: React.FC<StartBuildModalProps> = ({
             </div>
           </div>
 
-          {/* Step 2: Rough Concept & AI Structuring Assistant (Requirement 10 & 17) */}
-          <div className="p-4 rounded-xl bg-gradient-to-r from-blue-50/70 to-indigo-50/50 border border-blue-200/80 space-y-2">
-            <div className="flex items-center justify-between">
-              <label className="font-bold text-slate-900 flex items-center gap-1.5">
-                <Sparkles className="w-3.5 h-3.5 text-blue-600" />
-                Start with a rough idea or problem (AI will structure it)
-              </label>
-              <button
-                type="button"
-                onClick={handleAiStructure}
-                disabled={!roughConcept.trim() || isAiStructuring}
-                className="flex items-center gap-1 px-3 py-1 rounded-lg text-2xs font-bold bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white transition cursor-pointer shadow-3xs"
-              >
-                <Sparkles className={`w-3 h-3 ${isAiStructuring ? 'animate-spin' : ''}`} />
-                <span>{isAiStructuring ? 'Structuring...' : '✨ AI Structure Build'}</span>
-              </button>
-            </div>
-            <textarea
-              value={roughConcept}
-              onChange={(e) => setRoughConcept(e.target.value)}
-              rows={2}
-              className="w-full px-3 py-2 rounded-lg border border-slate-200 bg-white text-slate-800 placeholder:text-slate-400 focus:outline-hidden focus:ring-2 focus:ring-blue-500/20 resize-none font-medium text-xs"
-              placeholder="e.g. Build an autonomous voice reviewer for GitHub pull requests that reduces code review bikeshedding..."
-            />
-            <p className="text-[10px] text-slate-500">
-              Tip: You can start with an incomplete or messy thought. Click "AI Structure Build" to auto-fill deliverables, domain, and capabilities.
-            </p>
-          </div>
-
-          {/* Step 3: Structured Fields */}
+          {/* Step 2: Basic Build Fields (Challenge / Build Title, Objective, Duration, Team Size) */}
           <div className="space-y-4 pt-1">
-            
             {/* Title */}
             <div className="space-y-1">
-              <label className="font-bold text-slate-700">What are you trying to build? (Title)</label>
+              <label className="font-bold text-slate-700">Challenge / Build Title *</label>
               <input
                 type="text"
                 value={title}
@@ -258,99 +263,129 @@ export const StartBuildModal: React.FC<StartBuildModalProps> = ({
               />
             </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-              {/* Domain */}
-              <div className="space-y-1">
-                <label className="font-bold text-slate-700">Domain</label>
-                <input
-                  type="text"
-                  value={domain}
-                  onChange={(e) => setDomain(e.target.value)}
-                  className="w-full px-3 py-2 rounded-xl border border-slate-200 bg-white text-slate-800 font-medium focus:outline-hidden focus:ring-2 focus:ring-blue-500/20"
-                  placeholder="e.g. AI & Dev Tools"
-                  required
-                />
-              </div>
+            {/* Objective */}
+            <div className="space-y-1">
+              <label className="font-bold text-slate-700">Objective *</label>
+              <textarea
+                value={whyItMatters}
+                onChange={(e) => setWhyItMatters(e.target.value)}
+                rows={2}
+                className="w-full px-3 py-2 rounded-xl border border-slate-200 bg-white text-slate-800 font-medium focus:outline-hidden focus:ring-2 focus:ring-blue-500/20 resize-none"
+                placeholder="Explain the build objective, the friction it resolves, and why it's worth building..."
+                required
+              />
+            </div>
 
-              {/* Timeline */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              {/* Duration */}
               <div className="space-y-1">
-                <label className="font-bold text-slate-700">Timeline</label>
+                <label className="font-bold text-slate-700">Duration *</label>
                 <input
                   type="text"
                   value={duration}
                   onChange={(e) => setDuration(e.target.value)}
                   className="w-full px-3 py-2 rounded-xl border border-slate-200 bg-white text-slate-800 font-medium focus:outline-hidden focus:ring-2 focus:ring-blue-500/20"
-                  placeholder="e.g. 14 days, 3 weeks"
+                  placeholder="e.g. 14 days, 2–4 weeks"
                   required
                 />
               </div>
 
               {/* Team Size */}
               <div className="space-y-1">
-                <label className="font-bold text-slate-700">Team Size Needed</label>
+                <label className="font-bold text-slate-700">Team Size *</label>
                 <input
                   type="text"
                   value={teamSizeNeeded}
                   onChange={(e) => setTeamSizeNeeded(e.target.value)}
                   className="w-full px-3 py-2 rounded-xl border border-slate-200 bg-white text-slate-800 font-medium focus:outline-hidden focus:ring-2 focus:ring-blue-500/20"
-                  placeholder="e.g. 2–3 builders"
+                  placeholder="e.g. Team of 2–3 builders"
                   required
                 />
               </div>
             </div>
-
-            {/* Why does it matter? */}
-            <div className="space-y-1">
-              <label className="font-bold text-slate-700">Why does it matter? (Problem &amp; Impact)</label>
-              <textarea
-                value={whyItMatters}
-                onChange={(e) => setWhyItMatters(e.target.value)}
-                rows={2}
-                className="w-full px-3 py-2 rounded-xl border border-slate-200 bg-white text-slate-800 font-medium focus:outline-hidden focus:ring-2 focus:ring-blue-500/20 resize-none"
-                placeholder="Explain the friction, who it helps, and why it's worth building..."
-                required
-              />
-            </div>
-
-            {/* Expected Outcome */}
-            <div className="space-y-1">
-              <label className="font-bold text-slate-700">Expected Outcome / Concrete Deliverables (one per line)</label>
-              <textarea
-                value={expectedOutcome}
-                onChange={(e) => setExpectedOutcome(e.target.value)}
-                rows={3}
-                className="w-full px-3 py-2 rounded-xl border border-slate-200 bg-white text-slate-800 font-medium focus:outline-hidden focus:ring-2 focus:ring-blue-500/20 resize-none"
-                placeholder="• Build interactive prototype&#10;• Test with 5 users&#10;• Deliver architecture documentation"
-                required
-              />
-            </div>
-
-            {/* Capabilities Needed */}
-            <div className="space-y-1">
-              <label className="font-bold text-slate-700">Capabilities Needed (comma separated)</label>
-              <input
-                type="text"
-                value={capabilitiesNeeded}
-                onChange={(e) => setCapabilitiesNeeded(e.target.value)}
-                className="w-full px-3 py-2 rounded-xl border border-slate-200 bg-white text-slate-800 font-medium focus:outline-hidden focus:ring-2 focus:ring-blue-500/20"
-                placeholder="e.g. Product Strategy, AI Engineering, UX Design"
-                required
-              />
-            </div>
-
-            {/* Who can participate */}
-            <div className="space-y-1">
-              <label className="font-bold text-slate-700">Who can participate?</label>
-              <input
-                type="text"
-                value={whoCanParticipate}
-                onChange={(e) => setWhoCanParticipate(e.target.value)}
-                className="w-full px-3 py-2 rounded-xl border border-slate-200 bg-white text-slate-800 font-medium focus:outline-hidden focus:ring-2 focus:ring-blue-500/20"
-                placeholder="e.g. Open to all engineers, designers, and product leaders"
-              />
-            </div>
-
           </div>
+
+          {/* Step 3: Advanced Build Intelligence */}
+          <ProgressiveCreationSection workflowKey="builds">
+            {/* Rough Concept & AI Structuring Assistant */}
+            <div className="p-4 rounded-xl bg-gradient-to-r from-blue-50/70 to-indigo-50/50 border border-blue-200/80 space-y-2">
+              <div className="flex items-center justify-between">
+                <label className="font-bold text-slate-900 flex items-center gap-1.5">
+                  <Sparkles className="w-3.5 h-3.5 text-blue-600" />
+                  Start with a rough idea or problem (AI will structure it)
+                </label>
+                <button
+                  type="button"
+                  onClick={handleAiStructure}
+                  disabled={!roughConcept.trim() || isAiStructuring}
+                  className="flex items-center gap-1 px-3 py-1 rounded-lg text-2xs font-bold bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white transition cursor-pointer shadow-3xs"
+                >
+                  <Sparkles className={`w-3 h-3 ${isAiStructuring ? 'animate-spin' : ''}`} />
+                  <span>{isAiStructuring ? 'Structuring...' : '✨ AI Structure Build'}</span>
+                </button>
+              </div>
+              <textarea
+                value={roughConcept}
+                onChange={(e) => setRoughConcept(e.target.value)}
+                rows={2}
+                className="w-full px-3 py-2 rounded-lg border border-slate-200 bg-white text-slate-800 placeholder:text-slate-400 focus:outline-hidden focus:ring-2 focus:ring-blue-500/20 resize-none font-medium text-xs"
+                placeholder="e.g. Build an autonomous voice reviewer for GitHub pull requests that reduces code review bikeshedding..."
+              />
+              <p className="text-[10px] text-slate-500">
+                Tip: You can start with an incomplete or messy thought. Click "AI Structure Build" to auto-fill deliverables, domain, and capabilities.
+              </p>
+            </div>
+
+            <div className="space-y-4">
+              {/* Domain */}
+              <div className="space-y-1">
+                <label className="font-bold text-slate-700">Domain &amp; Career Signal Mapping</label>
+                <input
+                  type="text"
+                  value={domain}
+                  onChange={(e) => setDomain(e.target.value)}
+                  className="w-full px-3 py-2 rounded-xl border border-slate-200 bg-white text-slate-800 font-medium focus:outline-hidden focus:ring-2 focus:ring-blue-500/20"
+                  placeholder="e.g. AI & Dev Tools, Enterprise SaaS"
+                />
+              </div>
+
+              {/* Expected Outcome / Evidence Capture */}
+              <div className="space-y-1">
+                <label className="font-bold text-slate-700">Expected Outcome / Evidence Capture Deliverables (one per line)</label>
+                <textarea
+                  value={expectedOutcome}
+                  onChange={(e) => setExpectedOutcome(e.target.value)}
+                  rows={3}
+                  className="w-full px-3 py-2 rounded-xl border border-slate-200 bg-white text-slate-800 font-medium focus:outline-hidden focus:ring-2 focus:ring-blue-500/20 resize-none"
+                  placeholder="• Build interactive prototype&#10;• Test with 5 users&#10;• Deliver architecture documentation"
+                />
+              </div>
+
+              {/* Capabilities Needed / Capability Objectives */}
+              <div className="space-y-1">
+                <label className="font-bold text-slate-700">Capability Objectives &amp; Skills Needed (comma separated)</label>
+                <input
+                  type="text"
+                  value={capabilitiesNeeded}
+                  onChange={(e) => setCapabilitiesNeeded(e.target.value)}
+                  className="w-full px-3 py-2 rounded-xl border border-slate-200 bg-white text-slate-800 font-medium focus:outline-hidden focus:ring-2 focus:ring-blue-500/20"
+                  placeholder="e.g. Product Strategy, AI Engineering, UX Design"
+                />
+              </div>
+
+              {/* Who can participate / Team Fit */}
+              <div className="space-y-1">
+                <label className="font-bold text-slate-700">Team Fit &amp; Participation Criteria</label>
+                <input
+                  type="text"
+                  value={whoCanParticipate}
+                  onChange={(e) => setWhoCanParticipate(e.target.value)}
+                  className="w-full px-3 py-2 rounded-xl border border-slate-200 bg-white text-slate-800 font-medium focus:outline-hidden focus:ring-2 focus:ring-blue-500/20"
+                  placeholder="e.g. Open to all engineers, designers, and product leaders"
+                />
+              </div>
+            </div>
+          </ProgressiveCreationSection>
 
           {/* Footer Actions */}
           <div className="pt-4 border-t border-slate-100 flex items-center justify-end gap-3">
@@ -362,16 +397,28 @@ export const StartBuildModal: React.FC<StartBuildModalProps> = ({
               Cancel
             </button>
 
-            <button
-              type="submit"
-              className="flex items-center gap-1.5 px-5 py-2.5 rounded-xl text-xs font-bold bg-blue-600 hover:bg-blue-700 text-white transition-all shadow-xs cursor-pointer active:scale-95"
-            >
-              <Sparkles className="w-3.5 h-3.5 text-white" />
-              <span>Publish Build Opportunity</span>
-            </button>
+            {!capabilities.canCreate ? (
+              <button
+                type="button"
+                onClick={() => openAccessModal('DEMO')}
+                className="flex items-center gap-1.5 px-5 py-2.5 rounded-xl text-xs font-bold bg-indigo-600 hover:bg-indigo-700 text-white transition-all shadow-xs cursor-pointer active:scale-95"
+              >
+                <Lock className="w-3.5 h-3.5 text-white" />
+                <span>Unlock in Demo</span>
+              </button>
+            ) : (
+              <button
+                type="submit"
+                className="flex items-center gap-1.5 px-5 py-2.5 rounded-xl text-xs font-bold bg-blue-600 hover:bg-blue-700 text-white transition-all shadow-xs cursor-pointer active:scale-95"
+              >
+                <Sparkles className="w-3.5 h-3.5 text-white" />
+                <span>Publish Build Opportunity</span>
+              </button>
+            )}
           </div>
 
         </form>
+        </DemoQuotaGate>
 
       </div>
     </div>

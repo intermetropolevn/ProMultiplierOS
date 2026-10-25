@@ -15,6 +15,8 @@ import {
 } from 'lucide-react';
 import { EvidenceItem } from '../../features/evidenceIntelligence/types';
 import { EvidenceDetailModal } from './EvidenceDetailModal';
+import { useAccessControl } from '../../services/accessControlService';
+import { CareerOSIntelligenceGate, IntelligenceModeBadge } from '../access/CareerOSIntelligenceGate';
 
 interface EvidenceTimelineViewProps {
   evidenceList: EvidenceItem[];
@@ -25,15 +27,20 @@ export const EvidenceTimelineView: React.FC<EvidenceTimelineViewProps> = ({
   evidenceList,
   onOpenQuickCapture
 }) => {
+  const { accessLevel, consumeDemoIntelligenceSignal } = useAccessControl();
   const [selectedCapability, setSelectedCapability] = useState<string>('all');
   const [selectedStatus, setSelectedStatus] = useState<string>('all');
   const [selectedSource, setSelectedSource] = useState<string>('all');
   const [searchQuery, setSearchQuery] = useState('');
   const [activeEvidenceDetail, setActiveEvidenceDetail] = useState<EvidenceItem | null>(null);
+  const [isGateModalOpen, setIsGateModalOpen] = useState(false);
 
-  // Group evidence by Year -> Month
+  const isFullAccess = accessLevel === 'FULL_ACCESS';
+  const isGuest = accessLevel === 'PUBLIC_GUEST';
+
+  // Group evidence by Year -> Month (access-aware slice for Guest/Demo)
   const filteredEvidence = useMemo(() => {
-    return evidenceList.filter((item) => {
+    const base = evidenceList.filter((item) => {
       if (selectedCapability !== 'all' && !item.capabilities.includes(selectedCapability)) return false;
       if (selectedStatus !== 'all' && item.validationStatus !== selectedStatus) return false;
       if (selectedSource !== 'all' && !item.source.toLowerCase().includes(selectedSource.toLowerCase())) return false;
@@ -46,7 +53,8 @@ export const EvidenceTimelineView: React.FC<EvidenceTimelineViewProps> = ({
       }
       return true;
     });
-  }, [evidenceList, selectedCapability, selectedStatus, selectedSource, searchQuery]);
+    return isFullAccess ? base : base.slice(0, 3);
+  }, [evidenceList, selectedCapability, selectedStatus, selectedSource, searchQuery, isFullAccess]);
 
   const timelineYears = useMemo(() => {
     const yearsMap = new Map<number, EvidenceItem[]>();
@@ -60,11 +68,20 @@ export const EvidenceTimelineView: React.FC<EvidenceTimelineViewProps> = ({
     return Array.from(yearsMap.entries()).sort((a, b) => b[0] - a[0]);
   }, [filteredEvidence]);
 
-  const allCapabilities = useMemo(() => {
-    const caps = new Set<string>();
-    evidenceList.forEach(e => e.capabilities.forEach(c => caps.add(c)));
-    return Array.from(caps);
-  }, [evidenceList]);
+  const handleOpenTimelineItem = (ev: EvidenceItem) => {
+    if (isGuest) {
+      setIsGateModalOpen(true);
+      return;
+    }
+    if (!isFullAccess) {
+      const allowed = consumeDemoIntelligenceSignal('evidence_intelligence', `timeline-${ev.id}`);
+      if (!allowed) {
+        setIsGateModalOpen(true);
+        return;
+      }
+    }
+    setActiveEvidenceDetail(ev);
+  };
 
   return (
     <div className="space-y-6 animate-in fade-in duration-150">
@@ -73,10 +90,11 @@ export const EvidenceTimelineView: React.FC<EvidenceTimelineViewProps> = ({
       <div className="bg-white rounded-2xl border border-slate-200/90 shadow-2xs p-5 sm:p-6 space-y-4">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div className="space-y-1">
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 flex-wrap">
               <span className="text-[10px] font-black uppercase tracking-wider px-2 py-0.5 rounded bg-blue-50 text-blue-700 border border-blue-200">
                 Evidence Timeline
               </span>
+              <IntelligenceModeBadge capability="evidence_intelligence" />
               <span className="text-slate-300">·</span>
               <span className="text-xs text-slate-500 font-medium">Demonstrated Progression Over Time</span>
             </div>
@@ -97,7 +115,7 @@ export const EvidenceTimelineView: React.FC<EvidenceTimelineViewProps> = ({
           </button>
         </div>
 
-        {/* Filter Controls Strip (Section 12) */}
+        {/* Filter Controls Strip */}
         <div className="pt-3 border-t border-slate-100 flex flex-col md:flex-row md:items-center justify-between gap-3 flex-wrap">
           <div className="relative flex-1 max-w-xs">
             <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-2.5" />
@@ -111,7 +129,6 @@ export const EvidenceTimelineView: React.FC<EvidenceTimelineViewProps> = ({
           </div>
 
           <div className="flex items-center gap-2 flex-wrap text-xs">
-            {/* Filter by Capability */}
             <select
               value={selectedCapability}
               onChange={(e) => setSelectedCapability(e.target.value)}
@@ -125,7 +142,6 @@ export const EvidenceTimelineView: React.FC<EvidenceTimelineViewProps> = ({
               <option value="cap-stakeholder-mgmt">Stakeholder Management</option>
             </select>
 
-            {/* Filter by Validation Status */}
             <select
               value={selectedStatus}
               onChange={(e) => setSelectedStatus(e.target.value)}
@@ -137,7 +153,6 @@ export const EvidenceTimelineView: React.FC<EvidenceTimelineViewProps> = ({
               <option value="Suggested">Suggested</option>
             </select>
 
-            {/* Filter by Source */}
             <select
               value={selectedSource}
               onChange={(e) => setSelectedSource(e.target.value)}
@@ -163,7 +178,9 @@ export const EvidenceTimelineView: React.FC<EvidenceTimelineViewProps> = ({
             <div className="flex items-center gap-3">
               <span className="text-xl font-black text-slate-900 tracking-tight font-mono">{year}</span>
               <div className="h-px bg-slate-200 flex-1" />
-              <span className="text-xs text-slate-400 font-mono">{itemsInYear.length} Verified Evidence Records</span>
+              <span className="text-xs text-slate-400 font-mono">
+                {itemsInYear.length} {isFullAccess ? 'Verified Evidence Records' : 'Curated Sample Records'}
+              </span>
             </div>
 
             {/* Evidence items under year */}
@@ -171,7 +188,7 @@ export const EvidenceTimelineView: React.FC<EvidenceTimelineViewProps> = ({
               {itemsInYear.map((ev) => (
                 <div
                   key={ev.id}
-                  onClick={() => setActiveEvidenceDetail(ev)}
+                  onClick={() => handleOpenTimelineItem(ev)}
                   className="relative bg-white rounded-2xl border border-slate-200/90 shadow-2xs hover:shadow-xs hover:border-blue-400 transition-all p-5 cursor-pointer group"
                 >
                   {/* Timeline Node Dot */}
@@ -240,12 +257,29 @@ export const EvidenceTimelineView: React.FC<EvidenceTimelineViewProps> = ({
         )}
       </div>
 
+      {/* Intelligence Gate for Guest / Demo */}
+      {!isFullAccess && (
+        <CareerOSIntelligenceGate
+          capability="evidence_intelligence"
+          variant="inline"
+          sampleCountLabel={`Showing ${filteredEvidence.length} curated sample timeline signals`}
+        />
+      )}
+
       {/* Evidence Detail Modal */}
       <EvidenceDetailModal
         isOpen={Boolean(activeEvidenceDetail)}
         onClose={() => setActiveEvidenceDetail(null)}
         evidence={activeEvidenceDetail}
       />
+
+      {isGateModalOpen && (
+        <CareerOSIntelligenceGate
+          capability="evidence_intelligence"
+          variant="modal"
+          onClose={() => setIsGateModalOpen(false)}
+        />
+      )}
 
     </div>
   );

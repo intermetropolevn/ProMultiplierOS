@@ -40,6 +40,7 @@ import { applicationStore } from '../../features/applications/services/applicati
 import { JobRadarSnapshot } from './JobRadarSnapshot';
 import { AddJobModal } from './AddJobModal';
 import { JobEvidenceMatchModal } from '../library/JobEvidenceMatchModal';
+import { useAccessControl } from '../../services/accessControlService';
 
 interface JobsExplorerProps {
   onSelectJob: (job: JobListing) => void;
@@ -56,6 +57,8 @@ export const JobsExplorer: React.FC<JobsExplorerProps> = ({
   onStartPracticeForJob,
   onOpenApplication,
 }) => {
+  const { accessLevel, capabilities } = useAccessControl();
+
   // All jobs loaded from JobService (pre-seeded + custom jobs)
   const [allJobs, setAllJobs] = useState<JobListing[]>(() => JobService.getAllJobs());
   const [userProfile, setUserProfile] = useState<UserCareerProfile>(() => StorageService.getProfile());
@@ -88,13 +91,16 @@ export const JobsExplorer: React.FC<JobsExplorerProps> = ({
     setTrackedApplications(applicationStore.getApplications());
   };
 
-  // React to storage events
+  // React to storage events & access tier changes
   useEffect(() => {
+    refreshJobs();
     window.addEventListener('career_jobs_updated', refreshJobs);
     window.addEventListener('career_applications_updated', refreshJobs);
+    window.addEventListener('career_access_changed', refreshJobs);
     return () => {
       window.removeEventListener('career_jobs_updated', refreshJobs);
       window.removeEventListener('career_applications_updated', refreshJobs);
+      window.removeEventListener('career_access_changed', refreshJobs);
     };
   }, []);
 
@@ -490,10 +496,22 @@ export const JobsExplorer: React.FC<JobsExplorerProps> = ({
       </div>
 
       {/* 3. Header Results Indicator */}
-      <div className="flex items-center justify-between text-xs text-slate-500 px-1">
-        <div>
-          Showing <strong className="font-bold text-slate-900">{totalItems === 0 ? 0 : startIndex + 1}–{Math.min(startIndex + pageSize, totalItems)}</strong> of{' '}
-          <strong className="font-bold text-slate-900">{totalItems}</strong> jobs
+      <div className="flex flex-wrap items-center justify-between text-xs text-slate-500 px-1 gap-2">
+        <div className="flex items-center gap-2">
+          <span>
+            Showing <strong className="font-bold text-slate-900">{filteredJobs.length}</strong> {filteredJobs.length === 1 ? 'opportunity' : 'opportunities'}
+          </span>
+          <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${
+            accessLevel === 'FULL'
+              ? 'bg-emerald-50 text-emerald-800 border-emerald-200'
+              : accessLevel === 'DEMO'
+              ? 'bg-amber-50 text-amber-800 border-amber-200'
+              : accessLevel === 'GUEST'
+              ? 'bg-blue-50 text-blue-700 border-blue-200'
+              : 'bg-slate-100 text-slate-700 border-slate-200'
+          }`}>
+            {capabilities.tierBadgeLabel}
+          </span>
         </div>
 
         <div className="flex items-center gap-2">

@@ -1,6 +1,7 @@
 import React from 'react';
-import { Layers, Sparkles, BookOpen, Briefcase, CheckCircle2 } from 'lucide-react';
+import { Layers, Sparkles, BookOpen, Briefcase, CheckCircle2, Shield } from 'lucide-react';
 import { ActiveTab } from './Header';
+import { openProtectedPreviewNotice } from '../access/ProtectedPreviewOverlay';
 
 interface FooterProps {
   onNavigate: (tab: ActiveTab) => void;
@@ -152,11 +153,22 @@ export const Footer: React.FC<FooterProps> = ({ onNavigate }) => {
         </div>
 
         <div className="pt-8 border-t border-slate-800/80 flex flex-col sm:flex-row items-center justify-between text-xs text-slate-500 gap-4">
-          <p>© 2026 Career Interview OS. Production-grade career discovery and interview excellence.</p>
-          <div className="flex items-center gap-4">
-            <span>Press <kbd className="px-1.5 py-0.5 font-mono bg-slate-800 text-slate-300 rounded border border-slate-700">⌘K</kbd> anywhere to search</span>
+          <div className="flex flex-wrap items-center gap-2">
+            <span>© 2026 Dynaisys. All rights reserved.</span>
+            <span>·</span>
+            <span>Developer / Product: <strong className="text-slate-300 font-semibold">Dynaisys</strong> (<a href="mailto:cpo@dynaisys.com" className="text-blue-400 hover:underline">cpo@dynaisys.com</a>)</span>
+          </div>
+          <div className="flex flex-wrap items-center gap-4">
+            <button
+              type="button"
+              onClick={() => openProtectedPreviewNotice('CareerOS Public Beta Environment')}
+              className="inline-flex items-center gap-1.5 text-slate-400 hover:text-white transition-colors cursor-pointer font-medium"
+            >
+              <Shield className="w-3.5 h-3.5 text-blue-400" />
+              <span>CareerOS Protected Preview Notice</span>
+            </button>
             <span>•</span>
-            <span>Local Offline Persistence</span>
+            <span>Press <kbd className="px-1.5 py-0.5 font-mono bg-slate-800 text-slate-300 rounded border border-slate-700">⌘K</kbd> anywhere to search</span>
           </div>
         </div>
       </div>

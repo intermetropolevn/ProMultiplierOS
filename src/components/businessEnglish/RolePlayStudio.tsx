@@ -35,6 +35,8 @@ import {
   WorkplaceContext
 } from '../../features/businessEnglish/types';
 import { BusinessEnglishService } from '../../features/businessEnglish/services/businessEnglishService';
+import { AudioPermissionGate } from '../common/AudioPermissionGate';
+import { AudioPermissionService } from '../../services/audioPermissionService';
 
 interface RolePlayStudioProps {
   initialScenarioId?: string;
@@ -77,8 +79,16 @@ export const RolePlayStudio: React.FC<RolePlayStudioProps> = ({
   const [isAudioEnabled, setIsAudioEnabled] = useState<boolean>(true);
   const [sessionFeedback, setSessionFeedback] = useState<RolePlaySessionFeedback | null>(null);
   const [savedPhrases, setSavedPhrases] = useState<string[]>([]);
+  const [isAudioGateOpen, setIsAudioGateOpen] = useState<boolean>(false);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
+
+  // Release any active microphone stream on unmount
+  useEffect(() => {
+    return () => {
+      AudioPermissionService.releaseStream();
+    };
+  }, []);
 
   // Scroll to bottom on new message
   useEffect(() => {
@@ -161,14 +171,8 @@ export const RolePlayStudio: React.FC<RolePlayStudioProps> = ({
     }, 900);
   };
 
-  // Simulated / Web Speech Voice Input
-  const toggleRecording = () => {
-    if (isRecording) {
-      setIsRecording(false);
-      return;
-    }
-
-    // Attempt browser SpeechRecognition if available
+  // Start voice capture after microphone permission is verified
+  const startVoiceRecording = () => {
     const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
     if (SpeechRecognition) {
       try {
@@ -200,7 +204,7 @@ export const RolePlayStudio: React.FC<RolePlayStudioProps> = ({
       }
     }
 
-    // Fallback simulation for demonstration
+    // Fallback simulation when microphone is granted or simulated
     setIsRecording(true);
     setTimeout(() => {
       const suggested = selectedScenario.suggestedPhrases[0] || "I recommend we prioritize this in Phase 1.";
@@ -209,9 +213,26 @@ export const RolePlayStudio: React.FC<RolePlayStudioProps> = ({
     }, 2000);
   };
 
+  // Contextual Microphone Trigger: Feature Intent -> Mic Pre-flight -> Browser Permission -> Mic Ready -> Session Started
+  const toggleRecording = async () => {
+    if (isRecording) {
+      setIsRecording(false);
+      AudioPermissionService.releaseStream();
+      return;
+    }
+
+    const { canStartImmediately } = await AudioPermissionService.initiateFeatureIntent('business_english');
+    if (canStartImmediately) {
+      startVoiceRecording();
+    } else {
+      setIsAudioGateOpen(true);
+    }
+  };
+
   // Complete and Evaluate Session
   const handleFinishSession = () => {
     BusinessEnglishService.stopSpeaking();
+    AudioPermissionService.releaseStream();
     const feedback = BusinessEnglishService.evaluateRolePlaySession(selectedScenario, messages);
     setSessionFeedback(feedback);
     setStage('session_report');
@@ -780,6 +801,25 @@ export const RolePlayStudio: React.FC<RolePlayStudioProps> = ({
 
         </div>
       )}
+
+      {/* Contextual Microphone Permission Gate — Only shown when user initiates voice speaking */}
+      <AudioPermissionGate
+        isOpen={isAudioGateOpen}
+        feature="business_english"
+        subFeatureLabel="Role-Play Speaking Mode"
+        onClose={() => setIsAudioGateOpen(false)}
+        onMicrophoneReady={() => {
+          setIsAudioGateOpen(false);
+          startVoiceRecording();
+        }}
+        onContinueWithoutMicrophone={() => {
+          setIsAudioGateOpen(false);
+          const suggested = selectedScenario.suggestedPhrases[0] || "I recommend we prioritize this in Phase 1.";
+          if (!inputText.trim()) {
+            setInputText(suggested);
+          }
+        }}
+      />
 
     </div>
   );

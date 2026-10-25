@@ -237,6 +237,18 @@ export const ProjectsDatabaseView: React.FC<ProjectsDatabaseViewProps> = ({
         </div>
       </div>
 
+      {/* Results & Beta Indicator */}
+      <div className="flex flex-wrap items-center justify-between text-xs text-slate-500 px-1 gap-2">
+        <div className="flex items-center gap-2">
+          <span>
+            Showing <strong className="font-bold text-slate-900">{filteredProjects.length}</strong> curated sample {filteredProjects.length === 1 ? 'project' : 'projects'}
+          </span>
+          <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-blue-50 text-blue-700 border border-blue-200">
+            Curated Beta Preview
+          </span>
+        </div>
+      </div>
+
       {/* Project Cards / List */}
       {filteredProjects.length === 0 ? (
         <div className="text-center py-16 bg-white rounded-2xl border border-slate-200 p-8 space-y-4 shadow-2xs">

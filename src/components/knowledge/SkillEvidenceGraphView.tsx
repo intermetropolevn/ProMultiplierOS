@@ -4,6 +4,8 @@ import { SkillEvidenceProfile, SkillEvidenceItem } from '../../features/sources/
 import { getEvidenceStrengthDefinition } from '../../features/sources/taxonomy';
 import { SourceDetailModal } from '../library/SourceDetailModal';
 import { SkillWhyEvidenceModal } from './SkillWhyEvidenceModal';
+import { useAccessControl } from '../../services/accessControlService';
+import { CareerOSIntelligenceGate, IntelligenceModeBadge } from '../access/CareerOSIntelligenceGate';
 import { 
   ShieldCheck, 
   ChevronRight, 
@@ -31,16 +33,54 @@ interface SkillEvidenceGraphViewProps {
 export const SkillEvidenceGraphView: React.FC<SkillEvidenceGraphViewProps> = ({
   onOpenSourceModal
 }) => {
+  const { accessLevel, getIntelligenceAccess, consumeDemoIntelligenceSignal } = useAccessControl();
   const [profiles, setProfiles] = useState<SkillEvidenceProfile[]>(() => sourceStore.getSkillEvidenceProfiles());
   const [expandedSkill, setExpandedSkill] = useState<string | null>(profiles[0]?.skillName || null);
-  const [selectedEvidenceItem, setSelectedEvidenceItem] = useState<SkillEvidenceItem | null>(null);
   const [viewingSourceId, setViewingSourceId] = useState<string | null>(null);
   const [inspectingSkillWhy, setInspectingSkillWhy] = useState<string | null>(null);
+  const [isGateModalOpen, setIsGateModalOpen] = useState(false);
+
+  const isFullAccess = accessLevel === 'FULL_ACCESS';
+  const isGuest = accessLevel === 'PUBLIC_GUEST';
+  const intelAccess = getIntelligenceAccess('full_knowledge_graph');
+
+  // Access-aware visible profiles: Guest/Demo only receive top 2 curated skills in DOM
+  const visibleProfiles = isFullAccess ? profiles : profiles.slice(0, 2);
 
   const metrics = sourceStore.getAggregateMetrics();
 
   const toggleSkill = (skillName: string) => {
-    setExpandedSkill(expandedSkill === skillName ? null : skillName);
+    if (expandedSkill === skillName) {
+      setExpandedSkill(null);
+      return;
+    }
+    if (isGuest && skillName !== profiles[0]?.skillName) {
+      setIsGateModalOpen(true);
+      return;
+    }
+    if (!isFullAccess) {
+      const allowed = consumeDemoIntelligenceSignal('full_knowledge_graph', `skill-${skillName}`);
+      if (!allowed) {
+        setIsGateModalOpen(true);
+        return;
+      }
+    }
+    setExpandedSkill(skillName);
+  };
+
+  const handleInspectWhy = (skillName: string) => {
+    if (isGuest) {
+      setIsGateModalOpen(true);
+      return;
+    }
+    if (!isFullAccess) {
+      const allowed = consumeDemoIntelligenceSignal('proprietary_scoring_logic', `why-${skillName}`);
+      if (!allowed) {
+        setIsGateModalOpen(true);
+        return;
+      }
+    }
+    setInspectingSkillWhy(skillName);
   };
 
   const currentViewingSource = viewingSourceId ? sourceStore.getSourceById(viewingSourceId) : null;
@@ -52,15 +92,16 @@ export const SkillEvidenceGraphView: React.FC<SkillEvidenceGraphViewProps> = ({
       <div className="bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 rounded-3xl p-6 sm:p-7 text-white space-y-5 shadow-sm">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-700/60 pb-4">
           <div className="space-y-1">
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 flex-wrap">
               <span className="p-1 rounded-md bg-blue-500/20 text-blue-400 border border-blue-400/30 text-xs font-black uppercase tracking-wider">
                 Aggregated Career Proof
               </span>
+              <IntelligenceModeBadge capability="full_knowledge_graph" />
               <span className="text-xs text-slate-400">•</span>
               <span className="text-xs font-bold text-slate-300">Skill → Evidence → Source Traceability</span>
             </div>
             <h3 className="text-lg sm:text-xl font-black tracking-tight text-white">
-              Skill Evidence Graph & Capability Ledger
+              Skill Evidence Graph &amp; Capability Ledger
             </h3>
             <p className="text-xs text-slate-300 max-w-2xl leading-relaxed">
               Every claimed skill is backed by an auditable chain of custody: from passive learning to validated real-world delivery.
@@ -71,7 +112,7 @@ export const SkillEvidenceGraphView: React.FC<SkillEvidenceGraphViewProps> = ({
             <ShieldCheck className="w-5 h-5 text-emerald-400" />
             <div>
               <span className="text-[10px] uppercase font-bold text-slate-400 block">Validated Skills</span>
-              <span className="text-sm font-black text-white">{metrics.validatedSkillsCount} Proven</span>
+              <span className="text-sm font-black text-white">{isFullAccess ? metrics.validatedSkillsCount : 2} {isFullAccess ? 'Proven' : 'Sample'}</span>
             </div>
           </div>
         </div>
@@ -112,19 +153,22 @@ export const SkillEvidenceGraphView: React.FC<SkillEvidenceGraphViewProps> = ({
 
       {/* Skills Graph Drill-down List */}
       <div className="bg-white rounded-3xl border border-slate-200/90 p-6 space-y-4 shadow-2xs">
-        <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+        <div className="flex items-center justify-between border-b border-slate-100 pb-3 flex-wrap gap-2">
           <div className="space-y-0.5">
             <h4 className="text-sm font-black text-slate-900 uppercase tracking-tight">
-              Verified Capability Breakdown ({profiles.length} Skills)
+              {isFullAccess
+                ? `Verified Capability Breakdown (${visibleProfiles.length} Skills)`
+                : `Sample Capability Breakdown (${visibleProfiles.length} Curated Skills)`}
             </h4>
             <p className="text-xs text-slate-500">
               Click any skill to drill down into the supporting evidence chain (Skill → Evidence → Source).
             </p>
           </div>
+          <IntelligenceModeBadge capability="full_knowledge_graph" />
         </div>
 
         <div className="space-y-3 pt-1">
-          {profiles.map(profile => {
+          {visibleProfiles.map(profile => {
             const isExpanded = expandedSkill === profile.skillName;
             const maxStrengthDef = getEvidenceStrengthDefinition(profile.maxStrength);
 
@@ -150,7 +194,7 @@ export const SkillEvidenceGraphView: React.FC<SkillEvidenceGraphViewProps> = ({
                           {profile.skillName}
                         </h4>
                         <span className="text-[10px] font-extrabold px-2 py-0.2 rounded-full bg-blue-100 text-blue-800">
-                          {profile.confidenceScore}% Confidence
+                          {isFullAccess ? `${profile.confidenceScore}% Confidence` : 'Verified Signal'}
                         </span>
                       </div>
                       
@@ -190,7 +234,7 @@ export const SkillEvidenceGraphView: React.FC<SkillEvidenceGraphViewProps> = ({
                     <button
                       onClick={(e) => {
                         e.stopPropagation();
-                        setInspectingSkillWhy(profile.skillName);
+                        handleInspectWhy(profile.skillName);
                       }}
                       className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-amber-500/10 hover:bg-amber-500/20 text-amber-900 border border-amber-300 text-xs font-bold transition-all cursor-pointer shadow-2xs hover:shadow-xs"
                       title="Inspect transparent evidence explanation, 4 tiers, and relationship model"
@@ -215,12 +259,16 @@ export const SkillEvidenceGraphView: React.FC<SkillEvidenceGraphViewProps> = ({
                     </div>
 
                     <div className="space-y-2">
-                      {profile.evidenceList.map((item, idx) => {
+                      {(isFullAccess ? profile.evidenceList : profile.evidenceList.slice(0, 2)).map((item, idx) => {
                         const sDef = getEvidenceStrengthDefinition(item.evidenceStrength);
                         return (
                           <div
                             key={idx}
                             onClick={() => {
+                              if (isGuest) {
+                                setIsGateModalOpen(true);
+                                return;
+                              }
                               if (onOpenSourceModal) {
                                 onOpenSourceModal(item.sourceId);
                               } else {
@@ -262,6 +310,19 @@ export const SkillEvidenceGraphView: React.FC<SkillEvidenceGraphViewProps> = ({
         </div>
       </div>
 
+      {/* Intelligence Gate for Guest / Demo */}
+      {!isFullAccess && (
+        <CareerOSIntelligenceGate
+          capability="full_knowledge_graph"
+          variant="inline"
+          sampleCountLabel={
+            isGuest
+              ? `Showing ${visibleProfiles.length} sample skill nodes · Full Knowledge Graph is protected`
+              : `Demo Preview · ${intelAccess.demoSignalsUsed} / ${intelAccess.demoSignalsLimit} graph skill inspections used`
+          }
+        />
+      )}
+
       {/* Embedded Source Detail Modal if needed */}
       {currentViewingSource && (
         <SourceDetailModal
@@ -290,6 +351,14 @@ export const SkillEvidenceGraphView: React.FC<SkillEvidenceGraphViewProps> = ({
           onSkillUpdated={() => {
             setProfiles(sourceStore.getSkillEvidenceProfiles());
           }}
+        />
+      )}
+
+      {isGateModalOpen && (
+        <CareerOSIntelligenceGate
+          capability="full_knowledge_graph"
+          variant="modal"
+          onClose={() => setIsGateModalOpen(false)}
         />
       )}
 

@@ -14,6 +14,8 @@ import { EvidenceIntelligenceWorkspace } from '../evidenceIntelligence/EvidenceI
 import { RoleBlueprint, InterviewQuestion, UserCareerProfile } from '../../types';
 import { UniversalSourceIngestionModal, InputMethod } from '../library/UniversalSourceIngestionModal';
 import { sourceStore } from '../../features/sources/services/sourceStore';
+import { AccessControlService } from '../../services/accessControlService';
+import { ProtectedFrameworkAttribution } from '../access/ProtectedPreviewOverlay';
 
 export type KnowledgeChildDestination = 'role_blueprint_mapping' | 'global_knowledge_library' | 'role_intelligence' | 'evidence_intelligence';
 
@@ -52,6 +54,30 @@ export const KnowledgeSystemWorkspace: React.FC<KnowledgeSystemWorkspaceProps> =
   const [isIngestionOpen, setIsIngestionOpen] = useState(false);
   const [ingestionMethod, setIngestionMethod] = useState<InputMethod>('text');
 
+  React.useEffect(() => {
+    if (initialDestination) {
+      setActiveDestination(initialDestination);
+    }
+  }, [initialDestination]);
+
+  React.useEffect(() => {
+    const handleShowcaseStep = (e: Event) => {
+      const custom = e as CustomEvent<{ stepId: string }>;
+      const stepId = custom.detail?.stepId;
+      if (stepId === 'role_intelligence') {
+        setActiveDestination('role_intelligence');
+      } else if (stepId === 'knowledge') {
+        setActiveDestination('global_knowledge_library');
+      } else if (stepId === 'evidence') {
+        setActiveDestination('evidence_intelligence');
+      } else if (stepId === 'capabilities') {
+        setActiveDestination('role_blueprint_mapping');
+      }
+    };
+    window.addEventListener('career_showcase_step_selected', handleShowcaseStep);
+    return () => window.removeEventListener('career_showcase_step_selected', handleShowcaseStep);
+  }, []);
+
   return (
     <div className="space-y-6">
       
@@ -72,6 +98,7 @@ export const KnowledgeSystemWorkspace: React.FC<KnowledgeSystemWorkspaceProps> =
             <button
               type="button"
               onClick={() => {
+                AccessControlService.recordMeaningfulInteraction('protected_action');
                 setActiveDestination('global_knowledge_library');
                 setIngestionMethod('text');
                 setIsIngestionOpen(true);
@@ -85,6 +112,7 @@ export const KnowledgeSystemWorkspace: React.FC<KnowledgeSystemWorkspaceProps> =
             <button
               type="button"
               onClick={() => {
+                AccessControlService.recordMeaningfulInteraction('protected_action');
                 setActiveDestination('global_knowledge_library');
                 setIngestionMethod('manual');
                 setIsIngestionOpen(true);
@@ -102,7 +130,10 @@ export const KnowledgeSystemWorkspace: React.FC<KnowledgeSystemWorkspaceProps> =
           <button
             id="knowledge-dest-role-intelligence"
             type="button"
-            onClick={() => setActiveDestination('role_intelligence')}
+            onClick={() => {
+              AccessControlService.recordMeaningfulInteraction('navigation');
+              setActiveDestination('role_intelligence');
+            }}
             className={`px-4 py-2.5 rounded-xl text-xs sm:text-sm font-bold transition-all flex items-center gap-2 cursor-pointer ${
               activeDestination === 'role_intelligence'
                 ? 'bg-blue-600 text-white shadow-xs ring-2 ring-blue-600/20'
@@ -119,7 +150,10 @@ export const KnowledgeSystemWorkspace: React.FC<KnowledgeSystemWorkspaceProps> =
           <button
             id="knowledge-dest-evidence-intelligence"
             type="button"
-            onClick={() => setActiveDestination('evidence_intelligence')}
+            onClick={() => {
+              AccessControlService.recordMeaningfulInteraction('navigation');
+              setActiveDestination('evidence_intelligence');
+            }}
             className={`px-4 py-2.5 rounded-xl text-xs sm:text-sm font-bold transition-all flex items-center gap-2 cursor-pointer ${
               activeDestination === 'evidence_intelligence'
                 ? 'bg-blue-600 text-white shadow-xs ring-2 ring-blue-600/20'
@@ -136,7 +170,10 @@ export const KnowledgeSystemWorkspace: React.FC<KnowledgeSystemWorkspaceProps> =
           <button
             id="knowledge-dest-role-blueprints"
             type="button"
-            onClick={() => setActiveDestination('role_blueprint_mapping')}
+            onClick={() => {
+              AccessControlService.recordMeaningfulInteraction('navigation');
+              setActiveDestination('role_blueprint_mapping');
+            }}
             className={`px-4 py-2.5 rounded-xl text-xs sm:text-sm font-bold transition-all flex items-center gap-2 cursor-pointer ${
               activeDestination === 'role_blueprint_mapping'
                 ? 'bg-blue-600 text-white shadow-xs ring-2 ring-blue-600/20'
@@ -150,7 +187,10 @@ export const KnowledgeSystemWorkspace: React.FC<KnowledgeSystemWorkspaceProps> =
           <button
             id="knowledge-dest-global-library"
             type="button"
-            onClick={() => setActiveDestination('global_knowledge_library')}
+            onClick={() => {
+              AccessControlService.recordMeaningfulInteraction('navigation');
+              setActiveDestination('global_knowledge_library');
+            }}
             className={`px-4 py-2.5 rounded-xl text-xs sm:text-sm font-bold transition-all flex items-center gap-2 cursor-pointer ${
               activeDestination === 'global_knowledge_library'
                 ? 'bg-blue-600 text-white shadow-xs ring-2 ring-blue-600/20'
@@ -165,7 +205,10 @@ export const KnowledgeSystemWorkspace: React.FC<KnowledgeSystemWorkspaceProps> =
 
       {/* Destination 1: Role Intelligence & Evaluation */}
       {activeDestination === 'role_intelligence' && (
-        <div className="animate-in fade-in">
+        <div
+          data-protected-ip="Role Intelligence & Capability Evaluation Matrix"
+          className="animate-in fade-in"
+        >
           <RoleIntelligenceWorkspace
             userProfile={profile}
             onNavigateToLearning={() => setActiveDestination('global_knowledge_library')}
@@ -178,7 +221,10 @@ export const KnowledgeSystemWorkspace: React.FC<KnowledgeSystemWorkspaceProps> =
 
       {/* Destination 1b: Evidence Intelligence */}
       {activeDestination === 'evidence_intelligence' && (
-        <div className="animate-in fade-in">
+        <div
+          data-protected-ip="Evidence Intelligence & Signal Attribution Graph"
+          className="animate-in fade-in"
+        >
           <EvidenceIntelligenceWorkspace
             onNavigateToRoleIntelligence={() => setActiveDestination('role_intelligence')}
           />
@@ -187,7 +233,10 @@ export const KnowledgeSystemWorkspace: React.FC<KnowledgeSystemWorkspaceProps> =
 
       {/* Destination 2: Preferred Role Mapping */}
       {activeDestination === 'role_blueprint_mapping' && (
-        <div className="animate-in fade-in">
+        <div
+          data-protected-ip="Preferred Role Mapping & Capability Blueprints"
+          className="animate-in fade-in"
+        >
           <RoleBlueprintMappingWorkspace
             profile={profile}
             onUpdateProfile={onUpdateProfile}
@@ -208,6 +257,19 @@ export const KnowledgeSystemWorkspace: React.FC<KnowledgeSystemWorkspaceProps> =
           />
         </div>
       )}
+
+      {/* Subtle Copyright Awareness on Advanced Intelligence Pages */}
+      <ProtectedFrameworkAttribution
+        areaLabel={
+          activeDestination === 'role_intelligence'
+            ? 'Role Intelligence & Capability Evaluation Models'
+            : activeDestination === 'evidence_intelligence'
+              ? 'Evidence Intelligence & Signal Disambiguation'
+              : activeDestination === 'role_blueprint_mapping'
+                ? 'Preferred Role Mapping & Competency Architecture'
+                : 'Curated Domain Knowledge & Blueprints'
+        }
+      />
 
       {/* Universal Source Ingestion Modal */}
       {isIngestionOpen && (

@@ -11,7 +11,10 @@ import {
   Cpu, 
   Pencil, 
   Trash2,
-  ExternalLink
+  Sparkles,
+  Layers,
+  Users,
+  TrendingUp
 } from 'lucide-react';
 import { WorkExperienceRecord } from '../../services/workExperienceService';
 
@@ -38,7 +41,7 @@ export const WorkExperienceDetailModal: React.FC<WorkExperienceDetailModalProps>
         return (
           <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-blue-50 text-blue-700 border border-blue-200">
             <span className="w-1.5 h-1.5 rounded-full bg-blue-500"></span>
-            Extracted from Resume
+            Imported via CSV
           </span>
         );
       case 'edited':
@@ -64,6 +67,16 @@ export const WorkExperienceDetailModal: React.FC<WorkExperienceDetailModalProps>
         );
     }
   };
+
+  const importedLine =
+    record.userProvided?.importedSummaryLine ||
+    `${record.role} — ${record.company} — ${record.dates.replace(/\s*—\s*/g, '–')}`;
+
+  const intelligenceLine =
+    record.inferredIntelligence?.intelligenceSummaryLine ||
+    (record.relevantSkills?.some(s => /product|plg|funnel/i.test(s))
+      ? 'Product Management · Enterprise SaaS · Platform Product · Senior-level scope'
+      : 'Software Engineering · FinTech · SaaS · Core Platform · Senior-level scope');
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs animate-in fade-in">
@@ -141,6 +154,76 @@ export const WorkExperienceDetailModal: React.FC<WorkExperienceDetailModalProps>
 
         {/* Content Body */}
         <div className="p-6 overflow-y-auto space-y-6 flex-1 text-xs">
+
+          {/* User-Provided vs. CareerOS Inferred / Classified Intelligence */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            {/* User-Provided Source Material */}
+            <div className="p-3.5 rounded-xl bg-slate-50 border border-slate-200/90 space-y-1.5">
+              <div className="flex items-center justify-between">
+                <span className="text-[10px] font-extrabold uppercase tracking-wider text-slate-500">
+                  Imported · User-Provided Source
+                </span>
+                <span className="px-1.5 py-0.5 rounded bg-white border border-slate-200 text-[10px] font-semibold text-slate-600">
+                  Source Material
+                </span>
+              </div>
+              <p className="text-xs font-bold text-slate-900">
+                {importedLine}
+              </p>
+              {record.userProvided?.rawDescription && (
+                <p className="text-2xs text-slate-600 leading-relaxed pt-0.5">
+                  “{record.userProvided.rawDescription}”
+                </p>
+              )}
+              {record.userProvided?.rawAchievements && (
+                <p className="text-2xs text-slate-500 leading-relaxed">
+                  <span className="font-semibold text-slate-700">Raw Outcomes:</span> {record.userProvided.rawAchievements}
+                </p>
+              )}
+            </div>
+
+            {/* CareerOS Inferred Intelligence */}
+            <div className="p-3.5 rounded-xl bg-indigo-50/60 border border-indigo-200/80 space-y-2">
+              <div className="flex items-center justify-between">
+                <span className="inline-flex items-center gap-1 text-[10px] font-extrabold uppercase tracking-wider text-indigo-700">
+                  <Sparkles className="w-3 h-3 text-indigo-600" />
+                  CareerOS Intelligence
+                </span>
+                <span className="px-1.5 py-0.5 rounded bg-white/90 border border-indigo-200 text-[10px] font-semibold text-indigo-700">
+                  Auto-Classified
+                </span>
+              </div>
+              <p className="text-xs font-bold text-indigo-950 leading-snug">
+                {intelligenceLine}
+              </p>
+
+              {record.inferredIntelligence && (
+                <div className="pt-1 space-y-1.5 text-2xs text-indigo-900/90">
+                  <div className="flex flex-wrap gap-1">
+                    {record.inferredIntelligence.relationshipPillars.map((pillar, i) => (
+                      <span
+                        key={i}
+                        className="px-1.5 py-0.5 rounded bg-white border border-indigo-200/80 text-[10px] font-semibold text-indigo-800"
+                      >
+                        {pillar}
+                      </span>
+                    ))}
+                    <span className="px-1.5 py-0.5 rounded bg-indigo-100/80 text-[10px] font-semibold text-indigo-900">
+                      {record.inferredIntelligence.careerTrajectory}
+                    </span>
+                  </div>
+                  {record.inferredIntelligence.stakeholders.length > 0 && (
+                    <div className="flex items-center gap-1 text-[11px] text-indigo-800">
+                      <Users className="w-3 h-3 text-indigo-500 shrink-0" />
+                      <span className="truncate">
+                        Stakeholders: {record.inferredIntelligence.stakeholders.join(', ')}
+                      </span>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          </div>
           
           {/* Executive Scope / Mandate */}
           {record.scope && (

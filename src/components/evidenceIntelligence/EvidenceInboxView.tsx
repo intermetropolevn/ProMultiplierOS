@@ -17,6 +17,8 @@ import {
 } from 'lucide-react';
 import { EvidenceItem } from '../../features/evidenceIntelligence/types';
 import { evidenceIntelligenceStore } from '../../features/evidenceIntelligence/services/evidenceIntelligenceStore';
+import { useAccessControl } from '../../services/accessControlService';
+import { CareerOSIntelligenceGate, IntelligenceModeBadge } from '../access/CareerOSIntelligenceGate';
 
 interface EvidenceInboxViewProps {
   inboxItems: EvidenceItem[];
@@ -31,19 +33,76 @@ export const EvidenceInboxView: React.FC<EvidenceInboxViewProps> = ({
   onOpenQuickCapture,
   onNavigateToTimeline
 }) => {
+  const { accessLevel, getIntelligenceAccess, consumeDemoIntelligenceSignal } = useAccessControl();
   const [selectedMergeSourceId, setSelectedMergeSourceId] = useState<string | null>(null);
+  const [isGateModalOpen, setIsGateModalOpen] = useState(false);
+
+  const intelAccess = getIntelligenceAccess('evidence_intelligence');
+  const isFullAccess = accessLevel === 'FULL_ACCESS';
+  const isGuest = accessLevel === 'PUBLIC_GUEST';
+
+  // Access-aware visible items: Guest sees 2 curated examples; Demo sees up to 2; Full sees all
+  const visibleInboxItems = isFullAccess ? inboxItems : inboxItems.slice(0, 2);
 
   const handleConfirm = (id: string) => {
+    if (isGuest) {
+      setIsGateModalOpen(true);
+      return;
+    }
+    if (!isFullAccess) {
+      const allowed = consumeDemoIntelligenceSignal('evidence_intelligence', `confirm-${id}`);
+      if (!allowed) {
+        setIsGateModalOpen(true);
+        return;
+      }
+    }
     evidenceIntelligenceStore.confirmEvidence(id);
   };
 
   const handleDismiss = (id: string) => {
+    if (isGuest) {
+      setIsGateModalOpen(true);
+      return;
+    }
+    if (!isFullAccess) {
+      const allowed = consumeDemoIntelligenceSignal('evidence_intelligence', `dismiss-${id}`);
+      if (!allowed) {
+        setIsGateModalOpen(true);
+        return;
+      }
+    }
     evidenceIntelligenceStore.rejectEvidence(id);
   };
 
   const handleTriggerMerge = (sourceId: string, targetId: string) => {
+    if (isGuest) {
+      setIsGateModalOpen(true);
+      return;
+    }
+    if (!isFullAccess) {
+      const allowed = consumeDemoIntelligenceSignal('evidence_intelligence', `merge-${sourceId}`);
+      if (!allowed) {
+        setIsGateModalOpen(true);
+        return;
+      }
+    }
     evidenceIntelligenceStore.mergeEvidence(sourceId, targetId);
     setSelectedMergeSourceId(null);
+  };
+
+  const handleInspectDetail = (item: EvidenceItem) => {
+    if (isGuest) {
+      setIsGateModalOpen(true);
+      return;
+    }
+    if (!isFullAccess) {
+      const allowed = consumeDemoIntelligenceSignal('evidence_intelligence', `detail-${item.id}`);
+      if (!allowed) {
+        setIsGateModalOpen(true);
+        return;
+      }
+    }
+    onOpenDetail(item);
   };
 
   return (
@@ -53,10 +112,11 @@ export const EvidenceInboxView: React.FC<EvidenceInboxViewProps> = ({
       <div className="bg-white rounded-2xl border border-slate-200/90 shadow-2xs p-5 sm:p-6 space-y-3">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div className="space-y-1">
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 flex-wrap">
               <span className="text-[10px] font-black uppercase tracking-wider px-2 py-0.5 rounded bg-blue-50 text-blue-700 border border-blue-200">
                 Evidence Inbox
               </span>
+              <IntelligenceModeBadge capability="evidence_intelligence" />
               <span className="text-slate-300">·</span>
               <span className="text-xs text-slate-500 font-medium">Automatic Activity Disambiguation</span>
             </div>
@@ -82,14 +142,23 @@ export const EvidenceInboxView: React.FC<EvidenceInboxViewProps> = ({
 
         {/* Triage Status Stats */}
         <div className="pt-3 border-t border-slate-100 flex items-center justify-between text-xs text-slate-600 flex-wrap gap-2">
-          <div className="flex items-center gap-4">
+          <div className="flex items-center gap-4 flex-wrap">
             <span>
-              Candidate Signals Pending: <strong className="text-slate-900">{inboxItems.length}</strong>
+              {isFullAccess ? 'Candidate Signals Pending:' : 'Curated Sample Signals:'}{' '}
+              <strong className="text-slate-900">{visibleInboxItems.length}</strong>
             </span>
             <span className="text-slate-300">·</span>
             <span>
-              Confirmed Signals: <strong className="text-emerald-700">{evidenceIntelligenceStore.getConfirmedEvidenceCount()}</strong>
+              Confirmed Signals: <strong className="text-emerald-700">{isFullAccess ? evidenceIntelligenceStore.getConfirmedEvidenceCount() : 3}</strong>
             </span>
+            {!isFullAccess && accessLevel === 'DEMO_ACCESS' && (
+              <>
+                <span className="text-slate-300">·</span>
+                <span className="text-blue-700 font-semibold">
+                  Demo Signal Actions: {intelAccess.demoSignalsUsed} / {intelAccess.demoSignalsLimit} used
+                </span>
+              </>
+            )}
           </div>
 
           <button
@@ -104,7 +173,7 @@ export const EvidenceInboxView: React.FC<EvidenceInboxViewProps> = ({
       </div>
 
       {/* 2. Candidate Evidence Cards Stream */}
-      {inboxItems.length === 0 ? (
+      {visibleInboxItems.length === 0 ? (
         <div className="p-12 text-center bg-white rounded-2xl border border-slate-200 shadow-2xs space-y-3">
           <div className="w-12 h-12 rounded-full bg-emerald-50 text-emerald-600 flex items-center justify-center mx-auto">
             <CheckCircle2 className="w-6 h-6" />
@@ -125,7 +194,7 @@ export const EvidenceInboxView: React.FC<EvidenceInboxViewProps> = ({
         </div>
       ) : (
         <div className="space-y-4">
-          {inboxItems.map((item) => {
+          {visibleInboxItems.map((item) => {
             const isMergingThis = selectedMergeSourceId === item.id;
             return (
               <div 
@@ -134,14 +203,14 @@ export const EvidenceInboxView: React.FC<EvidenceInboxViewProps> = ({
               >
                 {/* Card Top Strip */}
                 <div className="px-5 py-3.5 border-b border-slate-100 bg-slate-50/70 flex items-center justify-between flex-wrap gap-2">
-                  <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-2 flex-wrap">
                     <span className="w-2 h-2 rounded-full bg-blue-600 animate-pulse" />
                     <span className="text-[10px] font-black uppercase tracking-wider text-blue-700 font-mono">
-                      Potential Evidence Detected
+                      {isFullAccess ? 'Potential Evidence Detected' : 'Curated Sample Signal'}
                     </span>
                     <span className="text-slate-300">·</span>
                     <span className="text-xs text-slate-500 font-medium">
-                      Confidence: <strong className="text-emerald-700">{item.evidenceConfidence}%</strong>
+                      Signal Alignment: <strong className="text-emerald-700">High Confidence</strong>
                     </span>
                   </div>
 
@@ -150,7 +219,7 @@ export const EvidenceInboxView: React.FC<EvidenceInboxViewProps> = ({
                   </span>
                 </div>
 
-                {/* Card Body (Matches Section 3 layout) */}
+                {/* Card Body */}
                 <div className="p-5 sm:p-6 space-y-4">
                   
                   {/* Initiative Title & Source Counts */}
@@ -208,7 +277,7 @@ export const EvidenceInboxView: React.FC<EvidenceInboxViewProps> = ({
                     <div className="flex items-center gap-2 flex-wrap text-xs font-semibold text-slate-600">
                       <button
                         type="button"
-                        onClick={() => onOpenDetail(item)}
+                        onClick={() => handleInspectDetail(item)}
                         className="p-1.5 hover:bg-slate-100 rounded-lg flex items-center gap-1 transition-colors cursor-pointer"
                         title="Edit Evidence Attributes"
                       >
@@ -218,7 +287,13 @@ export const EvidenceInboxView: React.FC<EvidenceInboxViewProps> = ({
 
                       <button
                         type="button"
-                        onClick={() => setSelectedMergeSourceId(isMergingThis ? null : item.id)}
+                        onClick={() => {
+                          if (isGuest) {
+                            setIsGateModalOpen(true);
+                            return;
+                          }
+                          setSelectedMergeSourceId(isMergingThis ? null : item.id);
+                        }}
                         className={`p-1.5 rounded-lg flex items-center gap-1 transition-colors cursor-pointer ${
                           isMergingThis ? 'bg-purple-100 text-purple-800' : 'hover:bg-slate-100'
                         }`}
@@ -230,7 +305,7 @@ export const EvidenceInboxView: React.FC<EvidenceInboxViewProps> = ({
 
                       <button
                         type="button"
-                        onClick={() => onOpenDetail(item)}
+                        onClick={() => handleInspectDetail(item)}
                         className="p-1.5 hover:bg-slate-100 rounded-lg flex items-center gap-1 transition-colors cursor-pointer"
                         title="Add missing quantitative outcome"
                       >
@@ -268,7 +343,7 @@ export const EvidenceInboxView: React.FC<EvidenceInboxViewProps> = ({
                         Select an existing initiative or evidence to merge into:
                       </span>
                       <div className="space-y-1">
-                        {inboxItems.filter(other => other.id !== item.id).map(target => (
+                        {visibleInboxItems.filter(other => other.id !== item.id).map(target => (
                           <button
                             key={target.id}
                             type="button"
@@ -288,6 +363,28 @@ export const EvidenceInboxView: React.FC<EvidenceInboxViewProps> = ({
             );
           })}
         </div>
+      )}
+
+      {/* Intelligence Gate for Guest & Demo after sample preview */}
+      {!isFullAccess && (
+        <CareerOSIntelligenceGate
+          capability="evidence_intelligence"
+          variant="inline"
+          sampleCountLabel={
+            isGuest
+              ? `Showing ${visibleInboxItems.length} curated sample evidence detections`
+              : `Demo Preview · ${intelAccess.demoSignalsUsed} / ${intelAccess.demoSignalsLimit} demo signal confirmations used`
+          }
+        />
+      )}
+
+      {/* Modal Gate when user triggers locked action */}
+      {isGateModalOpen && (
+        <CareerOSIntelligenceGate
+          capability="evidence_intelligence"
+          variant="modal"
+          onClose={() => setIsGateModalOpen(false)}
+        />
       )}
 
     </div>

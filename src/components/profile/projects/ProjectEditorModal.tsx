@@ -19,11 +19,16 @@ import {
   HelpCircle,
   Eye,
   Pencil,
-  Tag
+  Tag,
+  Lock
 } from 'lucide-react';
 import { CareerProject, ProjectSection, ProjectSectionType, SUGGESTED_SECTION_PRESETS } from '../../../features/projects/types';
 import { convertClipboardToStructuredMarkdown } from '../../../features/knowledge/services/richTextPasteService';
 import { BlueprintRichTextRenderer } from '../../common/BlueprintRichTextRenderer';
+import { AccessCreationBanner } from '../../access/AccessCreationBanner';
+import { ProgressiveCreationSection } from '../../access/ProgressiveCreationSection';
+import { DemoQuotaGate } from '../../access/DemoQuotaGate';
+import { useAccessControl } from '../../../services/accessControlService';
 
 interface ProjectEditorModalProps {
   isOpen: boolean;
@@ -38,10 +43,13 @@ export const ProjectEditorModal: React.FC<ProjectEditorModalProps> = ({
   project,
   onSave,
 }) => {
+  const { capabilities, canCreate, openContextualPrompt } = useAccessControl();
+  const isSubmittingRef = useRef(false);
   if (!isOpen) return null;
 
-  // Metadata form state
+  // Metadata form state (Basic: Project Name, Project Type, Description, Status)
   const [title, setTitle] = useState(project?.title || '');
+  const [projectType, setProjectType] = useState('Production Architecture');
   const [tagline, setTagline] = useState(project?.tagline || '');
   const [role, setRole] = useState(project?.role || '');
   const [company, setCompany] = useState(project?.company || '');
@@ -193,7 +201,16 @@ export const ProjectEditorModal: React.FC<ProjectEditorModalProps> = ({
   };
 
   const handleSave = () => {
+    if (isSubmittingRef.current) return;
+    if (!capabilities.canCreate) {
+      openContextualPrompt();
+      return;
+    }
+    if (!project && !canCreate('projects')) {
+      return;
+    }
     if (!title.trim()) return;
+    isSubmittingRef.current = true;
 
     const techArray = techStackInput
       .split(',')
@@ -284,15 +301,27 @@ export const ProjectEditorModal: React.FC<ProjectEditorModalProps> = ({
         </div>
 
         {/* Modal Body */}
+        <DemoQuotaGate workflowKey="projects" isEditing={Boolean(project)} onViewExistingItems={onClose}>
         <div className="flex-1 overflow-y-auto p-6 space-y-6">
+          <AccessCreationBanner workflowKey="projects" workflowLabel="Projects" />
+
           {activeTab === 'edit' ? (
             <>
-              {/* PRIMARY METADATA */}
+              {/* BASIC FIELDS: Project Name, Project Type, Description, Status */}
               <div className="space-y-4 bg-slate-50/60 p-4 rounded-xl border border-slate-200/80">
+                <div className="flex items-center justify-between">
+                  <span className="text-[11px] font-bold uppercase tracking-wider text-slate-500">
+                    Basic Project Fields
+                  </span>
+                  <span className="text-[11px] text-slate-400">
+                    Project Name · Project Type · Description · Status
+                  </span>
+                </div>
+
                 <div className="grid grid-cols-1 md:grid-cols-12 gap-3">
-                  <div className="md:col-span-8">
+                  <div className="md:col-span-5">
                     <label className="block text-2xs font-bold text-slate-700 uppercase tracking-wider mb-1">
-                      Project Title *
+                      Project Name *
                     </label>
                     <input
                       type="text"
@@ -304,6 +333,23 @@ export const ProjectEditorModal: React.FC<ProjectEditorModalProps> = ({
                   </div>
 
                   <div className="md:col-span-4">
+                    <label className="block text-2xs font-bold text-slate-700 uppercase tracking-wider mb-1">
+                      Project Type
+                    </label>
+                    <select
+                      value={projectType}
+                      onChange={e => setProjectType(e.target.value)}
+                      className="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg text-xs font-medium text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    >
+                      <option value="Production Architecture">Production Architecture</option>
+                      <option value="0-to-1 Product Build">0-to-1 Product Build</option>
+                      <option value="AI & Data Pipeline">AI &amp; Data Pipeline</option>
+                      <option value="System Migration & Reliability">System Migration &amp; Reliability</option>
+                      <option value="Open Source / Developer Tool">Open Source / Developer Tool</option>
+                    </select>
+                  </div>
+
+                  <div className="md:col-span-3">
                     <label className="block text-2xs font-bold text-slate-700 uppercase tracking-wider mb-1">
                       Status
                     </label>
@@ -322,17 +368,21 @@ export const ProjectEditorModal: React.FC<ProjectEditorModalProps> = ({
 
                 <div>
                   <label className="block text-2xs font-bold text-slate-700 uppercase tracking-wider mb-1">
-                    Tagline / One-Line Executive Summary
+                    Description
                   </label>
-                  <input
-                    type="text"
+                  <textarea
+                    rows={2}
                     value={tagline}
                     onChange={e => setTagline(e.target.value)}
                     placeholder="High-throughput at-most-once payment processing pipeline with zero duplicate charges across $45M volume"
                     className="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg text-xs font-medium text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500"
                   />
                 </div>
+              </div>
 
+              {/* ADVANCED SECTION: Capability Mapping, Evidence Model, Outcome Metrics, Role Alignment, Intelligence Tags */}
+              <ProgressiveCreationSection workflowKey="projects">
+              <div className="space-y-4 bg-slate-50/60 p-4 rounded-xl border border-slate-200/80">
                 <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3">
                   <div>
                     <label className="block text-2xs font-bold text-slate-700 uppercase tracking-wider mb-1">
@@ -661,6 +711,7 @@ export const ProjectEditorModal: React.FC<ProjectEditorModalProps> = ({
                   </div>
                 )}
               </div>
+              </ProgressiveCreationSection>
             </>
           ) : (
             /* PREVIEW TAB */
@@ -686,7 +737,7 @@ export const ProjectEditorModal: React.FC<ProjectEditorModalProps> = ({
                 </div>
               </div>
 
-              {sections.map((section, idx) => (
+              {capabilities.canViewIntelligence && sections.map((section, idx) => (
                 <div key={section.id} className="space-y-2 border-b border-slate-100 pb-4 last:border-0">
                   <h3 className="text-xs font-bold uppercase tracking-wide text-slate-800 flex items-center gap-2">
                     <span className="w-4 h-4 rounded-full bg-blue-100 text-blue-700 flex items-center justify-center text-[10px]">
@@ -707,7 +758,7 @@ export const ProjectEditorModal: React.FC<ProjectEditorModalProps> = ({
         <div className="px-6 py-3 border-t border-slate-200 bg-slate-50 flex items-center justify-between">
           <div className="flex items-center gap-2 text-2xs text-slate-500">
             <Sparkles className="w-3.5 h-3.5 text-blue-600" />
-            <span>Structured for 1-click Storybank & Q&A generation</span>
+            <span>Structured for 1-click Storybank &amp; Q&amp;A generation</span>
           </div>
 
           <div className="flex items-center gap-2">
@@ -718,16 +769,28 @@ export const ProjectEditorModal: React.FC<ProjectEditorModalProps> = ({
             >
               Cancel
             </button>
-            <button
-              type="button"
-              disabled={!title.trim()}
-              onClick={handleSave}
-              className="px-5 py-2 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white rounded-xl text-xs font-bold shadow-xs transition-colors cursor-pointer"
-            >
-              {project ? 'Save Project Changes' : 'Save Project'}
-            </button>
+            {!capabilities.canCreate ? (
+              <button
+                type="button"
+                onClick={() => openContextualPrompt()}
+                className="px-5 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-bold shadow-xs transition-colors cursor-pointer inline-flex items-center gap-1.5"
+              >
+                <Lock className="w-3.5 h-3.5" />
+                <span>Unlock in Demo</span>
+              </button>
+            ) : (
+              <button
+                type="button"
+                disabled={!title.trim()}
+                onClick={handleSave}
+                className="px-5 py-2 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white rounded-xl text-xs font-bold shadow-xs transition-colors cursor-pointer"
+              >
+                {project ? 'Save Project Changes' : 'Save Project'}
+              </button>
+            )}
           </div>
         </div>
+        </DemoQuotaGate>
 
       </div>
     </div>

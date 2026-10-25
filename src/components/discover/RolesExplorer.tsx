@@ -17,6 +17,7 @@ import {
 } from 'lucide-react';
 import { RoleBlueprintService } from '../../services/roleBlueprintService';
 import { RoleBlueprint, RoleCategory } from '../../types';
+import { useAccessControl } from '../../services/accessControlService';
 
 interface RolesExplorerProps {
   onSelectRole: (role: RoleBlueprint) => void;
@@ -33,18 +34,23 @@ export const RolesExplorer: React.FC<RolesExplorerProps> = ({
   onDuplicateRole,
   onStartMission,
 }) => {
+  const { accessLevel, capabilities } = useAccessControl();
   const [roles, setRoles] = useState<RoleBlueprint[]>(() => RoleBlueprintService.getAllBlueprints(true));
   const [selectedCategory, setSelectedCategory] = useState<string>('All');
   const [statusFilter, setStatusFilter] = useState<'all' | 'published' | 'draft'>('all');
   const [openMenuRoleId, setOpenMenuRoleId] = useState<string | null>(null);
 
-  // Sync with storage updates
+  // Sync with storage updates & access tier changes
   useEffect(() => {
     const handleSync = () => {
       setRoles(RoleBlueprintService.getAllBlueprints(true));
     };
     window.addEventListener('career_roles_updated', handleSync);
-    return () => window.removeEventListener('career_roles_updated', handleSync);
+    window.addEventListener('career_access_changed', handleSync);
+    return () => {
+      window.removeEventListener('career_roles_updated', handleSync);
+      window.removeEventListener('career_access_changed', handleSync);
+    };
   }, []);
 
   // Close overflow menu when clicking outside
@@ -80,8 +86,11 @@ export const RolesExplorer: React.FC<RolesExplorerProps> = ({
             <h2 className="text-xl font-bold text-slate-900 tracking-tight">
               Role Blueprints &amp; Career Ladders
             </h2>
-            <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-slate-100 text-slate-600 border border-slate-200">
-              {filteredRoles.length} {filteredRoles.length === 1 ? 'Blueprint' : 'Blueprints'}
+            <span className="text-xs font-semibold px-2.5 py-0.5 rounded-full bg-slate-100 text-slate-700 border border-slate-200">
+              Showing {filteredRoles.length} curated {filteredRoles.length === 1 ? 'Blueprint' : 'Blueprints'}
+            </span>
+            <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-blue-50 text-blue-700 border border-blue-200">
+              Curated Beta Preview
             </span>
           </div>
           <p className="text-sm text-slate-500 mt-0.5">
@@ -140,6 +149,26 @@ export const RolesExplorer: React.FC<RolesExplorerProps> = ({
               </button>
             ))}
           </div>
+        </div>
+      </div>
+
+      {/* Results & Beta Indicator */}
+      <div className="flex flex-wrap items-center justify-between text-xs text-slate-500 px-1 gap-2">
+        <div className="flex items-center gap-2">
+          <span>
+            Showing <strong className="font-bold text-slate-900">{filteredRoles.length}</strong> {filteredRoles.length === 1 ? 'role blueprint' : 'role blueprints'}
+          </span>
+          <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${
+            accessLevel === 'FULL'
+              ? 'bg-emerald-50 text-emerald-800 border-emerald-200'
+              : accessLevel === 'DEMO'
+              ? 'bg-amber-50 text-amber-800 border-amber-200'
+              : accessLevel === 'GUEST'
+              ? 'bg-blue-50 text-blue-700 border-blue-200'
+              : 'bg-slate-100 text-slate-700 border-slate-200'
+          }`}>
+            {capabilities.tierBadgeLabel}
+          </span>
         </div>
       </div>
 

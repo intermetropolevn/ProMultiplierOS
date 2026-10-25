@@ -31,10 +31,12 @@ export type FocusArea =
 export interface FeedbackContext {
   careerGoal: string;
   targetRole: string;
+  targetDomain?: string;
   roleBlueprintId?: string;
   relevantCapability: string;
   workSubmittedTitle: string;
   workSubmittedContent: string;
+  supportingEvidence?: string[];
   sourceType: 'practice' | 'mission' | 'build' | 'evidence' | 'readiness';
   sourceId?: string;
   readinessScore: number;
@@ -92,7 +94,12 @@ export interface FollowUpMessage {
   timestamp: string;
 }
 
-export interface FeedbackRequest {
+/**
+ * Canonical Career Feedback Session entity unifying context, interaction mode,
+ * submitted work, reviewer, AI analysis, expert feedback, practice iterations,
+ * follow-up thread, and readiness impact.
+ */
+export interface CareerFeedbackSession {
   id: string;
   userId: string;
   helpType: ExpertHelpType;
@@ -104,6 +111,7 @@ export interface FeedbackRequest {
   status: 'waiting_for_expert' | 'in_review' | 'feedback_delivered' | 'completed';
   submittedAt: string;
   deadline?: string;
+  attachedToMission?: boolean;
   privacyShared: {
     practiceResponse: boolean;
     careerGoal: boolean;
@@ -137,6 +145,8 @@ export interface FeedbackRequest {
   followUpMessages?: FollowUpMessage[];
 }
 
+export type FeedbackRequest = CareerFeedbackSession;
+
 export interface CreateFeedbackPayload {
   helpType: ExpertHelpType;
   context: FeedbackContext;
@@ -145,6 +155,7 @@ export interface CreateFeedbackPayload {
   expertId?: string;
   expertName?: string;
   deadline?: string;
+  deliverImmediately?: boolean;
   privacyShared?: {
     practiceResponse: boolean;
     careerGoal: boolean;

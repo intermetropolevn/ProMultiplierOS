@@ -18,9 +18,11 @@ import { CareerIntelligenceDashboard } from '../intelligence/observability/Caree
 import { CapabilityActivationInspector } from '../intelligence/activation/CapabilityActivationInspector';
 import { CapabilityLedgerAdminView } from './CapabilityLedgerAdminView';
 import { AdminOpportunitiesView } from './AdminOpportunitiesView';
-import { Trophy } from 'lucide-react';
+import { Trophy, ClipboardCheck } from 'lucide-react';
+import { ProtectedFrameworkAttribution } from '../access/ProtectedPreviewOverlay';
+import { InternalBetaQAChecklistPanel } from '../access/InternalBetaQAChecklistPanel';
 
-export type PlatformAdminTab = 'admin' | 'opportunities' | 'intelligence' | 'trigger_engine' | 'capability_ledger';
+export type PlatformAdminTab = 'admin' | 'opportunities' | 'intelligence' | 'trigger_engine' | 'capability_ledger' | 'beta_qa';
 
 interface PlatformAdminWorkspaceProps {
   initialTab?: PlatformAdminTab;
@@ -36,7 +38,10 @@ export const PlatformAdminWorkspace: React.FC<PlatformAdminWorkspaceProps> = ({
   const [activeTab, setActiveTab] = useState<PlatformAdminTab>(initialTab);
 
   return (
-    <div className={`space-y-6 ${className}`}>
+    <div
+      data-protected-ip="Platform Administration, Capability Ledger & Intelligence Engine"
+      className={`space-y-6 ${className}`}
+    >
       
       {/* Platform Admin Top Header */}
       <div className="bg-slate-900 text-white rounded-3xl p-6 sm:p-7 border border-slate-800 shadow-md">
@@ -140,6 +145,19 @@ export const PlatformAdminWorkspace: React.FC<PlatformAdminWorkspaceProps> = ({
             <ShieldCheck className="w-4 h-4" />
             <span>Capability Ledger</span>
           </button>
+
+          <button
+            type="button"
+            onClick={() => setActiveTab('beta_qa')}
+            className={`px-4 py-2 rounded-xl text-xs sm:text-sm font-bold transition-all cursor-pointer flex items-center gap-2 ${
+              activeTab === 'beta_qa'
+                ? 'bg-emerald-600 text-white shadow-xs'
+                : 'text-slate-300 hover:text-white hover:bg-slate-800'
+            }`}
+          >
+            <ClipboardCheck className="w-4 h-4" />
+            <span>Beta QA &amp; Readiness</span>
+          </button>
         </div>
       </div>
 
@@ -186,7 +204,19 @@ export const PlatformAdminWorkspace: React.FC<PlatformAdminWorkspaceProps> = ({
             <CapabilityLedgerAdminView />
           </div>
         )}
+
+        {activeTab === 'beta_qa' && (
+          <div className="animate-in fade-in duration-150">
+            <InternalBetaQAChecklistPanel mode="embedded" />
+          </div>
+        )}
       </div>
+
+      {/* Subtle Copyright Awareness on Proprietary Framework Admin Screen */}
+      <ProtectedFrameworkAttribution
+        areaLabel="Career Intelligence Engine, L0–L4 Trigger Architecture & Capability Ledger"
+        variant="dark"
+      />
 
     </div>
   );

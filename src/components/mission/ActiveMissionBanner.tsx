@@ -60,6 +60,22 @@ export const ActiveMissionBanner: React.FC<ActiveMissionBannerProps> = ({
                 <Target className="w-3 h-3 text-blue-300" />
                 Active Career Mission
               </span>
+              <span className="text-2xs font-bold px-2 py-0.5 rounded-full bg-blue-400/20 text-blue-200 border border-blue-300/30">
+                Curated Beta Preview
+              </span>
+              <span className="text-2xs font-extrabold uppercase px-2 py-0.5 rounded-full bg-amber-400/20 text-amber-300 border border-amber-400/30">
+                Phase: {mission.currentStage}
+              </span>
+              {mission.capabilityGaps && mission.capabilityGaps.length > 0 && (
+                <button
+                  type="button"
+                  onClick={onOpenMissionControl}
+                  title={`View ${mission.capabilityGaps.length} capability gaps preventing stronger readiness for ${mission.targetRoleTitle}`}
+                  className="text-2xs font-bold px-2 py-0.5 rounded-full bg-rose-500/20 hover:bg-rose-500/30 text-rose-200 border border-rose-400/30 transition-colors cursor-pointer"
+                >
+                  {mission.capabilityGaps.length} Capability Gaps
+                </button>
+              )}
               <span className="text-2xs font-bold text-slate-300 px-2 py-0.5 rounded-md bg-white/10">
                 {mission.targetRoleTitle}
               </span>

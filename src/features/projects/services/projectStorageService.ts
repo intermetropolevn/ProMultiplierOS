@@ -2,11 +2,24 @@ import { CareerProject, ProjectSection } from '../types';
 import { INITIAL_PROJECTS } from '../data/seedProjects';
 import { CandidateStory, StructuredAnswerBlueprint, BlueprintFramework } from '../../knowledge/types';
 import { KnowledgeStorageService } from '../../knowledge/services/knowledgeStorageService';
+import { curatedBetaData } from '../../../services/curatedBetaData';
+import { AccessControlService } from '../../../services/accessControlService';
+import { demoWorkspaceService } from '../../../services/demoWorkspaceService';
 
 const STORAGE_KEY = 'career_os_projects_v2';
 
 export class ProjectStorageService {
   public static getProjects(): CareerProject[] {
+    const access = AccessControlService.getAccessLevel();
+
+    if (access === 'DEMO') {
+      return demoWorkspaceService.getProjects();
+    }
+
+    if (curatedBetaData.isCuratedBetaActive()) {
+      return curatedBetaData.getProjects();
+    }
+
     try {
       const data = localStorage.getItem(STORAGE_KEY);
       if (data) {
@@ -35,6 +48,10 @@ export class ProjectStorageService {
   }
 
   public static saveProjects(projects: CareerProject[]): void {
+    if (AccessControlService.getAccessLevel() === 'DEMO') {
+      demoWorkspaceService.saveProjects(projects, true);
+      return;
+    }
     try {
       localStorage.setItem(STORAGE_KEY, JSON.stringify(projects));
       if (typeof window !== 'undefined') {
@@ -50,8 +67,31 @@ export class ProjectStorageService {
   }
 
   public static addOrUpdateProject(project: CareerProject): CareerProject[] {
+    const isDemo = AccessControlService.getAccessLevel() === 'DEMO';
     const list = this.getProjects();
     const existingIndex = list.findIndex(p => p.id === project.id);
+
+    if (existingIndex < 0) {
+      let customCount = 0;
+      if (isDemo) {
+        customCount = demoWorkspaceService.getCategoryUsage('projects').used;
+      } else {
+        try {
+          const data = localStorage.getItem(STORAGE_KEY);
+          if (data) {
+            const parsed: CareerProject[] = JSON.parse(data);
+            customCount = parsed.filter(item => !INITIAL_PROJECTS.some(init => init.id === item.id)).length;
+          }
+        } catch {}
+      }
+
+      const decision = AccessControlService.canCreateWorkflowItem('projects', customCount);
+      if (!decision.allowed) {
+        console.warn('Project creation blocked by access control:', decision.reason);
+        throw new Error(decision.reason || 'Demo limit reached');
+      }
+    }
+
     let updated: CareerProject[];
     const now = new Date().toISOString();
 

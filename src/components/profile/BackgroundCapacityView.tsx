@@ -26,34 +26,48 @@ import {
   Info,
   Check,
   ChevronRight,
-  TrendingUp
+  TrendingUp,
+  Download,
+  FileSpreadsheet,
+  HelpCircle,
+  ChevronDown,
+  ChevronUp
 } from 'lucide-react';
-import { ResumeService, ResumeDocument, MAX_RESUME_SIZE_BYTES } from '../../services/resumeService';
 import { WorkExperienceService, WorkExperienceRecord } from '../../services/workExperienceService';
+import {
+  CsvImportProcessingStep,
+  CSV_PROCESSING_STEPS,
+  CsvImportBatchSummary,
+  StagedWorkExperienceImportItem,
+  SAMPLE_WORK_EXPERIENCE_CSV,
+  downloadWorkExperienceCsvTemplate,
+  processWorkExperienceCsvImport
+} from '../../services/workExperienceCsvService';
 import { SkillService, CanonicalSkill, SkillProvenance } from '../../services/skillService';
-import { CareerIntelligenceService, CapabilityRecord, UnderlyingSkill } from '../../services/careerIntelligenceService';
+import { CareerIntelligenceService, CapabilityRecord } from '../../services/careerIntelligenceService';
 import { careerGraphEventBus } from '../../services/careerGraphEventBus';
 import { AddWorkExperienceModal } from './AddWorkExperienceModal';
 import { WorkExperienceDetailModal } from './WorkExperienceDetailModal';
+import { ReviewImportedExperiencesModal } from './ReviewImportedExperiencesModal';
 
 interface BackgroundCapacityViewProps {
   onOpenEvidenceDetail?: (evidenceId: string) => void;
 }
 
-type ScanningStep = 'reading' | 'extracting' | 'detecting' | 'updating';
-
 export const BackgroundCapacityView: React.FC<BackgroundCapacityViewProps> = ({
   onOpenEvidenceDetail,
 }) => {
-  // Resume state
-  const [resumeDoc, setResumeDoc] = useState<ResumeDocument>(() => ResumeService.getResume());
-  const [isUploading, setIsUploading] = useState(false);
-  const [scanningStep, setScanningStep] = useState<ScanningStep>('reading');
-  const [scanningProgress, setScanningProgress] = useState(0);
+  // Structured CSV Work Experience Import state
+  const [isProcessingCsv, setIsProcessingCsv] = useState(false);
+  const [processingStep, setProcessingStep] = useState<CsvImportProcessingStep>('importing');
+  const [processingProgress, setProcessingProgress] = useState(0);
+  const [csvBatch, setCsvBatch] = useState<CsvImportBatchSummary | null>(null);
+  const [isReviewModalOpen, setIsReviewModalOpen] = useState(false);
+  const [showTemplateGuide, setShowTemplateGuide] = useState(false);
   const [uploadError, setUploadError] = useState<string | null>(null);
   const [importSuccessMessage, setImportSuccessMessage] = useState<string | null>(null);
   const [isDragOver, setIsDragOver] = useState(false);
-  const fileInputRef = useRef<HTMLInputElement>(null);
+  const csvInputRef = useRef<HTMLInputElement>(null);
 
   // Work experiences state
   const [experiences, setExperiences] = useState<WorkExperienceRecord[]>(() => 
@@ -83,7 +97,6 @@ export const BackgroundCapacityView: React.FC<BackgroundCapacityViewProps> = ({
       setExperiences(WorkExperienceService.getWorkExperiences());
       setSkills(SkillService.getSkills());
       setCapabilities(CareerIntelligenceService.getCapabilities());
-      setResumeDoc(ResumeService.getResume());
     });
     return () => unsubscribe();
   }, []);
@@ -135,57 +148,63 @@ export const BackgroundCapacityView: React.FC<BackgroundCapacityViewProps> = ({
     return toolsAndStacks.filter(t => t.provenance === filterProvenance);
   }, [toolsAndStacks, filterProvenance]);
 
-  // Handle File Upload and Extraction Pipeline
-  const handleFileUpload = async (file: File) => {
+  // Run CSV content through the 6-stage CareerOS classification & structuring pipeline
+  const runCsvImportPipeline = async (csvContent: string, fileName: string) => {
     setUploadError(null);
     setImportSuccessMessage(null);
-    const validation = ResumeService.validateFile(file);
-    if (!validation.isValid) {
-      setUploadError(validation.error || 'Invalid file uploaded');
+    setIsProcessingCsv(true);
+    setProcessingStep('importing');
+    setProcessingProgress(15);
+
+    try {
+      const { batch, errors } = await processWorkExperienceCsvImport(
+        csvContent,
+        fileName,
+        (step, percent) => {
+          setProcessingStep(step);
+          setProcessingProgress(percent);
+        }
+      );
+
+      if (errors.length > 0 && (!batch || batch.items.length === 0)) {
+        setUploadError(errors.join(' '));
+        setCsvBatch(null);
+      } else if (batch) {
+        setCsvBatch(batch);
+        if (errors.length > 0) {
+          setUploadError(`Note: ${errors.join(' ')}`);
+        }
+      }
+    } catch (err: any) {
+      setUploadError(err.message || 'Unable to process CSV file.');
+    } finally {
+      setIsProcessingCsv(false);
+    }
+  };
+
+  // Handle CSV File Upload
+  const handleCsvFileUpload = async (file: File) => {
+    setUploadError(null);
+    setImportSuccessMessage(null);
+
+    const lowerName = file.name.toLowerCase();
+    if (lowerName.endsWith('.pdf')) {
+      setUploadError(
+        'Production-ready PDF resume parsing is not currently available in this beta. Please download our lightweight CSV template and import a .csv file.'
+      );
+      return;
+    }
+
+    if (!lowerName.endsWith('.csv') && file.type !== 'text/csv' && file.type !== 'application/vnd.ms-excel') {
+      setUploadError('Please select a valid .csv file using the CareerOS Work Experience template.');
       return;
     }
 
     try {
-      setIsUploading(true);
-      setScanningStep('reading');
-      setScanningProgress(15);
-
-      const updatedDoc = await ResumeService.uploadAndExtract(
-        file,
-        (step, percent) => {
-          setScanningStep(step);
-          setScanningProgress(percent);
-        }
-      );
-
-      setResumeDoc(updatedDoc);
-
-      // DATA-CONNECTED INTELLIGENCE PIPELINE:
-      // Import extracted experiences into WorkExperienceService while preserving manual entries
-      if (updatedDoc.extractedData?.workExperiences) {
-        const updatedExperiences = WorkExperienceService.importExtractedExperiences(
-          updatedDoc.extractedData.workExperiences
-        );
-        setExperiences(updatedExperiences);
-      }
-
-      // Import extracted skills into SkillService while preserving manual entries
-      if (updatedDoc.extractedData?.coreCompetences || updatedDoc.extractedData?.toolsAndStacks) {
-        const updatedSkills = SkillService.importExtractedSkills(
-          updatedDoc.extractedData?.coreCompetences || [],
-          updatedDoc.extractedData?.toolsAndStacks || []
-        );
-        setSkills(updatedSkills);
-      }
-
-      setImportSuccessMessage(
-        `Scanned & imported "${file.name}"! Work Experiences & Skills synchronized with your career ledger.`
-      );
+      const text = await file.text();
+      await runCsvImportPipeline(text, file.name);
     } catch (err: any) {
-      setUploadError(err.message || 'Failed to process resume');
-    } finally {
-      setIsUploading(false);
-      setScanningProgress(0);
+      setUploadError(err.message || 'Failed to read the selected CSV file.');
     }
   };
 
@@ -193,7 +212,7 @@ export const BackgroundCapacityView: React.FC<BackgroundCapacityViewProps> = ({
     e.preventDefault();
     setIsDragOver(false);
     if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
-      handleFileUpload(e.dataTransfer.files[0]);
+      handleCsvFileUpload(e.dataTransfer.files[0]);
     }
   };
 
@@ -206,11 +225,91 @@ export const BackgroundCapacityView: React.FC<BackgroundCapacityViewProps> = ({
     setIsDragOver(false);
   };
 
-  const handleRemoveResume = () => {
-    ResumeService.removeResume();
-    setResumeDoc(ResumeService.getResume());
-    setUploadError(null);
-    setImportSuccessMessage(null);
+  // Review & Commit handlers for staged CSV records
+  const recomputeBatchCounts = (items: StagedWorkExperienceImportItem[], baseBatch: CsvImportBatchSummary): CsvImportBatchSummary => {
+    const activeItems = items.filter(i => i.status === 'pending');
+    const uniqueCompetencies = new Set<string>();
+    let outcomesCount = 0;
+
+    activeItems.forEach(item => {
+      item.record.relevantSkills.forEach(sk => uniqueCompetencies.add(sk));
+      item.record.inferredIntelligence.capabilities.forEach(cap => uniqueCompetencies.add(cap));
+      outcomesCount += item.record.measurableOutcomes.length;
+    });
+
+    return {
+      ...baseBatch,
+      items,
+      totalDetected: activeItems.length,
+      rolesClassifiedCount: activeItems.length,
+      competenciesDetectedCount: uniqueCompetencies.size,
+      measurableOutcomesCount: outcomesCount
+    };
+  };
+
+  const handleUpdateStagedItem = (
+    stagingId: string,
+    updater: (item: StagedWorkExperienceImportItem) => StagedWorkExperienceImportItem
+  ) => {
+    if (!csvBatch) return;
+    const nextItems = csvBatch.items.map(i => (i.stagingId === stagingId ? updater(i) : i));
+    setCsvBatch(recomputeBatchCounts(nextItems, csvBatch));
+  };
+
+  const handleAcceptSingleStaged = (stagingId: string) => {
+    if (!csvBatch) return;
+    const target = csvBatch.items.find(i => i.stagingId === stagingId && i.status === 'pending');
+    if (!target) return;
+
+    const updatedExperiences = WorkExperienceService.commitCsvImportedExperiences([target.record]);
+    setExperiences(updatedExperiences);
+    setSkills(SkillService.getSkills());
+
+    const nextItems = csvBatch.items.map(i =>
+      i.stagingId === stagingId ? { ...i, status: 'accepted' as const } : i
+    );
+    const remainingPending = nextItems.filter(i => i.status === 'pending');
+
+    if (remainingPending.length === 0) {
+      setCsvBatch(null);
+      setIsReviewModalOpen(false);
+      setImportSuccessMessage(
+        `Committed "${target.record.role} — ${target.record.company}" to your Work Experiences & Career Evidence Ledger.`
+      );
+    } else {
+      setCsvBatch(recomputeBatchCounts(nextItems, csvBatch));
+    }
+  };
+
+  const handleDiscardSingleStaged = (stagingId: string) => {
+    if (!csvBatch) return;
+    const nextItems = csvBatch.items.map(i =>
+      i.stagingId === stagingId ? { ...i, status: 'discarded' as const } : i
+    );
+    const remainingPending = nextItems.filter(i => i.status === 'pending');
+    if (remainingPending.length === 0) {
+      setCsvBatch(null);
+      setIsReviewModalOpen(false);
+    } else {
+      setCsvBatch(recomputeBatchCounts(nextItems, csvBatch));
+    }
+  };
+
+  const handleAcceptAllStaged = () => {
+    if (!csvBatch) return;
+    const pending = csvBatch.items.filter(i => i.status === 'pending');
+    if (pending.length === 0) return;
+
+    const updatedExperiences = WorkExperienceService.commitCsvImportedExperiences(
+      pending.map(p => p.record)
+    );
+    setExperiences(updatedExperiences);
+    setSkills(SkillService.getSkills());
+    setCsvBatch(null);
+    setIsReviewModalOpen(false);
+    setImportSuccessMessage(
+      `Imported and structured ${pending.length} work experience record${pending.length === 1 ? '' : 's'} with CareerOS role, domain, and capability classification.`
+    );
   };
 
   // Add Competence
@@ -286,16 +385,16 @@ export const BackgroundCapacityView: React.FC<BackgroundCapacityViewProps> = ({
         return (
           <span 
             className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-2xs font-semibold bg-blue-50 text-blue-700 border border-blue-200 cursor-help"
-            title="Extracted: Parsed directly from your uploaded resume. Preserves manual edits."
+            title="Imported: Structured from your CSV work history with CareerOS intelligence classification."
           >
-            <FileCheck className="w-2.5 h-2.5" /> Extracted
+            <FileCheck className="w-2.5 h-2.5" /> Imported
           </span>
         );
       case 'edited':
         return (
           <span 
             className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-2xs font-semibold bg-amber-50 text-amber-700 border border-amber-200 cursor-help"
-            title="Edited: Customized by you. Preserved during subsequent resume imports."
+            title="Edited: Customized by you. Preserved during subsequent imports."
           >
             <Pencil className="w-2.5 h-2.5" /> Edited
           </span>
@@ -316,234 +415,349 @@ export const BackgroundCapacityView: React.FC<BackgroundCapacityViewProps> = ({
   return (
     <div className="space-y-8 animate-in fade-in">
       
-      {/* SECTION 1: SCAN & IMPORT RESUME DATA + COMPACT WORK EXPERIENCES (2-Column Layout) */}
+      {/* SECTION 1: IMPORT WORK EXPERIENCE (CSV) + COMPACT WORK EXPERIENCES (2-Column Layout) */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
         
-        {/* Left Column: Scan & Import Resume Data (5 cols) */}
+        {/* Left Column: Import Work Experience (5 cols) */}
         <div className="lg:col-span-5 space-y-4">
-          <div className="bg-white rounded-2xl border border-slate-200 shadow-2xs p-5">
+          <div className="bg-white rounded-2xl border border-slate-200 shadow-2xs p-5 space-y-4">
             
-            <div className="flex items-center justify-between mb-3">
-              <div className="flex items-center gap-2.5">
-                <div className="w-8 h-8 rounded-lg bg-blue-50 border border-blue-200 text-blue-600 flex items-center justify-center font-bold">
-                  <FileText className="w-4 h-4" />
+            {/* Header */}
+            <div className="flex items-start justify-between gap-2">
+              <div className="flex items-start gap-2.5">
+                <div className="w-8 h-8 rounded-lg bg-blue-50 border border-blue-200 text-blue-600 flex items-center justify-center font-bold shrink-0 mt-0.5">
+                  <FileSpreadsheet className="w-4 h-4" />
                 </div>
                 <div>
-                  <h3 className="text-sm font-bold text-slate-900">Scan & Import Resume Data</h3>
-                  <p className="text-2xs text-slate-500">PDF, PNG, JPG, WEBP (Max 3 MB)</p>
+                  <h3 className="text-sm font-bold text-slate-900">Import Work Experience</h3>
+                  <p className="text-xs text-slate-600 leading-relaxed mt-0.5">
+                    Import your work history using our simple CSV template. CareerOS will automatically organize and classify the imported information into structured career records.
+                  </p>
                 </div>
               </div>
-
-              {resumeDoc.status === 'ready' && !isUploading && (
-                <button
-                  onClick={() => fileInputRef.current?.click()}
-                  className="text-xs font-semibold text-blue-600 hover:text-blue-700 flex items-center gap-1 px-2 py-1 rounded-md hover:bg-blue-50 transition-colors"
-                  title="Upload and scan replacement resume"
-                >
-                  <RefreshCw className="w-3 h-3" /> Rescan
-                </button>
-              )}
             </div>
 
-            {/* Hidden native input */}
+            {/* Clear Status Note: PDF Resume Extraction Not Enabled in Beta */}
+            <div className="px-3 py-2 rounded-xl bg-slate-50 border border-slate-200/80 flex items-center justify-between gap-2 text-2xs text-slate-600">
+              <span className="flex items-center gap-1.5">
+                <Info className="w-3.5 h-3.5 text-blue-600 shrink-0" />
+                <span>
+                  Automated PDF resume extraction is not enabled in the current beta. Use structured CSV import below.
+                </span>
+              </span>
+            </div>
+
+            {/* Hidden CSV File Input */}
             <input
-              ref={fileInputRef}
+              ref={csvInputRef}
               type="file"
-              accept=".pdf,.png,.jpg,.jpeg,.webp,application/pdf,image/*"
+              accept=".csv,text/csv"
               className="hidden"
               onChange={(e) => {
                 if (e.target.files && e.target.files.length > 0) {
-                  handleFileUpload(e.target.files[0]);
+                  handleCsvFileUpload(e.target.files[0]);
+                  e.target.value = '';
                 }
               }}
             />
 
+            {/* Primary Actions: Download CSV Template | Import CSV | View Template Guide */}
+            <div className="flex flex-wrap items-center gap-2">
+              <button
+                id="btn-download-work-exp-csv-template"
+                type="button"
+                onClick={downloadWorkExperienceCsvTemplate}
+                className="px-3 py-2 bg-white hover:bg-slate-50 text-slate-800 border border-slate-300 rounded-xl text-xs font-semibold flex items-center gap-1.5 shadow-2xs transition-colors cursor-pointer"
+              >
+                <Download className="w-3.5 h-3.5 text-blue-600" />
+                <span>Download CSV Template</span>
+              </button>
+
+              <button
+                id="btn-import-work-exp-csv"
+                type="button"
+                onClick={() => csvInputRef.current?.click()}
+                className="px-3.5 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-semibold flex items-center gap-1.5 shadow-2xs transition-colors cursor-pointer"
+              >
+                <Upload className="w-3.5 h-3.5" />
+                <span>Import CSV</span>
+              </button>
+
+              <button
+                id="btn-view-csv-template-guide"
+                type="button"
+                onClick={() => setShowTemplateGuide(prev => !prev)}
+                className="px-2.5 py-2 text-slate-600 hover:text-blue-600 hover:bg-blue-50/50 rounded-xl text-xs font-semibold flex items-center gap-1 transition-colors cursor-pointer"
+              >
+                <HelpCircle className="w-3.5 h-3.5" />
+                <span>View Template Guide</span>
+                {showTemplateGuide ? (
+                  <ChevronUp className="w-3 h-3" />
+                ) : (
+                  <ChevronDown className="w-3 h-3" />
+                )}
+              </button>
+            </div>
+
+            {/* Collapsible Lightweight Template Guide */}
+            {showTemplateGuide && (
+              <div className="p-3.5 rounded-xl bg-slate-50 border border-slate-200/90 space-y-3 text-2xs animate-in fade-in duration-150">
+                <div className="flex items-center justify-between">
+                  <span className="font-bold uppercase tracking-wider text-slate-700">
+                    Lightweight CSV Template Guide
+                  </span>
+                  <span className="text-slate-400">No CareerOS taxonomy required</span>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                  <div className="p-2.5 rounded-lg bg-white border border-slate-200/80 space-y-1">
+                    <span className="font-bold text-slate-900 block">Required Fields (3)</span>
+                    <ul className="text-slate-600 space-y-0.5">
+                      <li>• <code className="font-mono text-blue-700">Company</code></li>
+                      <li>• <code className="font-mono text-blue-700">Role / Job Title</code></li>
+                      <li>• <code className="font-mono text-blue-700">Start Date</code></li>
+                    </ul>
+                  </div>
+
+                  <div className="p-2.5 rounded-lg bg-white border border-slate-200/80 space-y-1">
+                    <span className="font-bold text-slate-700 block">Optional Fields (5)</span>
+                    <ul className="text-slate-500 space-y-0.5">
+                      <li>• <code className="font-mono">End Date</code>, <code className="font-mono">Current Role</code>, <code className="font-mono">Location</code></li>
+                      <li>• <code className="font-mono">Description / What You Did</code></li>
+                      <li>• <code className="font-mono">Key Achievements / Outcomes</code></li>
+                    </ul>
+                  </div>
+                </div>
+
+                <div className="p-2.5 rounded-lg bg-white border border-slate-200/80 space-y-1">
+                  <div className="flex items-center justify-between">
+                    <span className="font-bold text-slate-800">Example Minimal Row</span>
+                    <button
+                      type="button"
+                      onClick={() => runCsvImportPipeline(SAMPLE_WORK_EXPERIENCE_CSV, 'careeros_work_experience_template.csv')}
+                      className="text-blue-600 hover:text-blue-700 font-bold underline cursor-pointer"
+                    >
+                      Preview with Sample CSV (4 rows)
+                    </button>
+                  </div>
+                  <div className="text-slate-600 font-mono text-[10.5px] leading-relaxed bg-slate-50 p-2 rounded border border-slate-100">
+                    <div>Company: Stripe | Role: Product Manager</div>
+                    <div>Start Date: 2023-06 | End Date: Present</div>
+                    <div>Description: Led platform improvements for enterprise customers.</div>
+                  </div>
+                </div>
+              </div>
+            )}
+
             {/* Import Success Banner */}
-            {importSuccessMessage && !isUploading && (
-              <div className="mb-4 p-3 bg-emerald-50 border border-emerald-200 rounded-xl flex items-start gap-2.5 text-xs text-emerald-800">
+            {importSuccessMessage && !isProcessingCsv && (
+              <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-xl flex items-start gap-2.5 text-xs text-emerald-800">
                 <CheckCircle2 className="w-4 h-4 shrink-0 mt-0.5 text-emerald-600" />
                 <div className="flex-1">
-                  <p className="font-semibold">Resume Successfully Synchronized</p>
+                  <p className="font-semibold">Work Experiences Committed</p>
                   <p className="text-2xs mt-0.5 text-emerald-700">{importSuccessMessage}</p>
                 </div>
                 <button 
+                  type="button"
                   onClick={() => setImportSuccessMessage(null)}
-                  className="text-emerald-500 hover:text-emerald-800 text-xs font-bold"
+                  className="text-emerald-500 hover:text-emerald-800 text-xs font-bold cursor-pointer"
                 >
                   ×
                 </button>
               </div>
             )}
 
-            {/* Upload Error Banner */}
+            {/* Upload Error / Validation Notice */}
             {uploadError && (
-              <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-xl flex items-start gap-2.5 text-xs text-red-700">
+              <div className="p-3 bg-red-50 border border-red-200 rounded-xl flex items-start gap-2.5 text-xs text-red-700">
                 <AlertCircle className="w-4 h-4 shrink-0 mt-0.5 text-red-600" />
                 <div className="flex-1">
-                  <p className="font-semibold">Upload Constraint Notice</p>
+                  <p className="font-semibold">CSV Import Notice</p>
                   <p className="text-2xs mt-0.5">{uploadError}</p>
                 </div>
                 <button 
+                  type="button"
                   onClick={() => setUploadError(null)}
-                  className="text-red-400 hover:text-red-700 text-xs font-bold"
+                  className="text-red-400 hover:text-red-700 text-xs font-bold cursor-pointer"
                 >
                   ×
                 </button>
               </div>
             )}
 
-            {/* Animated Scanning & Progress State */}
-            {isUploading && (
-              <div className="py-8 px-5 border-2 border-dashed border-blue-400 rounded-xl bg-blue-50/60 space-y-4">
-                <div className="flex items-center justify-between text-xs font-bold text-blue-900">
+            {/* 6-Stage Intelligent Processing State:
+                Importing → Reading records → Structuring experience → Classifying roles & domains → Extracting evidence → Ready for review */}
+            {isProcessingCsv && (
+              <div className="p-4 border-2 border-dashed border-blue-400 rounded-xl bg-blue-50/50 space-y-3">
+                <div className="flex items-center justify-between text-xs font-bold text-blue-950">
                   <span className="flex items-center gap-2">
                     <Loader2 className="w-4 h-4 text-blue-600 animate-spin" />
-                    Scanning & Extracting Career Data...
+                    <span>
+                      {CSV_PROCESSING_STEPS.find(s => s.id === processingStep)?.label || 'Processing CSV'}...
+                    </span>
                   </span>
-                  <span>{scanningProgress}%</span>
+                  <span>{processingProgress}%</span>
                 </div>
 
                 {/* Progress Bar */}
-                <div className="w-full bg-blue-200/80 rounded-full h-2 overflow-hidden">
+                <div className="w-full bg-blue-200/80 rounded-full h-1.5 overflow-hidden">
                   <div 
-                    className="bg-blue-600 h-full transition-all duration-300 rounded-full"
-                    style={{ width: `${scanningProgress}%` }}
+                    className="bg-blue-600 h-full transition-all duration-200 rounded-full"
+                    style={{ width: `${processingProgress}%` }}
                   />
                 </div>
 
-                {/* 4-Step Animated Pipeline Indicators */}
-                <div className="grid grid-cols-2 gap-2 text-2xs pt-1">
-                  <div className={`p-2 rounded-lg border transition-all ${
-                    scanningStep === 'reading' 
-                      ? 'bg-white border-blue-400 text-blue-800 font-bold shadow-2xs'
-                      : scanningProgress > 25 ? 'bg-emerald-50 border-emerald-200 text-emerald-700' : 'bg-slate-100/60 border-slate-200 text-slate-400'
-                  }`}>
-                    1. Reading Format
-                  </div>
-                  <div className={`p-2 rounded-lg border transition-all ${
-                    scanningStep === 'extracting' 
-                      ? 'bg-white border-blue-400 text-blue-800 font-bold shadow-2xs'
-                      : scanningProgress > 50 ? 'bg-emerald-50 border-emerald-200 text-emerald-700' : 'bg-slate-100/60 border-slate-200 text-slate-400'
-                  }`}>
-                    2. Chronology & Scopes
-                  </div>
-                  <div className={`p-2 rounded-lg border transition-all ${
-                    scanningStep === 'detecting' 
-                      ? 'bg-white border-blue-400 text-blue-800 font-bold shadow-2xs'
-                      : scanningProgress > 75 ? 'bg-emerald-50 border-emerald-200 text-emerald-700' : 'bg-slate-100/60 border-slate-200 text-slate-400'
-                  }`}>
-                    3. Metrics & Tech Stack
-                  </div>
-                  <div className={`p-2 rounded-lg border transition-all ${
-                    scanningStep === 'updating' 
-                      ? 'bg-white border-blue-400 text-blue-800 font-bold shadow-2xs'
-                      : scanningProgress >= 95 ? 'bg-emerald-50 border-emerald-200 text-emerald-700' : 'bg-slate-100/60 border-slate-200 text-slate-400'
-                  }`}>
-                    4. Updating Career Ledger
-                  </div>
-                </div>
+                {/* 6-Step Pipeline Grid */}
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-1.5 text-[10.5px]">
+                  {CSV_PROCESSING_STEPS.map((step, idx) => {
+                    const activeIdx = CSV_PROCESSING_STEPS.findIndex(s => s.id === processingStep);
+                    const isCurrent = idx === activeIdx;
+                    const isDone = idx < activeIdx;
 
-                <p className="text-2xs text-slate-500 text-center italic">
-                  Preserves user-edited and manually added records while refreshing extracted data.
-                </p>
+                    return (
+                      <div
+                        key={step.id}
+                        className={`px-2 py-1.5 rounded-lg border transition-all truncate ${
+                          isCurrent
+                            ? 'bg-white border-blue-400 text-blue-900 font-bold shadow-3xs'
+                            : isDone
+                            ? 'bg-emerald-50 border-emerald-200 text-emerald-700 font-medium'
+                            : 'bg-slate-100/60 border-slate-200 text-slate-400'
+                        }`}
+                      >
+                        {step.label}
+                      </div>
+                    );
+                  })}
+                </div>
               </div>
             )}
 
-            {/* Dropzone Upload State (if no file or replaced) */}
-            {!isUploading && resumeDoc.status === 'idle' && (
+            {/* Review State Card (Before Committing Records) */}
+            {!isProcessingCsv && csvBatch && csvBatch.totalDetected > 0 && (
+              <div className="p-4 rounded-xl bg-indigo-50/60 border border-indigo-200 space-y-3 animate-in fade-in duration-150">
+                <div className="flex items-start justify-between gap-2">
+                  <div>
+                    <span className="inline-flex items-center gap-1 text-[10px] font-extrabold uppercase tracking-wider text-indigo-700">
+                      <Sparkles className="w-3 h-3 text-indigo-600" />
+                      Ready for Review
+                    </span>
+                    <h4 className="text-sm font-extrabold text-slate-900 mt-0.5">
+                      {csvBatch.totalDetected} work experience{csvBatch.totalDetected === 1 ? '' : 's'} detected
+                    </h4>
+                  </div>
+                  <span className="px-2 py-0.5 rounded-full bg-white border border-indigo-200 text-2xs font-semibold text-indigo-700 truncate max-w-[160px]">
+                    {csvBatch.fileName}
+                  </span>
+                </div>
+
+                {/* Detection Breakdown */}
+                <div className="grid grid-cols-2 gap-2 text-2xs">
+                  <div className="p-2 rounded-lg bg-white border border-indigo-100 font-semibold text-slate-800 flex items-center gap-1.5">
+                    <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                    <span>{csvBatch.totalDetected} records structured</span>
+                  </div>
+                  <div className="p-2 rounded-lg bg-white border border-indigo-100 font-semibold text-slate-800 flex items-center gap-1.5">
+                    <Briefcase className="w-3.5 h-3.5 text-blue-600 shrink-0" />
+                    <span>{csvBatch.rolesClassifiedCount} roles classified</span>
+                  </div>
+                  <div className="p-2 rounded-lg bg-white border border-indigo-100 font-semibold text-slate-800 flex items-center gap-1.5">
+                    <Sparkles className="w-3.5 h-3.5 text-indigo-600 shrink-0" />
+                    <span>{csvBatch.competenciesDetectedCount} competencies detected</span>
+                  </div>
+                  <div className="p-2 rounded-lg bg-white border border-indigo-100 font-semibold text-slate-800 flex items-center gap-1.5">
+                    <Target className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                    <span>{csvBatch.measurableOutcomesCount} measurable outcomes detected</span>
+                  </div>
+                </div>
+
+                {/* Preview of first detected record: Imported vs CareerOS Intelligence */}
+                {csvBatch.items.find(i => i.status === 'pending') && (() => {
+                  const previewItem = csvBatch.items.find(i => i.status === 'pending')!;
+                  return (
+                    <div className="p-2.5 rounded-lg bg-white/90 border border-indigo-100 space-y-1.5 text-2xs">
+                      <div>
+                        <span className="font-extrabold uppercase tracking-wider text-[10px] text-slate-400 block">
+                          Imported
+                        </span>
+                        <span className="font-bold text-slate-900">
+                          {previewItem.record.userProvided.importedSummaryLine}
+                        </span>
+                      </div>
+                      <div className="pt-1 border-t border-slate-100">
+                        <span className="font-extrabold uppercase tracking-wider text-[10px] text-indigo-600 block">
+                          CareerOS Intelligence
+                        </span>
+                        <span className="font-semibold text-indigo-950">
+                          {previewItem.record.inferredIntelligence.intelligenceSummaryLine}
+                        </span>
+                      </div>
+                    </div>
+                  );
+                })()}
+
+                {/* Review Actions */}
+                <div className="flex flex-wrap items-center justify-between gap-2 pt-1">
+                  <button
+                    id="btn-review-imported-records"
+                    type="button"
+                    onClick={() => setIsReviewModalOpen(true)}
+                    className="flex-1 py-2 px-3 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 shadow-xs transition-colors cursor-pointer"
+                  >
+                    <Eye className="w-3.5 h-3.5" />
+                    <span>Review Imported Records</span>
+                  </button>
+
+                  <button
+                    id="btn-accept-all-imported-records"
+                    type="button"
+                    onClick={handleAcceptAllStaged}
+                    className="py-2 px-3 bg-white hover:bg-emerald-50 text-emerald-700 border border-emerald-200 rounded-xl text-xs font-bold flex items-center gap-1 transition-colors cursor-pointer"
+                  >
+                    <Check className="w-3.5 h-3.5" />
+                    <span>Accept All</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setCsvBatch(null)}
+                    className="p-2 text-slate-400 hover:text-red-600 rounded-lg hover:bg-white transition-colors cursor-pointer"
+                    title="Discard staged CSV import"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {/* Compact CSV Dropzone (when not actively reviewing a staged batch) */}
+            {!isProcessingCsv && !csvBatch && (
               <div
                 onDrop={handleDrop}
                 onDragOver={handleDragOver}
                 onDragLeave={handleDragLeave}
-                onClick={() => fileInputRef.current?.click()}
-                className={`py-10 px-4 text-center border-2 border-dashed rounded-xl cursor-pointer transition-all ${
+                onClick={() => csvInputRef.current?.click()}
+                className={`py-5 px-4 text-center border-2 border-dashed rounded-xl cursor-pointer transition-all ${
                   isDragOver 
                     ? 'border-blue-500 bg-blue-50/60 scale-[0.99]' 
                     : 'border-slate-300 hover:border-blue-400 bg-slate-50/50 hover:bg-slate-50'
                 }`}
               >
-                <div className="w-12 h-12 rounded-full bg-blue-50 text-blue-600 flex items-center justify-center mx-auto mb-3">
-                  <Upload className="w-6 h-6" />
+                <div className="w-9 h-9 rounded-full bg-blue-50 text-blue-600 flex items-center justify-center mx-auto mb-2">
+                  <Upload className="w-4 h-4" />
                 </div>
                 <h4 className="text-xs font-bold text-slate-800">
-                  Drop your resume to scan & import, or <span className="text-blue-600 underline">browse</span>
+                  Drop your completed CSV here, or <span className="text-blue-600 underline">browse .csv file</span>
                 </h4>
-                <p className="text-2xs text-slate-500 mt-1">
-                  Supported formats: PDF, PNG, JPG, WEBP • Max size: 3 MB
+                <p className="text-2xs text-slate-500 mt-0.5">
+                  Minimal required columns: <span className="font-semibold text-slate-700">Company, Role / Job Title, Start Date</span>
                 </p>
-                <div className="mt-4 inline-flex items-center gap-1.5 px-3 py-1 bg-white border border-slate-200 rounded-lg text-2xs font-semibold text-slate-600 shadow-2xs">
-                  <ShieldCheck className="w-3 h-3 text-emerald-600" />
-                  Direct AI extraction without overwriting manual notes
+                <div className="mt-2.5 flex items-center justify-center gap-2 flex-wrap">
+                  <span className="inline-flex items-center gap-1 px-2.5 py-0.5 bg-white border border-slate-200 rounded-lg text-[10.5px] font-semibold text-slate-600 shadow-3xs">
+                    <Sparkles className="w-3 h-3 text-indigo-600" />
+                    Auto-classifies roles, domains, capabilities &amp; outcomes
+                  </span>
                 </div>
-              </div>
-            )}
-
-            {/* Ready Preview State */}
-            {!isUploading && resumeDoc.status === 'ready' && (
-              <div className="space-y-4">
-                
-                {/* File Details Card */}
-                <div className="p-3.5 bg-slate-50 border border-slate-200/80 rounded-xl flex items-center justify-between">
-                  <div className="flex items-center gap-3 overflow-hidden">
-                    <div className="w-10 h-10 rounded-lg bg-blue-100 text-blue-700 flex items-center justify-center shrink-0 font-bold text-xs">
-                      PDF
-                    </div>
-                    <div className="overflow-hidden">
-                      <h4 className="text-xs font-bold text-slate-900 truncate">
-                        {resumeDoc.fileName}
-                      </h4>
-                      <p className="text-2xs text-slate-500">
-                        {(resumeDoc.fileSize / (1024 * 1024)).toFixed(2)} MB • Scanned {new Date(resumeDoc.uploadedAt).toLocaleDateString()}
-                      </p>
-                    </div>
-                  </div>
-
-                  <div className="flex items-center gap-1 shrink-0">
-                    <button
-                      onClick={() => fileInputRef.current?.click()}
-                      className="p-1.5 text-slate-500 hover:text-blue-600 rounded-lg hover:bg-slate-200/60 transition-colors"
-                      title="Upload new file to scan"
-                    >
-                      <RefreshCw className="w-4 h-4" />
-                    </button>
-                    <button
-                      onClick={handleRemoveResume}
-                      className="p-1.5 text-slate-400 hover:text-red-600 rounded-lg hover:bg-slate-200/60 transition-colors"
-                      title="Delete Resume"
-                    >
-                      <Trash2 className="w-4 h-4" />
-                    </button>
-                  </div>
-                </div>
-
-                {/* Parsed Metadata Card */}
-                {resumeDoc.extractedData && (
-                  <div className="p-4 bg-white border border-slate-200 rounded-xl space-y-3">
-                    <div className="flex items-center justify-between border-b border-slate-100 pb-2.5">
-                      <span className="text-2xs font-bold uppercase tracking-wider text-slate-400">Extracted Profile</span>
-                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-2xs font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
-                        <CheckCircle2 className="w-3 h-3" /> {resumeDoc.extractedData.confidenceScore}% Parsed
-                      </span>
-                    </div>
-
-                    <div>
-                      <h4 className="text-xs font-bold text-slate-900">{resumeDoc.extractedData.fullName}</h4>
-                      <p className="text-2xs font-medium text-slate-600">{resumeDoc.extractedData.headline}</p>
-                      <p className="text-2xs text-slate-400 mt-0.5">{resumeDoc.extractedData.location}</p>
-                    </div>
-
-                    <div className="pt-2 border-t border-slate-100 text-2xs text-slate-600 leading-relaxed bg-slate-50/60 p-2.5 rounded-lg border border-slate-100">
-                      <span className="font-semibold text-slate-700">Executive Summary: </span>
-                      {resumeDoc.extractedData.summary}
-                    </div>
-
-                    <div className="pt-2 flex items-center justify-between text-2xs text-slate-500 font-medium">
-                      <span>✓ {resumeDoc.extractedData.workExperiences.length} Roles Parsed</span>
-                      <span>✓ {resumeDoc.extractedData.coreCompetences.length} Competences</span>
-                      <span>✓ {resumeDoc.extractedData.toolsAndStacks.length} Tools/Stacks</span>
-                    </div>
-                  </div>
-                )}
               </div>
             )}
           </div>
@@ -554,14 +768,14 @@ export const BackgroundCapacityView: React.FC<BackgroundCapacityViewProps> = ({
           <div className="bg-white rounded-2xl border border-slate-200 shadow-2xs p-5">
             <div className="flex items-center justify-between mb-4">
               <div>
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-2 flex-wrap">
                   <h3 className="text-sm font-bold text-slate-900">Work Experiences</h3>
                   <span className="px-2 py-0.5 rounded-full bg-slate-100 text-slate-700 text-2xs font-semibold">
-                    {experiences.length}
+                    Showing {experiences.length} records
                   </span>
                 </div>
                 <p className="text-2xs text-slate-500 mt-0.5">
-                  Compact career chronology with measurable outcomes and verified evidence.
+                  Structured career chronology with measurable outcomes, CareerOS intelligence, and verified evidence.
                 </p>
               </div>
 
@@ -571,7 +785,7 @@ export const BackgroundCapacityView: React.FC<BackgroundCapacityViewProps> = ({
                   setEditingExperience(null);
                   setIsAddExpModalOpen(true);
                 }}
-                className="px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-semibold flex items-center gap-1.5 shadow-2xs transition-colors"
+                className="px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-semibold flex items-center gap-1.5 shadow-2xs transition-colors cursor-pointer"
               >
                 <Plus className="w-3.5 h-3.5" /> New Record
               </button>
@@ -608,6 +822,33 @@ export const BackgroundCapacityView: React.FC<BackgroundCapacityViewProps> = ({
                       )}
                     </div>
                   </div>
+
+                  {/* User-Provided vs CareerOS Intelligence Distinction (for Imported / Classified Records) */}
+                  {(exp.userProvided || exp.inferredIntelligence) && (
+                    <div className="p-2.5 rounded-lg bg-slate-50/90 border border-slate-200/80 grid grid-cols-1 sm:grid-cols-2 gap-2 text-2xs">
+                      {exp.userProvided && (
+                        <div>
+                          <span className="text-[9.5px] font-extrabold uppercase tracking-wider text-slate-400 block">
+                            Imported
+                          </span>
+                          <span className="font-semibold text-slate-800">
+                            {exp.userProvided.importedSummaryLine}
+                          </span>
+                        </div>
+                      )}
+                      {exp.inferredIntelligence && (
+                        <div className="sm:border-l sm:border-slate-200/80 sm:pl-2.5">
+                          <span className="text-[9.5px] font-extrabold uppercase tracking-wider text-indigo-600 flex items-center gap-1">
+                            <Sparkles className="w-2.5 h-2.5 text-indigo-600" />
+                            CareerOS Intelligence
+                          </span>
+                          <span className="font-semibold text-indigo-950">
+                            {exp.inferredIntelligence.intelligenceSummaryLine}
+                          </span>
+                        </div>
+                      )}
+                    </div>
+                  )}
 
                   {/* 1 Summary Line */}
                   {exp.scope && (
@@ -1213,6 +1454,17 @@ export const BackgroundCapacityView: React.FC<BackgroundCapacityViewProps> = ({
           WorkExperienceService.removeWorkExperience(id);
           setExperiences(WorkExperienceService.getWorkExperiences());
         }}
+      />
+
+      {/* Review Imported Work Experiences Modal */}
+      <ReviewImportedExperiencesModal
+        isOpen={isReviewModalOpen}
+        onClose={() => setIsReviewModalOpen(false)}
+        batch={csvBatch}
+        onUpdateStagedItem={handleUpdateStagedItem}
+        onAcceptSingle={handleAcceptSingleStaged}
+        onDiscardSingle={handleDiscardSingleStaged}
+        onAcceptAll={handleAcceptAllStaged}
       />
 
     </div>
