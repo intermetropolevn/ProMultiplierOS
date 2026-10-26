@@ -5,6 +5,7 @@ import { createServer as createViteServer } from 'vite';
 import { crawlerStore } from './src/features/admin/services/crawlerEngine';
 import { validateUrlForSSRF } from './src/features/admin/services/sanitizer';
 import { extractRawTextFromBuffer, extractStructuredResume } from './src/server/resumeExtractor';
+import { IntelligenceMoatEngine } from './src/server/intelligenceMoatEngine';
 import {
   CURATED_JOBS,
   CURATED_OPPORTUNITIES,
@@ -79,21 +80,25 @@ function resolveClientKey(req: Request): string {
   return `${ip}::${sessionHeader.slice(0, 32)}`;
 }
 
-function resolveRequestTier(req: Request): ServerAccessTier {
-  const tokenHeader = req.get('X-CareerOS-Session-Token');
-  if (tokenHeader && sessionRegistry.has(tokenHeader)) {
-    const record = sessionRegistry.get(tokenHeader)!;
-    if (record.expiresAt > Date.now()) {
-      return record.tier;
-    }
-    sessionRegistry.delete(tokenHeader);
-  }
+const adminFailedAttemptBuckets = new Map<string, number[]>();
+const DEFAULT_ADMIN_PASSWORD_SHA256 =
+  '2f9c022a9fb4f9b036c620a18691e3032c673b53c61fb043bf0bf9755a5b1161'; // SHA-256('career-os-admin')
 
-  const headerTier = (req.get('X-CareerOS-Access-Level') || 'GUEST').toUpperCase();
-  if (headerTier === 'PUBLIC' || headerTier === 'GUEST' || headerTier === 'DEMO' || headerTier === 'FULL') {
-    return headerTier as ServerAccessTier;
+function verifyAdminPasswordTimingSafe(candidatePassword: string): boolean {
+  const configuredSecret = process.env.CAREEROS_ADMIN_PASSWORD;
+  const candidateHash = crypto.createHash('sha256').update(String(candidatePassword)).digest('hex');
+  const expectedHash = configuredSecret
+    ? crypto.createHash('sha256').update(configuredSecret).digest('hex')
+    : DEFAULT_ADMIN_PASSWORD_SHA256;
+
+  try {
+    return crypto.timingSafeEqual(
+      Buffer.from(candidateHash, 'hex'),
+      Buffer.from(expectedHash, 'hex')
+    );
+  } catch {
+    return false;
   }
-  return 'GUEST';
 }
 
 function isVerifiedAdminRequest(req: Request): boolean {
@@ -105,9 +110,30 @@ function isVerifiedAdminRequest(req: Request): boolean {
     }
     adminTokenRegistry.delete(adminToken);
   }
-  // Allow same-origin internal admin workspace requests that explicitly pass admin role header in beta preview
-  const roleHeader = req.get('X-CareerOS-Admin-Role');
-  return roleHeader === 'admin';
+  // Security Hardening (SEC-02): Never trust raw client-supplied X-CareerOS-Admin-Role headers
+  return false;
+}
+
+function resolveRequestTier(req: Request): ServerAccessTier {
+  if (isVerifiedAdminRequest(req)) {
+    return 'FULL';
+  }
+
+  const tokenHeader = req.get('X-CareerOS-Session-Token');
+  if (tokenHeader && sessionRegistry.has(tokenHeader)) {
+    const record = sessionRegistry.get(tokenHeader)!;
+    if (record.expiresAt > Date.now()) {
+      return record.tier;
+    }
+    sessionRegistry.delete(tokenHeader);
+  }
+
+  // Security Hardening (SEC-03): Never trust unauthenticated X-CareerOS-Access-Level: FULL or DEMO headers
+  const headerTier = (req.get('X-CareerOS-Access-Level') || 'GUEST').toUpperCase();
+  if (headerTier === 'PUBLIC') {
+    return 'PUBLIC';
+  }
+  return 'GUEST';
 }
 
 function projectServerRecord<T>(record: T, tier: ServerAccessTier): T {
@@ -126,7 +152,15 @@ async function startServer() {
   const PORT = 3000;
 
   app.disable('x-powered-by');
-  app.use(express.json({ limit: '10mb' }));
+  app.use(express.json({ limit: '5mb' }));
+
+  // Standard Security Headers
+  app.use((_req: Request, res: Response, next: NextFunction) => {
+    res.setHeader('X-Content-Type-Options', 'nosniff');
+    res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
+    res.setHeader('X-Frame-Options', 'SAMEORIGIN');
+    next();
+  });
 
   // =========================================================================
   // MIDDLEWARE 1: Rate Limiting, Request Throttling & Anti-Scraping Detection
@@ -241,18 +275,30 @@ async function startServer() {
         ? (requestedTier as ServerAccessTier)
         : 'GUEST';
 
-    // If requesting DEMO, optionally verify demo workspace credentials if provided
-    if (validTier === 'DEMO' && req.body?.username !== undefined) {
-      if (req.body.username !== 'demo-basic' || req.body.password !== 'demo2026') {
+    // Security Hardening (SEC-03): Enforce server-side verification for DEMO and FULL session tokens
+    let grantedTier: ServerAccessTier = validTier;
+
+    if (validTier === 'DEMO') {
+      const { username, password } = req.body || {};
+      if (username !== 'demo-basic' || password !== 'demo2026') {
         return res.status(401).json({ error: 'Invalid Demo Workspace credentials.' });
+      }
+    } else if (validTier === 'FULL') {
+      const hasAdminToken = isVerifiedAdminRequest(req);
+      const hasApprovedSeat = IntelligenceMoatEngine.hasApprovedSeat(
+        req.body?.email,
+        req.body?.seatRequestId
+      );
+      if (!hasAdminToken && !hasApprovedSeat) {
+        grantedTier = 'GUEST';
       }
     }
 
     const now = Date.now();
-    const token = `cos_srv_${validTier.toLowerCase()}_${now.toString(36)}_${crypto.randomBytes(8).toString('hex')}`;
+    const token = `cos_srv_${grantedTier.toLowerCase()}_${now.toString(36)}_${crypto.randomBytes(12).toString('hex')}`;
     const sessionRecord: EphemeralSessionRecord = {
       token,
-      tier: validTier,
+      tier: grantedTier,
       ip: req.ip || 'unknown',
       issuedAt: now,
       expiresAt: now + SESSION_TTL_MS
@@ -266,7 +312,7 @@ async function startServer() {
 
     return res.json({
       token,
-      tier: validTier,
+      tier: grantedTier,
       expiresAt: sessionRecord.expiresAt,
       ttlSeconds: SESSION_TTL_MS / 1000
     });
@@ -380,27 +426,41 @@ async function startServer() {
   });
 
   // Admin authentication re-verification endpoint
-  // Password is verified server-side, never logged, never stored
+  // Password is verified server-side using timing-safe SHA-256 comparison & brute-force rate limiting
   app.post('/api/admin/verify', (req, res) => {
+    const ip = req.ip || req.socket.remoteAddress || 'unknown';
+    const now = Date.now();
+    const recentFailures = (adminFailedAttemptBuckets.get(ip) || []).filter(ts => now - ts < 60_000);
+    if (recentFailures.length >= 5) {
+      res.setHeader('Retry-After', '60');
+      return res.status(429).json({
+        verified: false,
+        error: 'Too many failed administrator verification attempts. Try again in 60 seconds.'
+      });
+    }
+
     const { username, password } = req.body || {};
-    if (!username || !password) {
+    if (!username || !password || typeof username !== 'string' || typeof password !== 'string') {
       return res.status(400).json({ verified: false, error: 'Username and password required' });
     }
 
-    const isValid = (username === 'admin_lead' || username === 'admin') && password === 'career-os-admin';
-    if (isValid) {
-      const now = Date.now();
-      const token = `auth_tok_${now}_${crypto.randomBytes(6).toString('hex')}`;
+    const cleanUser = username.trim();
+    const isValidUser = cleanUser === 'admin_lead' || cleanUser === 'admin';
+    const isValidPass = verifyAdminPasswordTimingSafe(password);
+
+    if (isValidUser && isValidPass) {
+      adminFailedAttemptBuckets.delete(ip);
+      const token = `auth_tok_${now}_${crypto.randomBytes(16).toString('hex')}`;
       adminTokenRegistry.set(token, {
         token,
-        username,
+        username: cleanUser,
         issuedAt: now,
         expiresAt: now + ADMIN_TOKEN_TTL_MS
       });
 
       crawlerStore.addAuditLog({
         actorId: 'admin-lead',
-        actorUsername: username,
+        actorUsername: cleanUser,
         action: 'VERIFY_ADMIN',
         result: 'SUCCESS',
         details: 'Admin verified credentials for sensitive operation',
@@ -410,9 +470,12 @@ async function startServer() {
       return res.json({ verified: true, token, expiresAt: now + ADMIN_TOKEN_TTL_MS });
     }
 
+    recentFailures.push(now);
+    adminFailedAttemptBuckets.set(ip, recentFailures);
+
     crawlerStore.addAuditLog({
       actorId: 'unknown',
-      actorUsername: username,
+      actorUsername: cleanUser.slice(0, 64),
       action: 'VERIFY_ADMIN',
       result: 'DENIED',
       details: 'Failed admin credentials re-verification attempt',
@@ -564,6 +627,10 @@ async function startServer() {
   });
 
   app.post('/api/crawler/jobs/:id/cancel', (req, res) => {
+    const tier = resolveRequestTier(req);
+    if ((tier === 'PUBLIC' || tier === 'GUEST') && !isVerifiedAdminRequest(req)) {
+      return res.status(403).json({ error: 'Cancelling crawl jobs requires Administrator authorization.' });
+    }
     const job = crawlerStore.getJob(req.params.id);
     if (!job) return res.status(404).json({ error: 'Job not found' });
     job.status = 'cancelled';
@@ -573,6 +640,10 @@ async function startServer() {
   });
 
   app.post('/api/crawler/jobs/:id/pause', (req, res) => {
+    const tier = resolveRequestTier(req);
+    if ((tier === 'PUBLIC' || tier === 'GUEST') && !isVerifiedAdminRequest(req)) {
+      return res.status(403).json({ error: 'Pausing crawl jobs requires Administrator authorization.' });
+    }
     const job = crawlerStore.getJob(req.params.id);
     if (!job) return res.status(404).json({ error: 'Job not found' });
     job.status = 'paused';
@@ -649,16 +720,88 @@ async function startServer() {
     res.json(item);
   });
 
-  // Audit Logs endpoints
+  // Audit Logs endpoints (Redacted for non-admin callers)
   app.get('/api/crawler/audit', (req, res) => {
+    const isAdmin = isVerifiedAdminRequest(req);
     const logs = crawlerStore.getAuditLogs();
-    const limit = Math.min(100, Math.max(1, parseInt(String(req.query.limit || '50'), 10) || 50));
-    res.json(logs.slice(0, limit));
+    const limit = Math.min(isAdmin ? 100 : 15, Math.max(1, parseInt(String(req.query.limit || '25'), 10) || 25));
+    const sliced = logs.slice(0, limit).map(log => {
+      if (!isAdmin) {
+        const { ip, userAgent, ...safeLog } = log as any;
+        return safeLog;
+      }
+      return log;
+    });
+    res.json(sliced);
   });
 
   // Stats endpoint
   app.get('/api/crawler/stats', (_req, res) => {
     res.json(crawlerStore.getStats());
+  });
+
+  // =========================================================================
+  // SERVER-SIDE PROPRIETARY INTELLIGENCE MOAT ENDPOINTS (SEC-04)
+  // =========================================================================
+  app.post('/api/intelligence/evaluate-answer', (req, res) => {
+    const { questionId, questionText, keywordsToMention, answer } = req.body || {};
+    if (typeof answer !== 'string') {
+      return res.status(400).json({ error: 'Answer text is required.' });
+    }
+    const result = IntelligenceMoatEngine.evaluateAnswer({
+      questionId,
+      questionText,
+      keywordsToMention,
+      answer
+    });
+    return res.json(result);
+  });
+
+  app.post('/api/intelligence/readiness', (req, res) => {
+    const { targetRoleId, targetRoleTitle, requiredSkills, userSkills } = req.body || {};
+    const readiness = IntelligenceMoatEngine.computeRoleReadiness({
+      targetRoleId: String(targetRoleId || 'role-default'),
+      targetRoleTitle,
+      requiredSkills,
+      userSkills
+    });
+    return res.json(readiness);
+  });
+
+  app.post('/api/intelligence/evidence-score', (req, res) => {
+    const nodes = Array.isArray(req.body?.nodes) ? req.body.nodes : [];
+    const proficiency = IntelligenceMoatEngine.computeEvidenceProficiency(nodes);
+    return res.json(proficiency);
+  });
+
+  // =========================================================================
+  // SERVER-AUTHORITATIVE SEAT REQUEST ENDPOINTS (Mass-Assignment Guarded)
+  // =========================================================================
+  app.get('/api/seat-requests', (req, res) => {
+    const isAdmin = isVerifiedAdminRequest(req);
+    const emailFilter = typeof req.query.email === 'string' ? req.query.email : undefined;
+    const items = IntelligenceMoatEngine.getSeatRequests(isAdmin, emailFilter);
+    return res.json({ items });
+  });
+
+  app.post('/api/seat-requests', (req, res) => {
+    const result = IntelligenceMoatEngine.submitSeatRequest(req.body || {});
+    if (!result.success) {
+      return res.status(400).json(result);
+    }
+    return res.json(result);
+  });
+
+  app.post('/api/seat-requests/:id/review', (req, res) => {
+    if (!isVerifiedAdminRequest(req)) {
+      return res.status(403).json({ error: 'Administrator verification token required to review seat requests.' });
+    }
+    const status = req.body?.status === 'approved' ? 'approved' : 'declined';
+    const updated = IntelligenceMoatEngine.reviewSeatRequest(req.params.id, status, 'admin_lead');
+    if (!updated) {
+      return res.status(404).json({ error: 'Seat request not found.' });
+    }
+    return res.json({ request: updated });
   });
 
   // Vite middleware for development vs static for production

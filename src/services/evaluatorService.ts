@@ -159,4 +159,29 @@ export const EvaluatorService = {
       detailedFeedback,
     };
   },
+
+  /**
+   * Server-Side Moat Evaluation (`/api/intelligence/evaluate-answer`)
+   * Executes proprietary scoring on the backend and falls back cleanly if offline.
+   */
+  async evaluateAnswerAsync(question: InterviewQuestion, answer: string): Promise<AnswerEvaluation> {
+    try {
+      const res = await fetch('/api/intelligence/evaluate-answer', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          questionId: question.id,
+          questionText: question.question,
+          keywordsToMention: question.keywordsToMention,
+          answer,
+        }),
+      });
+      if (res.ok) {
+        return await res.json();
+      }
+    } catch {
+      // Fallback to local evaluation when offline
+    }
+    return this.evaluateAnswer(question, answer);
+  },
 };

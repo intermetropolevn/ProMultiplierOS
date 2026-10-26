@@ -1,34 +1,222 @@
 /**
- * CareerOS Seat Request & Role Simulation Service
+ * CareerOS Seat Request, Central Display Access Mapping & QA Simulation Service
  *
  * Provides:
  * 1. Canonical seat request data model & persistence (`CareerOSSeatRequest`)
  * 2. Duplicate submission prevention (by account ID or normalized email)
- * 3. Development/Demo-only "Simulate role" layer so an Admin / Builder account
- *    can test the exact end-user seat request flow across every page without
- *    weakening or modifying real production permissions.
+ * 3. Centralized UI presentation mapping (`getDisplayAccessState`) that consolidates
+ *    complex internal roles/states into 4 primary user-facing categories:
+ *    - Admin ("Platform management access")
+ *    - Guest ("Explore CareerOS with limited access")
+ *    - Demo User ("Explore CareerOS in demo mode")
+ *    - Request Full Access ("Leave your email to request a CareerOS seat")
+ *    without modifying database role records or real production authorization.
  */
 
 import { useState, useEffect } from 'react';
 
 export type SimulatedRoleOption =
   | 'Admin'
-  | 'Normal User'
   | 'Guest'
-  | 'Invited User'
-  | 'Seat Requested'
-  | 'Seat Approved';
+  | 'Demo User'
+  | 'Request Full Access';
 
 export const SIMULATED_ROLE_OPTIONS: SimulatedRoleOption[] = [
   'Admin',
-  'Normal User',
   'Guest',
-  'Invited User',
-  'Seat Requested',
-  'Seat Approved',
+  'Demo User',
+  'Request Full Access',
+];
+
+export const USER_FACING_ROLE_MAP: Record<SimulatedRoleOption, string> = {
+  Admin: 'Admin',
+  Guest: 'Guest',
+  'Demo User': 'Demo User',
+  'Request Full Access': 'Request Full Access',
+};
+
+export type SimulatedAccessState =
+  | 'No Request'
+  | 'Pending'
+  | 'Approved'
+  | 'Rejected';
+
+export const SIMULATED_ACCESS_STATE_OPTIONS: SimulatedAccessState[] = [
+  'No Request',
+  'Pending',
+  'Approved',
+  'Rejected',
 ];
 
 export type SeatRequestStatus = 'pending' | 'approved' | 'declined';
+
+export type DisplayAccessCategory =
+  | 'Admin'
+  | 'Guest'
+  | 'Demo User'
+  | 'Request Full Access';
+
+export interface DisplayAccessStateInput {
+  authState?: 'GUEST' | 'AUTHENTICATED' | string;
+  actualRole?: string;
+  simulatedRole?: SimulatedRoleOption | string | null;
+  workspaceState?: string;
+  seatRequestState?: SimulatedAccessState | SeatRequestStatus | null;
+}
+
+export interface ResolvedDisplayAccessState {
+  category: DisplayAccessCategory;
+  displayLabel: string;
+  supportingText: string;
+  ctaLabel: string;
+  seatAccessStatus: 'no_request' | 'pending' | 'approved' | 'rejected';
+  seatStatusTitle: string;
+  seatStatusSupportingText: string;
+  isEndUserRequestFlow: boolean;
+}
+
+/**
+ * Centralized UI Presentation Mapping:
+ * Resolves the visible user-facing access category, supporting text, and seat request state
+ * without changing underlying database roles, invitations, or permissions.
+ */
+export function getDisplayAccessState({
+  authState = 'AUTHENTICATED',
+  actualRole = 'Admin',
+  simulatedRole = 'Admin',
+  workspaceState = 'DEMO',
+  seatRequestState = 'No Request',
+}: DisplayAccessStateInput): ResolvedDisplayAccessState {
+  // 1. Resolve Seat Request State independently of role
+  let seatAccessStatus: 'no_request' | 'pending' | 'approved' | 'rejected' = 'no_request';
+  let seatStatusTitle = 'Request Full Access';
+  let seatStatusSupportingText = 'Leave your email to request a CareerOS seat.';
+  let ctaLabel = 'Request a CareerOS Seat';
+
+  if (seatRequestState === 'Pending' || seatRequestState === 'pending') {
+    seatAccessStatus = 'pending';
+    seatStatusTitle = 'Pending';
+    seatStatusSupportingText = 'Your CareerOS seat request is under review.';
+    ctaLabel = 'Pending';
+  } else if (seatRequestState === 'Approved' || seatRequestState === 'approved') {
+    seatAccessStatus = 'approved';
+    seatStatusTitle = 'CareerOS Access';
+    seatStatusSupportingText = 'Your CareerOS seat has been approved.';
+    ctaLabel = 'CareerOS Access';
+  } else if (seatRequestState === 'Rejected' || seatRequestState === 'declined') {
+    seatAccessStatus = 'rejected';
+    seatStatusTitle = 'Request again';
+    seatStatusSupportingText = 'Your previous CareerOS seat request was not approved. You can submit an updated request.';
+    ctaLabel = 'Request again';
+  }
+
+  // 2. Resolve the 4 Primary User-Facing Categories
+  const normalizedSim = normalizeLegacyRole(simulatedRole ? String(simulatedRole) : null);
+
+  if (normalizedSim === 'Request Full Access') {
+    return {
+      category: 'Request Full Access',
+      displayLabel:
+        seatAccessStatus === 'pending'
+          ? 'Pending'
+          : seatAccessStatus === 'approved'
+          ? 'CareerOS Access'
+          : 'Request Full Access',
+      supportingText:
+        seatAccessStatus === 'pending'
+          ? 'Your CareerOS seat request is under review.'
+          : seatAccessStatus === 'approved'
+          ? 'Your CareerOS seat has been approved.'
+          : 'Leave your email to request a CareerOS seat',
+      ctaLabel,
+      seatAccessStatus,
+      seatStatusTitle,
+      seatStatusSupportingText,
+      isEndUserRequestFlow: true,
+    };
+  }
+
+  if (normalizedSim === 'Guest') {
+    return {
+      category: 'Guest',
+      displayLabel: 'Guest',
+      supportingText: 'Explore CareerOS with limited access',
+      ctaLabel,
+      seatAccessStatus,
+      seatStatusTitle,
+      seatStatusSupportingText,
+      isEndUserRequestFlow: true,
+    };
+  }
+
+  if (normalizedSim === 'Demo User') {
+    return {
+      category: 'Demo User',
+      displayLabel: 'Demo User',
+      supportingText: 'Explore CareerOS in demo mode',
+      ctaLabel,
+      seatAccessStatus,
+      seatStatusTitle,
+      seatStatusSupportingText,
+      isEndUserRequestFlow: true,
+    };
+  }
+
+  // When simulatedRole is 'Admin' (or no simulation override is active):
+  const isActualAdmin =
+    actualRole === 'Admin' || actualRole === 'ADMIN' || actualRole === 'OWNER';
+
+  if (isActualAdmin) {
+    return {
+      category: 'Admin',
+      displayLabel: 'Admin',
+      supportingText: 'Platform management access',
+      ctaLabel,
+      seatAccessStatus,
+      seatStatusTitle,
+      seatStatusSupportingText,
+      isEndUserRequestFlow: seatAccessStatus !== 'no_request',
+    };
+  }
+
+  // Non-admin fallback based on workspace / auth state
+  if (authState === 'GUEST' || workspaceState === 'GUEST' || workspaceState === 'PUBLIC') {
+    return {
+      category: 'Guest',
+      displayLabel: 'Guest',
+      supportingText: 'Explore CareerOS with limited access',
+      ctaLabel,
+      seatAccessStatus,
+      seatStatusTitle,
+      seatStatusSupportingText,
+      isEndUserRequestFlow: true,
+    };
+  }
+
+  if (workspaceState === 'DEMO') {
+    return {
+      category: 'Demo User',
+      displayLabel: 'Demo User',
+      supportingText: 'Explore CareerOS in demo mode',
+      ctaLabel,
+      seatAccessStatus,
+      seatStatusTitle,
+      seatStatusSupportingText,
+      isEndUserRequestFlow: true,
+    };
+  }
+
+  return {
+    category: 'Request Full Access',
+    displayLabel: 'Request Full Access',
+    supportingText: 'Leave your email to request a CareerOS seat',
+    ctaLabel,
+    seatAccessStatus,
+    seatStatusTitle,
+    seatStatusSupportingText,
+    isEndUserRequestFlow: true,
+  };
+}
 
 export interface CareerOSSeatRequest {
   id: string;
@@ -39,7 +227,7 @@ export interface CareerOSSeatRequest {
   sourceLocation: string;
   authenticatedUserId?: string | null;
   authenticatedUserName?: string | null;
-  effectiveRoleAtSubmission: SimulatedRoleOption;
+  effectiveRoleAtSubmission: string;
   status: SeatRequestStatus;
   createdAt: string;
   updatedAt: string;
@@ -53,7 +241,8 @@ export interface SeatRequestModalState {
 }
 
 const STORAGE_KEY_SEAT_REQUESTS = 'careeros_seat_requests_v1';
-const STORAGE_KEY_SIMULATED_ROLE = 'careeros_qa_simulated_role_v1';
+const STORAGE_KEY_SIMULATED_ROLE = 'careeros_qa_simulated_role_v2';
+const STORAGE_KEY_SIMULATED_ACCESS_STATE = 'careeros_qa_simulated_access_state_v1';
 
 const INITIAL_SEED_REQUESTS: CareerOSSeatRequest[] = [
   {
@@ -65,7 +254,7 @@ const INITIAL_SEED_REQUESTS: CareerOSSeatRequest[] = [
     sourceLocation: 'Role Intelligence Gate',
     authenticatedUserId: 'usr-elena-rostova',
     authenticatedUserName: 'Elena Rostova',
-    effectiveRoleAtSubmission: 'Normal User',
+    effectiveRoleAtSubmission: 'Demo User',
     status: 'pending',
     createdAt: new Date(Date.now() - 1000 * 60 * 42).toISOString(),
     updatedAt: new Date(Date.now() - 1000 * 60 * 42).toISOString(),
@@ -88,9 +277,24 @@ const INITIAL_SEED_REQUESTS: CareerOSSeatRequest[] = [
   },
 ];
 
+function normalizeLegacyRole(raw: string | null): SimulatedRoleOption | null {
+  if (!raw) return null;
+  if (raw === 'Admin' || raw === 'Guest' || raw === 'Demo User' || raw === 'Request Full Access') {
+    return raw;
+  }
+  if (raw === 'Normal User' || raw === 'Invited User') {
+    return 'Demo User';
+  }
+  if (raw === 'Seat Requested' || raw === 'Seat Approved') {
+    return 'Request Full Access';
+  }
+  return null;
+}
+
 class SeatRequestServiceManager {
   private requests: CareerOSSeatRequest[] = [];
   private simulatedRole: SimulatedRoleOption = 'Admin';
+  private simulatedAccessState: SimulatedAccessState = 'No Request';
   private modalState: SeatRequestModalState = {
     isOpen: false,
     sourceLocation: 'Workspace CTA',
@@ -118,9 +322,14 @@ class SeatRequestServiceManager {
         localStorage.setItem(STORAGE_KEY_SEAT_REQUESTS, JSON.stringify(this.requests));
       }
 
-      const savedSimRole = sessionStorage.getItem(STORAGE_KEY_SIMULATED_ROLE) as SimulatedRoleOption | null;
-      if (savedSimRole && SIMULATED_ROLE_OPTIONS.includes(savedSimRole)) {
+      const savedSimRole = normalizeLegacyRole(sessionStorage.getItem(STORAGE_KEY_SIMULATED_ROLE));
+      if (savedSimRole) {
         this.simulatedRole = savedSimRole;
+      }
+
+      const savedAccessState = sessionStorage.getItem(STORAGE_KEY_SIMULATED_ACCESS_STATE) as SimulatedAccessState | null;
+      if (savedAccessState && SIMULATED_ACCESS_STATE_OPTIONS.includes(savedAccessState)) {
+        this.simulatedAccessState = savedAccessState;
       }
     } catch {
       this.requests = [...INITIAL_SEED_REQUESTS];
@@ -140,21 +349,26 @@ class SeatRequestServiceManager {
     return this.simulatedRole;
   }
 
-  public isSimulating(): boolean {
-    return this.simulatedRole !== 'Admin';
+  public getUserFacingSimulatedState(): string {
+    return USER_FACING_ROLE_MAP[this.simulatedRole] || this.simulatedRole;
   }
 
-  /**
-   * Sets the temporary Demo/QA Simulated Role and synchronizes session state.
-   * Does NOT alter real production admin permissions.
-   */
+  public getSimulatedAccessState(): SimulatedAccessState {
+    return this.simulatedAccessState;
+  }
+
+  public isSimulating(): boolean {
+    return this.simulatedRole !== 'Admin' || this.simulatedAccessState !== 'No Request';
+  }
+
   public setSimulatedRole(role: SimulatedRoleOption): void {
-    if (!SIMULATED_ROLE_OPTIONS.includes(role)) return;
-    this.simulatedRole = role;
+    const normalized = normalizeLegacyRole(role);
+    if (!normalized) return;
+    this.simulatedRole = normalized;
 
     if (typeof window !== 'undefined') {
       try {
-        sessionStorage.setItem(STORAGE_KEY_SIMULATED_ROLE, role);
+        sessionStorage.setItem(STORAGE_KEY_SIMULATED_ROLE, normalized);
       } catch {
         // Ignore
       }
@@ -163,18 +377,34 @@ class SeatRequestServiceManager {
     this.notify();
   }
 
-  /**
-   * One-click Reset Simulation: restores Simulated Role to 'Admin' (no active user simulation)
-   * and clears transient session submission pointers so tests can be repeated cleanly.
-   */
+  public setSimulatedAccessState(accessState: SimulatedAccessState): void {
+    if (!SIMULATED_ACCESS_STATE_OPTIONS.includes(accessState)) return;
+    this.simulatedAccessState = accessState;
+
+    if (accessState === 'No Request') {
+      this.lastSubmittedRequestId = null;
+    }
+
+    if (typeof window !== 'undefined') {
+      try {
+        sessionStorage.setItem(STORAGE_KEY_SIMULATED_ACCESS_STATE, accessState);
+      } catch {
+        // Ignore
+      }
+    }
+
+    this.notify();
+  }
+
   public resetSimulation(): void {
     this.simulatedRole = 'Admin';
+    this.simulatedAccessState = 'No Request';
     this.lastSubmittedRequestId = null;
 
     if (typeof window !== 'undefined') {
       try {
         sessionStorage.removeItem(STORAGE_KEY_SIMULATED_ROLE);
-        // Also clear any stuck 'FULL_ACCESS_REQUESTED' session state if user is in DEMO or GUEST
+        sessionStorage.removeItem(STORAGE_KEY_SIMULATED_ACCESS_STATE);
         const currentAccess = localStorage.getItem('careeros_beta_access_level');
         if (currentAccess === 'DEMO') {
           localStorage.setItem('careeros_guest_session_state', 'DEMO_ACTIVE');
@@ -192,9 +422,6 @@ class SeatRequestServiceManager {
     }
   }
 
-  /**
-   * Opens the canonical Seat Request modal from any CTA across the application.
-   */
   public openRequestModal(sourceLocation: string = 'CareerOS Workspace CTA'): void {
     this.modalState = {
       isOpen: true,
@@ -221,23 +448,25 @@ class SeatRequestServiceManager {
     );
   }
 
-  /**
-   * Returns the active seat request associated with the current user/simulation context, if any.
-   */
   public getCurrentUserActiveRequest(emailInput?: string): CareerOSSeatRequest | null {
-    if (this.simulatedRole === 'Seat Requested') {
+    const isGuestRole = this.simulatedRole === 'Guest';
+    const fallbackEmail = isGuestRole
+      ? emailInput || 'guest.applicant@workspace.io'
+      : emailInput || 'alex.rivera@workspace.io';
+
+    if (this.simulatedAccessState === 'Pending') {
       const existingPending = this.requests.find((r) => r.status === 'pending');
       return (
         existingPending || {
           id: 'sim-seat-req-pending',
-          email: 'alex.rivera@careeros.io',
-          name: 'Alex Rivera',
-          organization: 'Product & Systems Group',
+          email: fallbackEmail,
+          name: isGuestRole ? 'Guest Applicant' : 'Alex Rivera',
+          organization: isGuestRole ? 'Independent Practitioner' : 'Product & Systems Group',
           reason: 'Requesting full CareerOS seat for role readiness and evidence graph calibration.',
           sourceLocation: this.modalState.sourceLocation,
-          authenticatedUserId: 'usr-alex-rivera',
-          authenticatedUserName: 'Alex Rivera',
-          effectiveRoleAtSubmission: 'Seat Requested',
+          authenticatedUserId: isGuestRole ? null : 'usr-alex-rivera',
+          authenticatedUserName: isGuestRole ? null : 'Alex Rivera',
+          effectiveRoleAtSubmission: USER_FACING_ROLE_MAP[this.simulatedRole],
           status: 'pending',
           createdAt: new Date(Date.now() - 1000 * 60 * 12).toISOString(),
           updatedAt: new Date(Date.now() - 1000 * 60 * 12).toISOString(),
@@ -245,19 +474,19 @@ class SeatRequestServiceManager {
       );
     }
 
-    if (this.simulatedRole === 'Seat Approved') {
+    if (this.simulatedAccessState === 'Approved') {
       const existingApproved = this.requests.find((r) => r.status === 'approved');
       return (
         existingApproved || {
           id: 'sim-seat-req-approved',
-          email: 'alex.rivera@careeros.io',
-          name: 'Alex Rivera',
-          organization: 'Product & Systems Group',
+          email: fallbackEmail,
+          name: isGuestRole ? 'Guest Applicant' : 'Alex Rivera',
+          organization: isGuestRole ? 'Independent Practitioner' : 'Product & Systems Group',
           reason: 'Full CareerOS Seat approved.',
           sourceLocation: this.modalState.sourceLocation,
-          authenticatedUserId: 'usr-alex-rivera',
-          authenticatedUserName: 'Alex Rivera',
-          effectiveRoleAtSubmission: 'Seat Approved',
+          authenticatedUserId: isGuestRole ? null : 'usr-alex-rivera',
+          authenticatedUserName: isGuestRole ? null : 'Alex Rivera',
+          effectiveRoleAtSubmission: USER_FACING_ROLE_MAP[this.simulatedRole],
           status: 'approved',
           createdAt: new Date(Date.now() - 1000 * 60 * 60).toISOString(),
           updatedAt: new Date(Date.now() - 1000 * 60 * 5).toISOString(),
@@ -267,16 +496,29 @@ class SeatRequestServiceManager {
       );
     }
 
-    if (emailInput) {
-      const normalized = emailInput.trim().toLowerCase();
-      const match = this.requests.find(
-        (r) =>
-          r.email.trim().toLowerCase() === normalized &&
-          (r.status === 'pending' || r.status === 'approved')
+    if (this.simulatedAccessState === 'Rejected') {
+      const existingDeclined = this.requests.find((r) => r.status === 'declined');
+      return (
+        existingDeclined || {
+          id: 'sim-seat-req-rejected',
+          email: fallbackEmail,
+          name: isGuestRole ? 'Guest Applicant' : 'Alex Rivera',
+          organization: isGuestRole ? 'Independent Practitioner' : 'Product & Systems Group',
+          reason: 'Requesting full CareerOS workspace access.',
+          sourceLocation: this.modalState.sourceLocation,
+          authenticatedUserId: isGuestRole ? null : 'usr-alex-rivera',
+          authenticatedUserName: isGuestRole ? null : 'Alex Rivera',
+          effectiveRoleAtSubmission: USER_FACING_ROLE_MAP[this.simulatedRole],
+          status: 'declined',
+          createdAt: new Date(Date.now() - 1000 * 60 * 120).toISOString(),
+          updatedAt: new Date(Date.now() - 1000 * 60 * 15).toISOString(),
+          reviewedBy: 'admin_lead',
+          reviewedAt: new Date(Date.now() - 1000 * 60 * 15).toISOString(),
+        }
       );
-      if (match) return match;
     }
 
+    // simulatedAccessState === 'No Request'
     if (this.lastSubmittedRequestId) {
       const found = this.requests.find((r) => r.id === this.lastSubmittedRequestId);
       if (found) return found;
@@ -285,12 +527,6 @@ class SeatRequestServiceManager {
     return null;
   }
 
-  /**
-   * Returns pre-fill context based on the effective role (real or simulated).
-   * - Guest: unauthenticated (empty email, email required)
-   * - Normal User: authenticated user account (associated with account ID, pre-filled email/name)
-   * - Invited User: invited cohort account (associated with invite token/account, pre-filled email)
-   */
   public getEffectiveUserIdentity(actualUser: {
     id: string;
     name: string;
@@ -306,6 +542,7 @@ class SeatRequestServiceManager {
     defaultOrganization: string;
     invitationCode?: string;
     effectiveRoleLabel: SimulatedRoleOption;
+    userFacingRole: string;
   } {
     const role = this.simulatedRole;
 
@@ -318,10 +555,11 @@ class SeatRequestServiceManager {
         defaultName: '',
         defaultOrganization: '',
         effectiveRoleLabel: 'Guest',
+        userFacingRole: USER_FACING_ROLE_MAP['Guest'],
       };
     }
 
-    if (role === 'Normal User') {
+    if (role === 'Demo User' || role === 'Request Full Access') {
       return {
         isAuthenticatedAccount: true,
         isAdminView: false,
@@ -334,38 +572,13 @@ class SeatRequestServiceManager {
           actualUser.name && !actualUser.name.includes('Guest') && !actualUser.name.includes('Demo')
             ? actualUser.name
             : 'Alex Rivera',
-        defaultOrganization: '',
-        effectiveRoleLabel: 'Normal User',
-      };
-    }
-
-    if (role === 'Invited User') {
-      return {
-        isAuthenticatedAccount: true,
-        isAdminView: false,
-        accountId: 'usr-invited-cohort-2026',
-        defaultEmail: 'invited.member@partner-cohort.org',
-        defaultName: 'Jordan Taylor',
-        defaultOrganization: 'Partner Accelerator Cohort',
-        invitationCode: 'COS-INVITE-2026',
-        effectiveRoleLabel: 'Invited User',
-      };
-    }
-
-    if (role === 'Seat Requested' || role === 'Seat Approved') {
-      return {
-        isAuthenticatedAccount: true,
-        isAdminView: false,
-        accountId: actualUser.id || 'usr-alex-rivera',
-        defaultEmail: 'alex.rivera@workspace.io',
-        defaultName: 'Alex Rivera',
         defaultOrganization: 'Product & Systems Group',
         effectiveRoleLabel: role,
+        userFacingRole: USER_FACING_ROLE_MAP[role],
       };
     }
 
-    // role === 'Admin' (no user override active)
-    // If real user is Admin, preserve Admin behavior
+    // role === 'Admin'
     if (actualUser.isAdmin) {
       return {
         isAuthenticatedAccount: true,
@@ -375,11 +588,12 @@ class SeatRequestServiceManager {
         defaultName: actualUser.name,
         defaultOrganization: 'CareerOS Platform Admin',
         effectiveRoleLabel: 'Admin',
+        userFacingRole: USER_FACING_ROLE_MAP['Admin'],
       };
     }
 
-    // Non-admin fallback
     const isGuestLevel = actualUser.accessLevel === 'PUBLIC' || actualUser.accessLevel === 'GUEST';
+    const fallbackRole: SimulatedRoleOption = isGuestLevel ? 'Guest' : 'Demo User';
     return {
       isAuthenticatedAccount: !isGuestLevel,
       isAdminView: false,
@@ -387,14 +601,11 @@ class SeatRequestServiceManager {
       defaultEmail: isGuestLevel ? '' : actualUser.email,
       defaultName: isGuestLevel ? '' : actualUser.name,
       defaultOrganization: '',
-      effectiveRoleLabel: isGuestLevel ? 'Guest' : 'Normal User',
+      effectiveRoleLabel: fallbackRole,
+      userFacingRole: USER_FACING_ROLE_MAP[fallbackRole],
     };
   }
 
-  /**
-   * Submits a new CareerOS Seat Request.
-   * Enforces email validation, duplicate submission guard, and persistence.
-   */
   public submitSeatRequest(input: {
     email: string;
     name?: string;
@@ -419,7 +630,6 @@ class SeatRequestServiceManager {
 
     const normalizedEmail = cleanEmail.toLowerCase();
 
-    // Check duplicate submission by email or authenticatedUserId
     const existing = this.requests.find((r) => {
       const sameEmail = r.email.trim().toLowerCase() === normalizedEmail;
       const sameAccount =
@@ -432,6 +642,7 @@ class SeatRequestServiceManager {
 
     if (existing) {
       this.lastSubmittedRequestId = existing.id;
+      this.simulatedAccessState = existing.status === 'approved' ? 'Approved' : 'Pending';
       this.notify();
       return {
         success: true,
@@ -441,16 +652,19 @@ class SeatRequestServiceManager {
     }
 
     const now = new Date().toISOString();
+    const sanitizeField = (val?: string, max = 500) =>
+      val ? val.replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, '').trim().slice(0, max) : undefined;
+
     const newRequest: CareerOSSeatRequest = {
       id: `seat-req-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
-      email: cleanEmail,
-      name: input.name?.trim() || undefined,
-      organization: input.organization?.trim() || undefined,
-      reason: input.reason?.trim() || undefined,
-      sourceLocation: input.sourceLocation || this.modalState.sourceLocation || 'CareerOS Workspace CTA',
+      email: cleanEmail.slice(0, 254),
+      name: sanitizeField(input.name, 120),
+      organization: sanitizeField(input.organization, 160),
+      reason: sanitizeField(input.reason, 1000),
+      sourceLocation: sanitizeField(input.sourceLocation || this.modalState.sourceLocation, 120) || 'CareerOS Workspace CTA',
       authenticatedUserId: input.authenticatedUserId || null,
-      authenticatedUserName: input.authenticatedUserName || input.name?.trim() || null,
-      effectiveRoleAtSubmission: this.simulatedRole,
+      authenticatedUserName: sanitizeField(input.authenticatedUserName || input.name, 120) || null,
+      effectiveRoleAtSubmission: USER_FACING_ROLE_MAP[this.simulatedRole],
       status: 'pending',
       createdAt: now,
       updatedAt: now,
@@ -458,8 +672,34 @@ class SeatRequestServiceManager {
 
     this.requests = [newRequest, ...this.requests];
     this.lastSubmittedRequestId = newRequest.id;
+    this.simulatedAccessState = 'Pending';
+    if (typeof window !== 'undefined') {
+      try {
+        sessionStorage.setItem(STORAGE_KEY_SIMULATED_ACCESS_STATE, 'Pending');
+      } catch {
+        // Ignore
+      }
+    }
     this.saveRequests();
     this.notify();
+
+    if (typeof window !== 'undefined') {
+      fetch('/api/seat-requests', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          email: newRequest.email,
+          name: newRequest.name,
+          organization: newRequest.organization,
+          reason: newRequest.reason,
+          sourceLocation: newRequest.sourceLocation,
+          authenticatedUserId: newRequest.authenticatedUserId,
+          effectiveRoleAtSubmission: newRequest.effectiveRoleAtSubmission,
+        }),
+      }).catch(() => {
+        // Local persistence already updated
+      });
+    }
 
     return {
       success: true,
@@ -468,9 +708,6 @@ class SeatRequestServiceManager {
     };
   }
 
-  /**
-   * Admin action: Approve or Decline a Seat Request
-   */
   public reviewSeatRequest(
     requestId: string,
     status: 'approved' | 'declined',
@@ -496,6 +733,14 @@ class SeatRequestServiceManager {
 
   public clearLastSubmittedSessionRequest(): void {
     this.lastSubmittedRequestId = null;
+    this.simulatedAccessState = 'No Request';
+    if (typeof window !== 'undefined') {
+      try {
+        sessionStorage.setItem(STORAGE_KEY_SIMULATED_ACCESS_STATE, 'No Request');
+      } catch {
+        // Ignore
+      }
+    }
     this.notify();
   }
 
@@ -523,6 +768,9 @@ export function useSeatRequestService() {
   const [simulatedRole, setSimulatedRoleState] = useState<SimulatedRoleOption>(() =>
     seatRequestService.getSimulatedRole()
   );
+  const [simulatedAccessState, setSimulatedAccessStateLocal] = useState<SimulatedAccessState>(() =>
+    seatRequestService.getSimulatedAccessState()
+  );
   const [requests, setRequests] = useState<CareerOSSeatRequest[]>(() =>
     seatRequestService.getAllRequests()
   );
@@ -533,6 +781,7 @@ export function useSeatRequestService() {
   useEffect(() => {
     return seatRequestService.subscribe(() => {
       setSimulatedRoleState(seatRequestService.getSimulatedRole());
+      setSimulatedAccessStateLocal(seatRequestService.getSimulatedAccessState());
       setRequests(seatRequestService.getAllRequests());
       setModalState(seatRequestService.getModalState());
     });
@@ -540,11 +789,21 @@ export function useSeatRequestService() {
 
   return {
     simulatedRole,
-    isSimulating: simulatedRole !== 'Admin',
+    userFacingSimulatedState: USER_FACING_ROLE_MAP[simulatedRole] || simulatedRole,
+    simulatedAccessState,
+    isSimulating: simulatedRole !== 'Admin' || simulatedAccessState !== 'No Request',
     requests,
     pendingCount: requests.filter((r) => r.status === 'pending').length,
     modalState,
+    getDisplayAccessState: (overrides?: Partial<DisplayAccessStateInput>) =>
+      getDisplayAccessState({
+        simulatedRole,
+        seatRequestState: simulatedAccessState,
+        ...overrides,
+      }),
     setSimulatedRole: (role: SimulatedRoleOption) => seatRequestService.setSimulatedRole(role),
+    setSimulatedAccessState: (state: SimulatedAccessState) =>
+      seatRequestService.setSimulatedAccessState(state),
     resetSimulation: () => seatRequestService.resetSimulation(),
     openRequestModal: (sourceLocation?: string) =>
       seatRequestService.openRequestModal(sourceLocation),

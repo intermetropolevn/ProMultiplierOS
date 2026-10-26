@@ -21,6 +21,7 @@ import {
 import { useAccessControl } from '../../services/accessControlService';
 import { useDemoWorkspace } from '../../services/demoWorkspaceService';
 import { RoleSimulationControl } from './RequestSeatModal';
+import { useSeatRequestService } from '../../services/seatRequestService';
 import type { ActiveTab } from '../layout/Header';
 
 export interface ShowcaseStepDefinition {
@@ -198,8 +199,14 @@ export const ShowcaseModeController: React.FC<ShowcaseModeControllerProps> = ({
   onStartShowcaseLiveInterview,
   onOpenMissionControl
 }) => {
-  const { accessLevel, enterDemoWorkspace, requestFullAccess, sessionState } = useAccessControl();
+  const { accessLevel, isAdmin, role, enterDemoWorkspace, requestFullAccess } = useAccessControl();
   const { resetDemoWorkspace } = useDemoWorkspace();
+  const {
+    simulatedRole,
+    simulatedAccessState,
+    getDisplayAccessState,
+    getCurrentUserActiveRequest
+  } = useSeatRequestService();
 
   const [isActive, setIsActive] = useState<boolean>(() => isShowcaseModeEnabled());
   const [currentStepIdx, setCurrentStepIdx] = useState<number>(() => {
@@ -212,7 +219,6 @@ export const ShowcaseModeController: React.FC<ShowcaseModeControllerProps> = ({
     }
   });
   const [resetToast, setResetToast] = useState(false);
-  const [seatRequested, setSeatRequested] = useState(false);
 
   useEffect(() => {
     const handleSync = (e: Event) => {
@@ -274,7 +280,16 @@ export const ShowcaseModeController: React.FC<ShowcaseModeControllerProps> = ({
   }
 
   const currentStep = SHOWCASE_NARRATIVE_STEPS[currentStepIdx] || SHOWCASE_NARRATIVE_STEPS[0];
-  const isSeatRequested = seatRequested || sessionState === 'FULL_ACCESS_REQUESTED';
+  const actualIsAdmin = isAdmin || role === 'ADMIN' || role === 'OWNER';
+  const activeRequest = getCurrentUserActiveRequest();
+  const effectiveSeatState = activeRequest ? activeRequest.status : simulatedAccessState;
+  const displayAccess = getDisplayAccessState({
+    authState: 'AUTHENTICATED',
+    actualRole: actualIsAdmin ? 'Admin' : 'User',
+    simulatedRole,
+    workspaceState: accessLevel,
+    seatRequestState: effectiveSeatState
+  });
 
   return (
     <div
@@ -303,7 +318,7 @@ export const ShowcaseModeController: React.FC<ShowcaseModeControllerProps> = ({
         </div>
 
         <div className="flex items-center gap-2 flex-wrap">
-          <RoleSimulationControl variant="compact" />
+          {accessLevel === 'FULL' && <RoleSimulationControl variant="compact" />}
 
           <button
             type="button"
@@ -315,15 +330,14 @@ export const ShowcaseModeController: React.FC<ShowcaseModeControllerProps> = ({
             <span>Reset Deterministic State</span>
           </button>
 
-          {isSeatRequested ? (
+          {displayAccess.seatAccessStatus === 'pending' || displayAccess.seatAccessStatus === 'approved' ? (
             <button
               type="button"
               onClick={() => requestFullAccess(false, 'Showcase Mode Header')}
               className="px-2.5 py-1 rounded-lg bg-emerald-500/20 hover:bg-emerald-500/30 border border-emerald-400/30 text-emerald-200 text-[11px] font-semibold inline-flex items-center gap-1 transition-colors cursor-pointer"
-              title="Click to inspect Seat Request status or test simulated roles"
             >
               <CheckCircle2 className="w-3 h-3 text-emerald-300" />
-              <span>Seat Requested</span>
+              <span>{displayAccess.ctaLabel}</span>
             </button>
           ) : (
             <button
@@ -333,7 +347,7 @@ export const ShowcaseModeController: React.FC<ShowcaseModeControllerProps> = ({
               }}
               className="px-2.5 py-1 rounded-lg bg-amber-400 hover:bg-amber-300 text-slate-950 text-[11px] font-bold transition-colors cursor-pointer"
             >
-              Request a CareerOS Seat
+              {displayAccess.ctaLabel}
             </button>
           )}
 

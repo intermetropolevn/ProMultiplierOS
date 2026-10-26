@@ -9,12 +9,9 @@ import {
   Layers, 
   HelpCircle, 
   Sliders, 
-  Pin, 
   ArrowUpRight,
   MoreHorizontal,
-  X,
   Hammer,
-  Target,
   ShieldCheck
 } from 'lucide-react';
 import { PracticeActionType } from '../practice/PracticeActionGroup';
@@ -59,18 +56,20 @@ export const Header: React.FC<HeaderProps> = ({
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
-  // Level 1 User Career OS Navigation Items (Strictly Prioritized)
+  // Level 1 User Career OS Navigation Items (Strictly Prioritized 1..6)
   const primaryNavItems: { 
     id: ActiveTab; 
-    label: string; 
+    label: string;
+    line1: string;
+    line2: string;
     icon: React.FC<{ className?: string }>;
   }[] = [
-    { id: 'profile', label: 'My Profile', icon: UserCheck },
-    { id: 'discover', label: 'Job Opportunity', icon: Compass },
-    { id: 'tracker', label: 'Participation Tracker', icon: CheckSquare },
-    { id: 'builder_match', label: 'Builder Match', icon: Hammer },
-    { id: 'knowledge', label: 'Knowledge System', icon: BookOpen },
-    { id: 'business_english', label: 'Business English', icon: Globe },
+    { id: 'profile', label: 'My Profile', line1: 'My', line2: 'Profile', icon: UserCheck },
+    { id: 'discover', label: 'Job Opportunity', line1: 'Job', line2: 'Opportunity', icon: Compass },
+    { id: 'tracker', label: 'Participation Tracker', line1: 'Participation', line2: 'Tracker', icon: CheckSquare },
+    { id: 'builder_match', label: 'Builder Match', line1: 'Builder', line2: 'Match', icon: Hammer },
+    { id: 'knowledge', label: 'Knowledge System', line1: 'Knowledge', line2: 'System', icon: BookOpen },
+    { id: 'business_english', label: 'Business English', line1: 'Business', line2: 'English', icon: Globe },
   ];
 
   // Visual active tab check
@@ -88,7 +87,7 @@ export const Header: React.FC<HeaderProps> = ({
 
   return (
     <header className="sticky top-0 z-40 bg-white/95 backdrop-blur-md border-b border-slate-200/90 shadow-2xs w-full max-w-full">
-      <div className="w-full max-w-[2560px] mx-auto px-2.5 sm:px-4 xl:px-5 2xl:px-6 py-1.5 xl:py-2 flex items-center justify-between gap-2 lg:gap-2.5 xl:gap-3 2xl:gap-5">
+      <div className="w-full max-w-[2560px] mx-auto px-3 sm:px-4 xl:px-5 2xl:px-6 py-1.5 xl:py-2 flex items-center justify-between gap-2 xl:gap-3 2xl:gap-4">
         
         {/* ==================================================
             LEFT: Brand & OS Identification
@@ -107,7 +106,7 @@ export const Header: React.FC<HeaderProps> = ({
                 <span className="font-bold text-sm xl:text-[15px] 2xl:text-base tracking-tight text-slate-900 whitespace-nowrap">
                   ProMultiplier <span className="text-blue-600">OS</span>
                 </span>
-                <span className="text-[9px] uppercase font-bold tracking-wider px-1.5 py-0.5 rounded bg-blue-50 text-blue-700 border border-blue-200 hidden min-[1680px]:inline-block whitespace-nowrap">
+                <span className="text-[9px] uppercase font-bold tracking-wider px-1.5 py-0.5 rounded bg-blue-50 text-blue-700 border border-blue-200 hidden min-[1800px]:inline-block whitespace-nowrap">
                   Career OS
                 </span>
               </div>
@@ -116,14 +115,15 @@ export const Header: React.FC<HeaderProps> = ({
         </div>
 
         {/* ==================================================
-            CENTER: Primary Navigation (Priority 1)
+            CENTER: Primary Navigation (Priority 1–6)
             - 6 Primary Items: My Profile, Job Opportunity, Participation Tracker,
               Builder Match, Knowledge System, Business English
-            - Narrower item widths with natural, balanced 2-line wrapping
-            - Zero ellipsis truncation, accessible tap targets across 14", 16", 23"
+            - Responsive 2-line wrapping on 14" & 16" laptop viewports (1366px, 1440px, 1536px)
+              and spacious layout on 23" desktop viewports (1920px, 2560px)
+            - Consistent item height, aligned icons, zero word clipping or truncation
             ================================================== */}
         <nav 
-          className="hidden lg:flex items-stretch gap-0.5 xl:gap-1 2xl:gap-1.5 p-1 bg-slate-100/90 rounded-xl border border-slate-200/80 text-xs font-medium min-w-0 shrink" 
+          className="hidden lg:flex items-stretch gap-1 xl:gap-1.5 2xl:gap-2 p-1 bg-slate-100/90 rounded-xl border border-slate-200/80 text-xs font-medium shrink-0" 
           aria-label="Global Career OS Navigation"
         >
           {primaryNavItems.map(item => {
@@ -138,21 +138,22 @@ export const Header: React.FC<HeaderProps> = ({
                   if (isPlatformAdminOpen) onOpenPlatformAdmin();
                   onTabChange(item.id);
                 }}
-                className={`group relative px-2 xl:px-2.5 2xl:px-3 py-1.5 min-h-[38px] rounded-lg transition-all flex items-center gap-1.5 xl:gap-2 cursor-pointer text-left select-none ${
+                className={`group relative px-2.5 xl:px-3 2xl:px-3.5 py-1.5 min-h-[42px] rounded-lg transition-all flex items-center gap-1.5 xl:gap-2 cursor-pointer text-left select-none shrink-0 ${
                   isActive
                     ? 'bg-white text-slate-900 font-semibold shadow-xs border border-slate-200/70'
                     : 'text-slate-600 hover:text-slate-900 hover:bg-white/60 border border-transparent'
                 }`}
               >
                 <Icon
-                  className={`w-3.5 h-3.5 xl:w-4 xl:h-4 shrink-0 transition-colors ${
+                  className={`w-4 h-4 shrink-0 transition-colors ${
                     isActive ? 'text-blue-600' : 'text-slate-500 group-hover:text-slate-700'
                   }`}
                 />
                 
-                {/* Balanced 2-line wrapping label: never truncated, wraps naturally by width */}
-                <span className="block text-[11.5px] xl:text-xs leading-[1.15] tracking-tight whitespace-normal break-normal [text-wrap:balance] max-w-[68px] xl:max-w-[76px] 2xl:max-w-[84px]">
-                  {item.label}
+                {/* Responsive 2-line label on 14" & 16" laptops, single-line on wide 23" desktops; words are never clipped */}
+                <span className="flex flex-col min-[1900px]:flex-row min-[1900px]:items-center min-[1900px]:gap-1 text-xs leading-[1.15] tracking-tight justify-center">
+                  <span className="block whitespace-nowrap">{item.line1}</span>
+                  <span className="block whitespace-nowrap">{item.line2}</span>
                 </span>
 
                 {isActive && (
@@ -169,36 +170,37 @@ export const Header: React.FC<HeaderProps> = ({
         </nav>
 
         {/* ==================================================
-            RIGHT: Secondary / Utility Controls (Priority 2)
-            Visually separated from Primary Navigation.
-            Progressively compacts secondary controls on 14" & 16" screens.
+            RIGHT: Secondary / Utility & Profile Controls (Priority 7–9)
+            - 7. Search
+            - 8. Live Interview
+            - 9. Utility & Profile Avatar (with Workspace / Demo Workspace inside dropdown)
             ================================================== */}
         <div className="flex items-center gap-1.5 xl:gap-2 2xl:gap-2.5 shrink-0">
           
           {/* --------------------------------------------------
-              SUB-GROUP A: Core Secondary Utilities (Search + Live Interview)
+              SUB-GROUP A: Search + Live Interview (Priority 7 & 8)
               -------------------------------------------------- */}
           <div className="flex items-center gap-1.5 xl:gap-2 shrink-0" data-header-group="secondary-utility">
-            {/* Omni Search Trigger */}
+            {/* 7. Omni Search Trigger */}
             <button
               id="cmd-palette-btn"
               onClick={onOpenCommand}
               type="button"
               title="Search CareerOS (⌘K)"
-              className="relative bg-slate-50 hover:bg-white text-xs px-2 xl:px-2.5 min-[1720px]:pl-7 min-[1720px]:pr-2.5 py-1.5 min-h-[36px] rounded-lg border border-slate-200 hover:border-slate-300 text-slate-500 hover:text-slate-700 flex items-center gap-1.5 transition-colors shadow-3xs cursor-pointer"
+              className="bg-slate-50 hover:bg-white text-xs px-2.5 xl:px-3 py-1.5 min-h-[38px] rounded-lg border border-slate-200 hover:border-slate-300 text-slate-600 hover:text-slate-900 flex items-center gap-1.5 transition-colors shadow-3xs cursor-pointer shrink-0"
             >
-              <Search className="w-3.5 h-3.5 text-slate-400 shrink-0 min-[1720px]:absolute min-[1720px]:left-2.5" />
-              <span className="hidden min-[1720px]:inline whitespace-nowrap">Search...</span>
+              <Search className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+              <span className="hidden xl:inline whitespace-nowrap">Search</span>
               <kbd className="text-[10px] font-mono px-1 py-0.2 rounded bg-slate-200/70 text-slate-600 border border-slate-300/60">
                 ⌘K
               </kbd>
             </button>
 
-            {/* Live Interview CTA */}
+            {/* 8. Live Interview CTA */}
             <button
               type="button"
               onClick={() => onSelectPracticeAction('live')}
-              className={`flex items-center gap-1.5 px-2.5 xl:px-3 py-1.5 min-h-[36px] text-xs font-semibold rounded-lg transition active:scale-95 cursor-pointer shadow-xs whitespace-nowrap ${
+              className={`flex items-center gap-1.5 px-2.5 xl:px-3 py-1.5 min-h-[38px] text-xs font-semibold rounded-lg transition active:scale-95 cursor-pointer shadow-xs whitespace-nowrap shrink-0 ${
                 activeTab === 'practice' && activePracticeAction === 'live'
                   ? 'bg-blue-700 text-white ring-2 ring-blue-500/20'
                   : 'bg-blue-600 hover:bg-blue-700 text-white'
@@ -216,9 +218,9 @@ export const Header: React.FC<HeaderProps> = ({
           </div>
 
           {/* --------------------------------------------------
-              SUB-GROUP B: System & Account Controls
+              SUB-GROUP B: Utility & Profile Avatar Controls (Priority 9)
               -------------------------------------------------- */}
-          <div className="flex items-center gap-1 xl:gap-1.5 pl-1 xl:pl-1.5 border-l border-slate-200/80 shrink-0" data-header-group="system-account-controls">
+          <div className="flex items-center gap-1.5 xl:gap-2 pl-1.5 xl:pl-2 border-l border-slate-200/80 shrink-0" data-header-group="system-account-controls">
             {/* Direct Help & Admin Buttons on Wide Desktop */}
             <div className="hidden 2xl:flex items-center gap-1">
               <button
@@ -308,18 +310,8 @@ export const Header: React.FC<HeaderProps> = ({
               )}
             </div>
 
-            {/* CareerOS Beta Access Tier Indicator & Switcher */}
-            <BetaAccessBadge />
-
-            {/* User Profile Avatar */}
-            <button
-              type="button"
-              onClick={() => onTabChange('profile')}
-              className="w-7 h-7 sm:w-8 sm:h-8 rounded-full ring-2 ring-slate-200/80 overflow-hidden bg-gradient-to-tr from-amber-200 to-rose-200 flex items-center justify-center cursor-pointer shadow-xs font-bold text-xs text-slate-800 hover:ring-blue-500 transition-all shrink-0"
-              title="View My Profile & Career Dashboard"
-            >
-              PH
-            </button>
+            {/* Unified Profile Avatar & Workspace Dropdown (Houses PROFILE, WORKSPACE / Demo Workspace, and ACCESS) */}
+            <BetaAccessBadge onNavigateProfile={() => onTabChange('profile')} />
           </div>
 
         </div>
@@ -338,11 +330,11 @@ export const Header: React.FC<HeaderProps> = ({
                 if (isPlatformAdminOpen) onOpenPlatformAdmin();
                 onTabChange(item.id);
               }}
-              className={`px-2.5 py-1 rounded-lg text-xs font-semibold whitespace-nowrap flex items-center gap-1.5 cursor-pointer ${
+              className={`px-2.5 py-1 rounded-lg text-xs font-semibold whitespace-nowrap flex items-center gap-1.5 cursor-pointer shrink-0 ${
                 isActive ? 'bg-slate-900 text-white' : 'text-slate-600 hover:bg-slate-100'
               }`}
             >
-              <Icon className="w-3.5 h-3.5" />
+              <Icon className="w-3.5 h-3.5 shrink-0" />
               <span>{item.label}</span>
             </button>
           );

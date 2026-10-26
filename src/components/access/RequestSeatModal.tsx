@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   Sparkles,
   X,
@@ -9,7 +9,7 @@ import {
   Building2,
   MessageSquare,
   RotateCcw,
-  Sliders,
+  Terminal,
   AlertCircle,
   Clock,
   Check,
@@ -17,12 +17,14 @@ import {
   Lock,
   ArrowRight,
   BadgeCheck,
+  ChevronDown,
+  ChevronUp,
 } from 'lucide-react';
 import { useAccessControl } from '../../services/accessControlService';
 import {
   useSeatRequestService,
   SIMULATED_ROLE_OPTIONS,
-  SimulatedRoleOption,
+  SIMULATED_ACCESS_STATE_OPTIONS,
 } from '../../services/seatRequestService';
 
 interface RoleSimulationControlProps {
@@ -31,238 +33,209 @@ interface RoleSimulationControlProps {
 }
 
 /**
- * Development/Demo-only "User Simulation" control & QA indicator.
- * Allows testing the "Request a CareerOS Seat" flow across all roles even when the
- * current logged-in account is the platform Admin / Builder, without changing real production permissions.
+ * Compact Developer / QA Simulation Control.
+ *
+ * Intentionally styled as an internal developer utility (monospace typography,
+ * console-slate surface, dashed technical border) so it never looks like normal
+ * CareerOS product UI.
+ *
+ * - Primary control: "QA Simulation" dropdown with 4 options:
+ *   Admin | Guest | Demo User | Request Full Access
+ * - Active state indicated solely by the selected option's highlighted background
+ *   (no "Active", "Current", or "Simulated" labels next to options).
+ * - Technical details (Actual role, Simulated state, Access state, Workspace) and
+ *   the secondary "Access State" selector (No Request | Pending | Approved | Rejected)
+ *   remain hidden when collapsed and are revealed only when the QA panel is expanded.
  */
 export const RoleSimulationControl: React.FC<RoleSimulationControlProps> = ({
   variant = 'bar',
   className = '',
 }) => {
-  const { isAdmin, role } = useAccessControl();
+  const { isAdmin, role, accessLevel } = useAccessControl();
   const {
     simulatedRole,
+    userFacingSimulatedState,
+    simulatedAccessState,
     isSimulating,
     setSimulatedRole,
+    setSimulatedAccessState,
     resetSimulation,
     openRequestModal,
   } = useSeatRequestService();
 
-  const actualRoleLabel = isAdmin || role === 'ADMIN' || role === 'OWNER' ? 'Admin' : 'Normal User';
+  const [isPanelExpanded, setIsPanelExpanded] = useState(false);
+  const [isDropdownOpen, setIsDropdownOpen] = useState(false);
+  const dropdownRef = useRef<HTMLDivElement>(null);
 
-  if (variant === 'compact') {
-    return (
-      <div
-        className={`inline-flex flex-wrap items-center gap-2 px-2.5 py-1 rounded-lg border text-[11px] transition-colors ${
-          isSimulating
-            ? 'bg-amber-500/15 border-amber-400/40 text-amber-200'
-            : 'bg-slate-900/80 border-slate-700/80 text-slate-300'
-        } ${className}`}
-      >
-        <span className="inline-flex items-center gap-1 font-semibold text-amber-300">
-          <Sliders className="w-3 h-3" />
-          Simulate role:
-        </span>
-        <select
-          aria-label="Simulate role"
-          value={simulatedRole}
-          onChange={(e) => setSimulatedRole(e.target.value as SimulatedRoleOption)}
-          className="bg-slate-950/90 text-white border border-slate-700 rounded px-1.5 py-0.5 text-[11px] font-semibold focus:outline-none focus:border-amber-400 cursor-pointer"
-        >
-          {SIMULATED_ROLE_OPTIONS.map((opt) => (
-            <option key={opt} value={opt} className="bg-slate-900 text-white">
-              {opt}
-            </option>
-          ))}
-        </select>
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(e.target as Node)) {
+        setIsDropdownOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
 
-        <span className="hidden xl:inline-flex items-center gap-1.5 text-[10px] text-slate-300 border-l border-slate-700/80 pl-2">
-          <span>
-            Current actual role: <strong className="text-white">{actualRoleLabel}</strong>
-          </span>
-          <span className="text-slate-600">•</span>
-          <span>
-            Simulated role:{' '}
-            <strong className={isSimulating ? 'text-amber-300' : 'text-indigo-300'}>
-              {simulatedRole}
-            </strong>
-          </span>
-        </span>
+  const actualRoleLabel = isAdmin || role === 'ADMIN' || role === 'OWNER' ? 'Admin' : 'User';
 
-        {isSimulating && (
-          <button
-            type="button"
-            onClick={resetSimulation}
-            title="Reset Simulation to Admin"
-            className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-amber-500/20 hover:bg-amber-500/30 text-amber-200 border border-amber-400/30 text-[10px] font-semibold transition-colors cursor-pointer"
-          >
-            <RotateCcw className="w-2.5 h-2.5" />
-            Reset Simulation
-          </button>
-        )}
-      </div>
-    );
-  }
+  const workspaceLabel =
+    simulatedRole === 'Demo User' || accessLevel === 'DEMO'
+      ? 'Demo Workspace'
+      : simulatedRole === 'Guest' || accessLevel === 'GUEST' || accessLevel === 'PUBLIC'
+      ? 'Guest Preview'
+      : 'Demo Workspace';
 
-  if (variant === 'panel') {
-    return (
-      <div
-        className={`rounded-xl border p-3.5 transition-colors ${
-          isSimulating
-            ? 'bg-amber-950/20 border-amber-500/40'
-            : 'bg-slate-900/90 border-slate-800'
-        } ${className}`}
-      >
-        <div className="flex items-center justify-between gap-2 mb-2">
-          <div className="flex items-center gap-1.5">
-            <Sliders className="w-3.5 h-3.5 text-amber-400" />
-            <span className="text-[11px] font-bold uppercase tracking-wider text-amber-300">
-              Simulate role (QA / Dev Only)
-            </span>
-          </div>
-          {isSimulating && (
-            <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-amber-500/20 text-amber-300 border border-amber-400/30">
-              Simulated: {simulatedRole}
-            </span>
-          )}
-        </div>
-
-        {/* QA Role Indicator */}
-        <div className="rounded-lg bg-slate-950/80 border border-slate-800/90 px-2.5 py-2 mb-2.5 text-[11px] space-y-1">
-          <div className="flex items-center justify-between text-slate-400">
-            <span>Current actual role:</span>
-            <span className="font-semibold text-white">{actualRoleLabel}</span>
-          </div>
-          <div className="flex items-center justify-between text-slate-400">
-            <span>Simulated role:</span>
-            <span
-              className={`font-semibold ${
-                isSimulating ? 'text-amber-300' : 'text-indigo-300'
-              }`}
-            >
-              {simulatedRole}
-            </span>
-          </div>
-        </div>
-
-        {/* Role Selector Buttons */}
-        <div className="grid grid-cols-2 gap-1.5 mb-2.5">
-          {SIMULATED_ROLE_OPTIONS.map((opt) => {
-            const active = simulatedRole === opt;
-            return (
-              <button
-                key={opt}
-                type="button"
-                onClick={() => setSimulatedRole(opt)}
-                className={`px-2.5 py-1.5 rounded-lg text-[11px] font-semibold text-left transition-all border cursor-pointer flex items-center justify-between ${
-                  active
-                    ? 'bg-amber-500/20 text-amber-200 border-amber-400/50 shadow-sm'
-                    : 'bg-slate-950/60 text-slate-300 border-slate-800 hover:bg-slate-800/70 hover:text-white'
-                }`}
-              >
-                <span className="truncate">{opt}</span>
-                {active && <span className="w-1.5 h-1.5 rounded-full bg-amber-400 shrink-0" />}
-              </button>
-            );
-          })}
-        </div>
-
-        <div className="flex items-center gap-2 pt-1 border-t border-slate-800/80">
-          <button
-            type="button"
-            onClick={() => openRequestModal('QA Simulation Panel')}
-            className="flex-1 inline-flex items-center justify-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-indigo-600/20 hover:bg-indigo-600/30 text-indigo-200 border border-indigo-500/30 text-[11px] font-semibold transition-colors cursor-pointer"
-          >
-            <Sparkles className="w-3 h-3 text-indigo-400" />
-            Test Seat CTA Now
-          </button>
-          <button
-            type="button"
-            onClick={resetSimulation}
-            disabled={!isSimulating}
-            className={`inline-flex items-center justify-center gap-1 px-2.5 py-1.5 rounded-lg text-[11px] font-semibold border transition-colors ${
-              isSimulating
-                ? 'bg-amber-500/20 hover:bg-amber-500/30 text-amber-200 border-amber-400/40 cursor-pointer'
-                : 'bg-slate-900/40 text-slate-600 border-slate-800/60 cursor-not-allowed'
-            }`}
-          >
-            <RotateCcw className="w-3 h-3" />
-            Reset Simulation
-          </button>
-        </div>
-      </div>
-    );
-  }
-
-  // Default: 'bar'
   return (
     <div
-      className={`flex flex-wrap items-center justify-between gap-2 px-3 py-1.5 rounded-lg border text-xs ${
-        isSimulating
-          ? 'bg-amber-950/30 border-amber-500/40 text-amber-100'
-          : 'bg-slate-900/90 border-slate-800 text-slate-300'
-      } ${className}`}
+      data-qa-simulation-control={variant}
+      className={`font-mono text-[11px] rounded-lg border border-dashed border-slate-700/90 bg-slate-950 text-slate-200 ${className}`}
     >
-      <div className="flex flex-wrap items-center gap-2.5">
-        <span className="inline-flex items-center gap-1.5 font-semibold text-amber-300">
-          <Sliders className="w-3.5 h-3.5" />
-          Simulate role:
-        </span>
+      {/* Compact Collapsed Toolbar Row */}
+      <div className="px-2.5 py-1.5 flex flex-wrap items-center justify-between gap-2">
+        <div className="flex items-center gap-2 flex-wrap">
+          <span className="inline-flex items-center gap-1.5 text-[11px] font-semibold tracking-tight text-slate-300">
+            <Terminal className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+            <span>QA Simulation</span>
+          </span>
 
-        <div className="flex flex-wrap items-center gap-1">
-          {SIMULATED_ROLE_OPTIONS.map((opt) => {
-            const active = simulatedRole === opt;
-            return (
-              <button
-                key={opt}
-                type="button"
-                onClick={() => setSimulatedRole(opt)}
-                className={`px-2 py-0.5 rounded text-[11px] font-semibold transition-all border cursor-pointer ${
-                  active
-                    ? 'bg-amber-500 text-slate-950 border-amber-400 shadow-xs'
-                    : 'bg-slate-950/70 text-slate-300 border-slate-700/80 hover:bg-slate-800 hover:text-white'
-                }`}
+          {/* Custom Dropdown with Highlighted Background for Selected Option */}
+          <div className="relative inline-block" ref={dropdownRef}>
+            <button
+              type="button"
+              onClick={() => setIsDropdownOpen((prev) => !prev)}
+              aria-haspopup="listbox"
+              aria-expanded={isDropdownOpen}
+              aria-label="QA Simulation"
+              className="inline-flex items-center justify-between gap-2 min-w-[148px] px-2.5 py-1 rounded bg-slate-900 hover:bg-slate-800 border border-slate-700 text-[11px] font-semibold text-white transition-colors cursor-pointer"
+            >
+              <span>{userFacingSimulatedState}</span>
+              <ChevronDown className="w-3 h-3 text-slate-400 shrink-0" />
+            </button>
+
+            {isDropdownOpen && (
+              <div
+                role="listbox"
+                aria-label="QA Simulation Options"
+                className="absolute left-0 top-full mt-1 w-48 rounded-lg bg-slate-900 border border-slate-700 shadow-2xl py-1 z-50"
               >
-                {opt}
-              </button>
-            );
-          })}
+                {SIMULATED_ROLE_OPTIONS.map((opt) => {
+                  const isSelected = simulatedRole === opt;
+                  return (
+                    <button
+                      key={opt}
+                      type="button"
+                      role="option"
+                      aria-selected={isSelected}
+                      onClick={() => {
+                        setSimulatedRole(opt);
+                        setIsDropdownOpen(false);
+                      }}
+                      className={`w-full text-left px-3 py-1.5 text-[11px] font-medium transition-colors cursor-pointer block ${
+                        isSelected
+                          ? 'bg-indigo-600 text-white font-semibold'
+                          : 'text-slate-300 hover:bg-slate-800 hover:text-white'
+                      }`}
+                    >
+                      {opt}
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Right Controls: Expand/Collapse QA Panel & Reset */}
+        <div className="flex items-center gap-1.5">
+          {isSimulating && (
+            <button
+              type="button"
+              onClick={resetSimulation}
+              title="Reset QA Simulation"
+              className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-slate-900 hover:bg-slate-800 text-slate-300 border border-slate-700 text-[10px] font-medium transition-colors cursor-pointer"
+            >
+              <RotateCcw className="w-2.5 h-2.5 text-slate-400" />
+              <span>Reset</span>
+            </button>
+          )}
+
+          <button
+            type="button"
+            onClick={() => setIsPanelExpanded((prev) => !prev)}
+            aria-expanded={isPanelExpanded}
+            className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-slate-900 hover:bg-slate-800 text-slate-300 border border-slate-700 text-[10px] font-medium transition-colors cursor-pointer"
+          >
+            <span>{isPanelExpanded ? 'Hide QA Panel' : 'QA Panel'}</span>
+            {isPanelExpanded ? (
+              <ChevronUp className="w-3 h-3 text-slate-400" />
+            ) : (
+              <ChevronDown className="w-3 h-3 text-slate-400" />
+            )}
+          </button>
         </div>
       </div>
 
-      <div className="flex flex-wrap items-center gap-2.5 text-[11px]">
-        <div className="flex items-center gap-2 px-2 py-0.5 rounded bg-slate-950/80 border border-slate-800">
-          <span className="text-slate-400">
-            Current actual role: <strong className="text-white">{actualRoleLabel}</strong>
-          </span>
-          <span className="text-slate-700">|</span>
-          <span className="text-slate-400">
-            Simulated role:{' '}
-            <strong className={isSimulating ? 'text-amber-300' : 'text-indigo-300'}>
-              {simulatedRole}
-            </strong>
-          </span>
+      {/* Expanded QA Panel (Hidden when collapsed) */}
+      {isPanelExpanded && (
+        <div className="px-3 py-2.5 border-t border-dashed border-slate-800 bg-slate-900/70 space-y-2.5">
+          {/* Technical Details */}
+          <div className="rounded bg-slate-950 border border-slate-800/90 px-2.5 py-2 space-y-1 text-[11px] leading-relaxed">
+            <div className="text-slate-300">
+              Actual role: <span className="text-white font-semibold">{actualRoleLabel}</span>
+            </div>
+            <div className="text-slate-300">
+              Simulated state:{' '}
+              <span className="text-white font-semibold">{userFacingSimulatedState}</span>
+            </div>
+            <div className="text-slate-300">
+              Access state:{' '}
+              <span className="text-white font-semibold">{simulatedAccessState}</span>
+            </div>
+            <div className="text-slate-300">
+              Workspace: <span className="text-white font-semibold">{workspaceLabel}</span>
+            </div>
+          </div>
+
+          {/* Secondary Access State Selector */}
+          <div className="space-y-1.5">
+            <div className="text-[10px] uppercase tracking-wider text-slate-400 font-semibold">
+              Access State
+            </div>
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-1">
+              {SIMULATED_ACCESS_STATE_OPTIONS.map((stateOpt) => {
+                const isSelected = simulatedAccessState === stateOpt;
+                return (
+                  <button
+                    key={stateOpt}
+                    type="button"
+                    onClick={() => setSimulatedAccessState(stateOpt)}
+                    className={`px-2 py-1 rounded text-[11px] font-medium transition-colors border cursor-pointer text-center ${
+                      isSelected
+                        ? 'bg-indigo-600 text-white border-indigo-500 font-semibold'
+                        : 'bg-slate-950 text-slate-300 border-slate-800 hover:bg-slate-800 hover:text-white'
+                    }`}
+                  >
+                    {stateOpt}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* Quick Developer Modal Trigger */}
+          <div className="pt-1 flex items-center justify-end gap-2 border-t border-slate-800/80">
+            <button
+              type="button"
+              onClick={() => openRequestModal('QA Simulation Panel')}
+              className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 text-[10px] font-semibold transition-colors cursor-pointer"
+            >
+              <Sparkles className="w-3 h-3 text-indigo-400" />
+              <span>Open Seat Request Modal</span>
+            </button>
+          </div>
         </div>
-
-        {isSimulating && (
-          <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-amber-500/20 text-amber-300 border border-amber-400/30">
-            Simulated: {simulatedRole}
-          </span>
-        )}
-
-        <button
-          type="button"
-          onClick={resetSimulation}
-          className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-semibold border transition-colors cursor-pointer ${
-            isSimulating
-              ? 'bg-amber-500/20 hover:bg-amber-500/30 text-amber-200 border-amber-400/40'
-              : 'bg-slate-800/70 hover:bg-slate-800 text-slate-400 border-slate-700'
-          }`}
-        >
-          <RotateCcw className="w-3 h-3" />
-          Reset Simulation
-        </button>
-      </div>
+      )}
     </div>
   );
 };
@@ -270,31 +243,33 @@ export const RoleSimulationControl: React.FC<RoleSimulationControlProps> = ({
 /**
  * Canonical CareerOS Seat Request Modal
  *
- * Dynamically adapts to the effective role (real or simulated via `RoleSimulationControl`):
- * - Normal User: User-facing modal associated with authenticated user account
- * - Guest: Unauthenticated user-facing modal (email strictly required, empty by default)
- * - Invited User: User-facing modal pre-filled with partner cohort invitation context
- * - Seat Requested: Pending confirmation state (duplicate submissions prevented)
- * - Seat Approved: Approved seat state with workspace unlock action
- * - Admin: Admin Seat Request Management & Review view (with 1-click switch to test Normal User / Guest flow)
+ * Uses the centralized `getDisplayAccessState` mapping:
+ * - Admin (no seat request state override) -> Admin Seat Request Management
+ * - Guest / Demo User / Request Full Access -> End-user "Request Full Access" modal
+ *   ("Leave your email to request a CareerOS seat." + CTA "Request a CareerOS Seat")
+ * - Pending -> "Pending" ("Your CareerOS seat request is under review.")
+ * - Approved -> "CareerOS Access"
+ * - Rejected -> "Request again" retry flow
  */
 export const RequestSeatModal: React.FC = () => {
   const {
     user,
     isAdmin,
     role,
+    accessLevel,
     markFullAccessRequested,
     setAccessLevel,
   } = useAccessControl();
 
   const {
     simulatedRole,
-    isSimulating,
+    simulatedAccessState,
     requests,
     pendingCount,
     modalState,
+    getDisplayAccessState,
     setSimulatedRole,
-    resetSimulation,
+    setSimulatedAccessState,
     closeRequestModal,
     submitSeatRequest,
     reviewSeatRequest,
@@ -303,12 +278,14 @@ export const RequestSeatModal: React.FC = () => {
     clearLastSubmittedSessionRequest,
   } = useSeatRequestService();
 
+  const actualIsAdmin = isAdmin || role === 'ADMIN' || role === 'OWNER';
+
   const identity = getEffectiveUserIdentity({
     id: user.id,
     name: user.name,
     email: user.email,
     accessLevel: user.accessLevel,
-    isAdmin: isAdmin || role === 'ADMIN' || role === 'OWNER',
+    isAdmin: actualIsAdmin,
   });
 
   const [email, setEmail] = useState(identity.defaultEmail);
@@ -339,10 +316,23 @@ export const RequestSeatModal: React.FC = () => {
     return null;
   }
 
-  const actualRoleLabel = isAdmin || role === 'ADMIN' || role === 'OWNER' ? 'Admin' : 'Normal User';
   const activeUserRequest = getCurrentUserActiveRequest(
     simulatedRole === 'Guest' ? undefined : email
   );
+
+  const effectiveSeatState = activeUserRequest
+    ? activeUserRequest.status
+    : simulatedAccessState;
+
+  const displayAccess = getDisplayAccessState({
+    authState: identity.isAuthenticatedAccount ? 'AUTHENTICATED' : 'GUEST',
+    actualRole: actualIsAdmin ? 'Admin' : 'User',
+    simulatedRole,
+    workspaceState: accessLevel,
+    seatRequestState: effectiveSeatState,
+  });
+
+  const showUserAccessStateView = displayAccess.isEndUserRequestFlow;
 
   const handleUserSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -379,63 +369,9 @@ export const RequestSeatModal: React.FC = () => {
       aria-labelledby="careeros-seat-request-title"
     >
       <div className="relative w-full max-w-2xl rounded-2xl bg-slate-900 border border-slate-700/80 shadow-2xl overflow-hidden text-slate-100 flex flex-col max-h-[92vh]">
-        {/* Top Development / Demo QA Role Simulation Header */}
-        <div className="bg-slate-950 border-b border-slate-800 px-5 py-3">
-          <div className="flex flex-wrap items-center justify-between gap-2 mb-2">
-            <div className="flex items-center gap-2 text-[11px]">
-              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-amber-500/15 text-amber-300 border border-amber-500/30 font-bold uppercase tracking-wider">
-                <Sliders className="w-3 h-3" />
-                QA User Simulation
-              </span>
-              <span className="text-slate-400">
-                Current actual role: <strong className="text-white">{actualRoleLabel}</strong>
-              </span>
-              <span className="text-slate-700">•</span>
-              <span className="text-slate-400">
-                Simulated role:{' '}
-                <strong className={isSimulating ? 'text-amber-300' : 'text-indigo-300'}>
-                  {simulatedRole}
-                </strong>
-              </span>
-            </div>
-
-            <div className="flex items-center gap-2">
-              {isSimulating && (
-                <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-amber-500/20 text-amber-300 border border-amber-400/40">
-                  Simulated: {simulatedRole}
-                </span>
-              )}
-              <button
-                type="button"
-                onClick={resetSimulation}
-                className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 text-[11px] font-semibold transition-colors cursor-pointer"
-              >
-                <RotateCcw className="w-3 h-3 text-amber-400" />
-                Reset Simulation
-              </button>
-            </div>
-          </div>
-
-          <div className="flex flex-wrap items-center gap-1.5">
-            <span className="text-[11px] font-semibold text-slate-400 mr-1">Simulate role:</span>
-            {SIMULATED_ROLE_OPTIONS.map((opt) => {
-              const active = simulatedRole === opt;
-              return (
-                <button
-                  key={opt}
-                  type="button"
-                  onClick={() => setSimulatedRole(opt)}
-                  className={`px-2.5 py-1 rounded-md text-[11px] font-semibold transition-all border cursor-pointer ${
-                    active
-                      ? 'bg-amber-500 text-slate-950 border-amber-400 shadow-xs'
-                      : 'bg-slate-900 text-slate-300 border-slate-800 hover:bg-slate-800 hover:text-white'
-                  }`}
-                >
-                  {opt}
-                </button>
-              );
-            })}
-          </div>
+        {/* Compact Developer / QA Simulation Control Bar */}
+        <div className="bg-slate-950 border-b border-slate-800 px-4 py-2.5">
+          <RoleSimulationControl variant="bar" />
         </div>
 
         {/* Main Modal Header */}
@@ -443,13 +379,21 @@ export const RequestSeatModal: React.FC = () => {
           <div className="flex items-start gap-3.5">
             <div
               className={`w-11 h-11 rounded-xl flex items-center justify-center shrink-0 border ${
-                identity.isAdminView
+                !showUserAccessStateView
                   ? 'bg-purple-500/15 border-purple-500/30 text-purple-300'
+                  : activeUserRequest?.status === 'declined'
+                  ? 'bg-rose-500/15 border-rose-500/30 text-rose-300'
+                  : activeUserRequest?.status === 'approved'
+                  ? 'bg-emerald-500/15 border-emerald-500/30 text-emerald-300'
                   : 'bg-indigo-500/15 border-indigo-500/30 text-indigo-300'
               }`}
             >
-              {identity.isAdminView ? (
+              {!showUserAccessStateView ? (
                 <Shield className="w-5 h-5" />
+              ) : activeUserRequest?.status === 'declined' ? (
+                <XCircle className="w-5 h-5" />
+              ) : activeUserRequest?.status === 'approved' ? (
+                <BadgeCheck className="w-5 h-5" />
               ) : (
                 <Sparkles className="w-5 h-5" />
               )}
@@ -460,26 +404,30 @@ export const RequestSeatModal: React.FC = () => {
                   id="careeros-seat-request-title"
                   className="text-lg font-bold text-white tracking-tight"
                 >
-                  {identity.isAdminView
-                    ? 'Admin Seat Request Management'
+                  {!showUserAccessStateView
+                    ? 'Admin'
                     : activeUserRequest?.status === 'approved'
-                    ? 'Your CareerOS Seat is Approved'
+                    ? 'CareerOS Access'
                     : activeUserRequest?.status === 'pending'
-                    ? 'CareerOS Seat Request Received'
-                    : 'Request a CareerOS Seat'}
+                    ? 'Pending'
+                    : activeUserRequest?.status === 'declined'
+                    ? 'Request Full Access'
+                    : 'Request Full Access'}
                 </h2>
                 <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-slate-800 text-slate-300 border border-slate-700">
-                  Source: {modalState.sourceLocation}
+                  {!showUserAccessStateView ? 'Admin Seat Queue' : displayAccess.category}
                 </span>
               </div>
               <p className="text-xs text-slate-400 mt-1">
-                {identity.isAdminView
-                  ? 'Review incoming CareerOS seat requests or switch "Simulate role" above to test the Normal User or Guest request modal.'
-                  : identity.effectiveRoleLabel === 'Guest'
-                  ? 'Unauthenticated Guest Flow — Enter your email and context to request full workspace access.'
-                  : identity.effectiveRoleLabel === 'Invited User'
-                  ? 'Partner Cohort Invitation detected — Confirm your details to request seat activation.'
-                  : 'Submit your details to unlock unlimited CareerOS creation, full AI coaching, and evidence synthesis.'}
+                {!showUserAccessStateView
+                  ? 'Platform management access — Review incoming seat requests or use QA Simulation above to test Guest, Demo User, or Request Full Access.'
+                  : activeUserRequest?.status === 'pending'
+                  ? 'Your CareerOS seat request is under review.'
+                  : activeUserRequest?.status === 'approved'
+                  ? 'Your CareerOS seat has been approved.'
+                  : activeUserRequest?.status === 'declined'
+                  ? 'Leave your email to request a CareerOS seat.'
+                  : 'Leave your email to request a CareerOS seat.'}
               </p>
             </div>
           </div>
@@ -496,38 +444,37 @@ export const RequestSeatModal: React.FC = () => {
 
         {/* Modal Body */}
         <div className="p-6 overflow-y-auto space-y-5">
-          {identity.isAdminView ? (
+          {!showUserAccessStateView ? (
             /* ============================================================
-               ADMIN VIEW (When Simulated Role === 'Admin')
+               ADMIN VIEW (When Resolved State === 'Admin' & No Request)
                ============================================================ */
             <div className="space-y-4">
-              {/* Quick banner explaining why Admin sees this & 1-click switch to Normal User */}
               <div className="rounded-xl bg-amber-500/10 border border-amber-500/30 p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                 <div className="space-y-1">
                   <div className="flex items-center gap-2 text-xs font-bold text-amber-300">
                     <Shield className="w-4 h-4" />
-                    Viewing as Platform Admin ({pendingCount} pending requests)
+                    Platform management access ({pendingCount} pending requests)
                   </div>
                   <p className="text-xs text-slate-300 leading-relaxed">
-                    Because the active role is <strong>Admin</strong>, this CTA opens the Admin Seat
-                    Management inbox. Switch to <strong>Normal User</strong> or{' '}
-                    <strong>Guest</strong> to test the end-user seat request form.
+                    Switch QA Simulation to <strong>Demo User</strong>,{' '}
+                    <strong>Guest</strong>, or <strong>Request Full Access</strong> to test the
+                    end-user seat request modal.
                   </p>
                 </div>
                 <div className="flex items-center gap-2 shrink-0">
                   <button
                     type="button"
-                    onClick={() => setSimulatedRole('Normal User')}
+                    onClick={() => setSimulatedRole('Request Full Access')}
                     className="px-3 py-2 rounded-lg bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold text-xs transition-colors cursor-pointer whitespace-nowrap"
                   >
-                    Simulate Normal User
+                    Request Full Access
                   </button>
                   <button
                     type="button"
-                    onClick={() => setSimulatedRole('Guest')}
+                    onClick={() => setSimulatedRole('Demo User')}
                     className="px-3 py-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-white border border-slate-700 font-semibold text-xs transition-colors cursor-pointer whitespace-nowrap"
                   >
-                    Simulate Guest
+                    Demo User
                   </button>
                 </div>
               </div>
@@ -546,7 +493,7 @@ export const RequestSeatModal: React.FC = () => {
                           : 'bg-slate-800/70 text-slate-400 hover:text-white'
                       }`}
                     >
-                      {tab} (
+                      {tab === 'declined' ? 'rejected' : tab} (
                       {tab === 'all'
                         ? requests.length
                         : requests.filter((r) => r.status === tab).length}
@@ -554,9 +501,6 @@ export const RequestSeatModal: React.FC = () => {
                     </button>
                   ))}
                 </div>
-                <span className="text-[11px] text-slate-400">
-                  Stored in <code className="text-slate-300">seatRequestService</code>
-                </span>
               </div>
 
               {/* Seat Requests List */}
@@ -586,10 +530,7 @@ export const RequestSeatModal: React.FC = () => {
                                 : 'bg-amber-500/15 text-amber-300 border border-amber-500/30'
                             }`}
                           >
-                            {req.status}
-                          </span>
-                          <span className="px-2 py-0.5 rounded text-[10px] bg-slate-800 text-slate-400">
-                            Role: {req.effectiveRoleAtSubmission}
+                            {req.status === 'declined' ? 'Rejected' : req.status}
                           </span>
                         </div>
 
@@ -607,11 +548,7 @@ export const RequestSeatModal: React.FC = () => {
                         )}
 
                         <div className="flex flex-wrap items-center gap-3 text-[11px] text-slate-500 pt-1">
-                          <span>CTA Source: {req.sourceLocation}</span>
-                          <span>•</span>
-                          <span>
-                            Account: {req.authenticatedUserId ? req.authenticatedUserId : 'Guest'}
-                          </span>
+                          <span>Source: {req.sourceLocation}</span>
                           <span>•</span>
                           <span>{new Date(req.createdAt).toLocaleString()}</span>
                         </div>
@@ -642,7 +579,7 @@ export const RequestSeatModal: React.FC = () => {
                           }`}
                         >
                           <XCircle className="w-3.5 h-3.5" />
-                          Decline
+                          Reject
                         </button>
                       </div>
                     </div>
@@ -652,13 +589,15 @@ export const RequestSeatModal: React.FC = () => {
             </div>
           ) : activeUserRequest ? (
             /* ============================================================
-               CONFIRMATION / STATUS STATE (Pending or Approved)
+               SEAT ACCESS STATE VIEW (Pending, CareerOS Access, or Request again)
                ============================================================ */
             <div className="space-y-5">
               <div
                 className={`rounded-2xl border p-5 ${
                   activeUserRequest.status === 'approved'
                     ? 'bg-emerald-500/10 border-emerald-500/30'
+                    : activeUserRequest.status === 'declined'
+                    ? 'bg-rose-500/10 border-rose-500/30'
                     : 'bg-indigo-500/10 border-indigo-500/30'
                 }`}
               >
@@ -667,11 +606,15 @@ export const RequestSeatModal: React.FC = () => {
                     className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${
                       activeUserRequest.status === 'approved'
                         ? 'bg-emerald-500/20 text-emerald-300'
+                        : activeUserRequest.status === 'declined'
+                        ? 'bg-rose-500/20 text-rose-300'
                         : 'bg-indigo-500/20 text-indigo-300'
                     }`}
                   >
                     {activeUserRequest.status === 'approved' ? (
                       <BadgeCheck className="w-5 h-5" />
+                    ) : activeUserRequest.status === 'declined' ? (
+                      <XCircle className="w-5 h-5" />
                     ) : (
                       <Clock className="w-5 h-5" />
                     )}
@@ -680,24 +623,34 @@ export const RequestSeatModal: React.FC = () => {
                     <div className="flex flex-wrap items-center justify-between gap-2">
                       <h3 className="text-base font-bold text-white">
                         {activeUserRequest.status === 'approved'
-                          ? 'Full CareerOS Seat Approved'
-                          : 'Seat Request Submitted & Pending Review'}
+                          ? 'CareerOS Access'
+                          : activeUserRequest.status === 'declined'
+                          ? 'Seat Request Not Approved'
+                          : 'Pending'}
                       </h3>
                       <span
                         className={`px-2.5 py-0.5 rounded-full text-[11px] font-bold uppercase ${
                           activeUserRequest.status === 'approved'
                             ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-400/30'
+                            : activeUserRequest.status === 'declined'
+                            ? 'bg-rose-500/20 text-rose-300 border border-rose-400/30'
                             : 'bg-amber-500/20 text-amber-300 border border-amber-400/30'
                         }`}
                       >
-                        {activeUserRequest.status}
+                        {activeUserRequest.status === 'approved'
+                          ? 'CareerOS Access'
+                          : activeUserRequest.status === 'declined'
+                          ? 'Rejected'
+                          : 'Pending'}
                       </span>
                     </div>
 
                     <p className="text-xs text-slate-300 leading-relaxed">
                       {activeUserRequest.status === 'approved'
                         ? 'Your CareerOS practitioner seat has been approved. You now have access to full role calibration, unlimited projects, and live AI coaching.'
-                        : 'Your request has been logged in the CareerOS Seat Queue. Duplicate submissions for this account/email are automatically prevented while your request is active.'}
+                        : activeUserRequest.status === 'declined'
+                        ? 'Your previous CareerOS seat request was not approved for the current cohort allocation. Click "Request again" below to submit an updated request.'
+                        : 'Your CareerOS seat request is under review. Duplicate submissions for this account/email are automatically prevented while your request is active.'}
                     </p>
 
                     {duplicateNotice && (
@@ -726,42 +679,33 @@ export const RequestSeatModal: React.FC = () => {
                         : ''}
                     </span>
                   </div>
-                  <div>
-                    <span className="text-slate-400 block text-[11px]">Account Association</span>
-                    <span className="font-semibold text-slate-200">
-                      {activeUserRequest.authenticatedUserId
-                        ? `Authenticated (${activeUserRequest.authenticatedUserId})`
-                        : 'Unauthenticated Guest Request'}
-                    </span>
-                  </div>
-                  <div>
-                    <span className="text-slate-400 block text-[11px]">Submitted From</span>
-                    <span className="font-semibold text-slate-200">
-                      {activeUserRequest.sourceLocation}
-                    </span>
-                  </div>
                 </div>
               </div>
 
               <div className="flex flex-wrap items-center justify-between gap-3 pt-2">
                 <div className="flex items-center gap-2">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      clearLastSubmittedSessionRequest();
-                      setSimulatedRole('Guest');
-                    }}
-                    className="px-3 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 text-xs font-semibold transition-colors cursor-pointer"
-                  >
-                    Test New Guest Request
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setSimulatedRole('Admin')}
-                    className="px-3 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-amber-300 border border-slate-700 text-xs font-semibold transition-colors cursor-pointer"
-                  >
-                    Inspect in Admin Inbox
-                  </button>
+                  {activeUserRequest.status === 'declined' ? (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        clearLastSubmittedSessionRequest();
+                      }}
+                      className="px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold inline-flex items-center gap-1.5 transition-colors cursor-pointer"
+                    >
+                      <RotateCcw className="w-3.5 h-3.5" />
+                      <span>Request again</span>
+                    </button>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        clearLastSubmittedSessionRequest();
+                      }}
+                      className="px-3 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 text-xs font-semibold transition-colors cursor-pointer"
+                    >
+                      Test New Request Form
+                    </button>
+                  )}
                 </div>
 
                 <div className="flex items-center gap-2">
@@ -774,14 +718,14 @@ export const RequestSeatModal: React.FC = () => {
                       }}
                       className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold inline-flex items-center gap-1.5 transition-colors cursor-pointer"
                     >
-                      Activate Full Workspace
+                      Activate CareerOS Access
                       <ArrowRight className="w-3.5 h-3.5" />
                     </button>
                   )}
                   <button
                     type="button"
                     onClick={closeRequestModal}
-                    className="px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold transition-colors cursor-pointer"
+                    className="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-white text-xs font-bold transition-colors cursor-pointer"
                   >
                     Done
                   </button>
@@ -790,7 +734,7 @@ export const RequestSeatModal: React.FC = () => {
             </div>
           ) : (
             /* ============================================================
-               END-USER SEAT REQUEST FORM (Normal User, Guest, Invited User)
+               END-USER SEAT REQUEST FORM (Guest, Demo User, Request Full Access)
                ============================================================ */
             <form onSubmit={handleUserSubmit} className="space-y-4">
               {/* Context Banner for Account Association */}
@@ -800,26 +744,18 @@ export const RequestSeatModal: React.FC = () => {
                     <>
                       <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
                       <span className="text-slate-300">
-                        Associated with authenticated account:{' '}
-                        <strong className="text-white">{identity.accountId}</strong>
+                        Leave your email to request a CareerOS seat for your workspace.
                       </span>
                     </>
                   ) : (
                     <>
                       <Lock className="w-4 h-4 text-amber-400 shrink-0" />
                       <span className="text-slate-300">
-                        Unauthenticated <strong>Guest</strong> session — valid email address is
-                        required
+                        Leave your email to request a CareerOS seat (valid email required).
                       </span>
                     </>
                   )}
                 </div>
-
-                {identity.invitationCode && (
-                  <span className="px-2 py-0.5 rounded bg-indigo-500/20 text-indigo-300 border border-indigo-500/30 text-[11px] font-mono font-semibold">
-                    Invite: {identity.invitationCode}
-                  </span>
-                )}
               </div>
 
               {errorMessage && (
@@ -920,7 +856,7 @@ export const RequestSeatModal: React.FC = () => {
               {/* Submit / Cancel Footer */}
               <div className="pt-2 flex items-center justify-between gap-3 border-t border-slate-800/80">
                 <span className="text-[11px] text-slate-400">
-                  Submitting as: <strong className="text-slate-200">{simulatedRole}</strong>
+                  Leave your email to request a CareerOS seat
                 </span>
                 <div className="flex items-center gap-2.5">
                   <button
@@ -935,7 +871,7 @@ export const RequestSeatModal: React.FC = () => {
                     className="px-5 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold inline-flex items-center gap-2 shadow-lg shadow-indigo-600/25 transition-all cursor-pointer"
                   >
                     <Sparkles className="w-4 h-4" />
-                    Submit Request
+                    Request a CareerOS Seat
                   </button>
                 </div>
               </div>

@@ -8,6 +8,7 @@ import {
 import { useDemoWorkspace } from '../../services/demoWorkspaceService';
 import { isShowcaseModeEnabled, setShowcaseModeEnabled } from './ShowcaseModeController';
 import { RoleSimulationControl } from './RequestSeatModal';
+import { useSeatRequestService } from '../../services/seatRequestService';
 
 const SESSION_STATE_LABELS: Record<GuestSessionState, string> = {
   FIRST_VISIT: 'First Visit · Guest Preview',
@@ -236,10 +237,17 @@ export const FirstSessionGuestPrompt: React.FC = () => {
 export const FirstSessionContextBar: React.FC = () => {
   const {
     accessLevel,
-    sessionState,
+    isAdmin,
+    role,
     openContextualPrompt,
     requestFullAccess
   } = useAccessControl();
+  const {
+    simulatedRole,
+    simulatedAccessState,
+    getDisplayAccessState,
+    getCurrentUserActiveRequest
+  } = useSeatRequestService();
   const { usageBreakdowns, resetDemoWorkspace } = useDemoWorkspace();
   const [showUsageDetails, setShowUsageDetails] = useState(false);
   const [resetSuccess, setResetSuccess] = useState(false);
@@ -254,6 +262,70 @@ export const FirstSessionContextBar: React.FC = () => {
   if (accessLevel === 'FULL') {
     return null;
   }
+
+  const actualIsAdmin = isAdmin || role === 'ADMIN' || role === 'OWNER';
+  const activeRequest = getCurrentUserActiveRequest();
+  const effectiveSeatState = activeRequest ? activeRequest.status : simulatedAccessState;
+
+  const displayAccess = getDisplayAccessState({
+    authState: accessLevel === 'GUEST' || accessLevel === 'PUBLIC' ? 'GUEST' : 'AUTHENTICATED',
+    actualRole: actualIsAdmin ? 'Admin' : 'User',
+    simulatedRole,
+    workspaceState: accessLevel,
+    seatRequestState: effectiveSeatState
+  });
+
+  const renderSeatCtaButton = (sourceLabel: string) => {
+    if (displayAccess.seatAccessStatus === 'pending') {
+      return (
+        <button
+          type="button"
+          onClick={() => requestFullAccess(false, sourceLabel)}
+          className="px-2.5 py-1 rounded-lg bg-amber-50 hover:bg-amber-100 border border-amber-200 text-[11px] font-semibold text-amber-900 inline-flex items-center gap-1 transition-colors cursor-pointer"
+          title="Your CareerOS seat request is under review."
+        >
+          <CheckCircle2 className="w-3 h-3 text-amber-600" />
+          <span>Pending</span>
+        </button>
+      );
+    }
+
+    if (displayAccess.seatAccessStatus === 'approved') {
+      return (
+        <button
+          type="button"
+          onClick={() => requestFullAccess(false, sourceLabel)}
+          className="px-2.5 py-1 rounded-lg bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 text-[11px] font-semibold text-emerald-800 inline-flex items-center gap-1 transition-colors cursor-pointer"
+          title="Your CareerOS seat has been approved."
+        >
+          <CheckCircle2 className="w-3 h-3 text-emerald-600" />
+          <span>CareerOS Access</span>
+        </button>
+      );
+    }
+
+    if (displayAccess.seatAccessStatus === 'rejected') {
+      return (
+        <button
+          type="button"
+          onClick={() => requestFullAccess(false, sourceLabel)}
+          className="px-2.5 py-1 rounded-lg bg-slate-900 hover:bg-slate-800 text-white font-semibold text-[11px] transition-colors cursor-pointer"
+        >
+          Request again
+        </button>
+      );
+    }
+
+    return (
+      <button
+        type="button"
+        onClick={() => requestFullAccess(false, sourceLabel)}
+        className="px-2.5 py-1 rounded-lg bg-slate-900 hover:bg-slate-800 text-white font-semibold text-[11px] transition-colors cursor-pointer"
+      >
+        Request a CareerOS Seat
+      </button>
+    );
+  };
 
   if (accessLevel === 'DEMO') {
     const handleReset = () => {
@@ -271,16 +343,14 @@ export const FirstSessionContextBar: React.FC = () => {
     return (
       <div className="mb-4 rounded-xl bg-amber-50/60 border border-amber-200/80 text-xs text-slate-800 overflow-hidden">
         <div className="px-3.5 py-2.5 flex flex-wrap items-center justify-between gap-2.5">
+          {/* ONE Primary Access Label + ONE Contextual Description */}
           <div className="flex items-center gap-2.5 flex-wrap">
-            <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md bg-amber-100/90 border border-amber-300/80 text-[10px] font-bold uppercase tracking-wider text-amber-950 shrink-0">
+            <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md bg-amber-100/90 border border-amber-300/80 text-[10px] font-bold tracking-wider text-amber-950 shrink-0">
               <span className="w-1.5 h-1.5 rounded-full bg-amber-500" />
-              DEMO WORKSPACE
+              {displayAccess.displayLabel}
             </span>
             <span className="text-slate-700 font-medium">
-              Demo changes are isolated to this workspace and may be reset.
-            </span>
-            <span className="hidden lg:inline text-[11px] text-amber-900/70 font-medium">
-              · Protected Preview (© 2026 Dynaisys)
+              {displayAccess.supportingText}
             </span>
             {resetSuccess && (
               <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-emerald-700 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-md">
@@ -299,7 +369,7 @@ export const FirstSessionContextBar: React.FC = () => {
                   ? 'bg-indigo-600 text-white border-indigo-600 shadow-2xs'
                   : 'bg-white hover:bg-indigo-50 border-indigo-200 text-indigo-800'
               }`}
-              title="Toggle deterministic 12-stage Showcase Mode narrative for product demos & investor pitches"
+              title="Toggle deterministic 12-stage Showcase Mode narrative"
             >
               <Presentation className="w-3.5 h-3.5" />
               <span>{showcaseEnabled ? 'Showcase Mode: ON' : 'Showcase Mode'}</span>
@@ -327,30 +397,12 @@ export const FirstSessionContextBar: React.FC = () => {
               <span>Reset Demo Workspace</span>
             </button>
 
-            {sessionState === 'FULL_ACCESS_REQUESTED' ? (
-              <button
-                type="button"
-                onClick={() => requestFullAccess(false, 'Demo Workspace Context Bar')}
-                className="px-2.5 py-1 rounded-lg bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 text-[11px] font-semibold text-emerald-800 inline-flex items-center gap-1 transition-colors cursor-pointer"
-                title="Click to view your CareerOS Seat Request status or test simulated roles"
-              >
-                <CheckCircle2 className="w-3 h-3 text-emerald-600" />
-                <span>CareerOS Seat Requested</span>
-              </button>
-            ) : (
-              <button
-                type="button"
-                onClick={() => requestFullAccess(false, 'Demo Workspace Context Bar')}
-                className="px-2.5 py-1 rounded-lg bg-slate-900 hover:bg-slate-800 text-white font-semibold text-[11px] transition-colors cursor-pointer"
-              >
-                Request a CareerOS Seat
-              </button>
-            )}
+            {renderSeatCtaButton('Demo Workspace Context Bar')}
           </div>
         </div>
 
-        {/* Development / Demo Role Simulation Bar */}
-        <div className="px-3.5 py-2 bg-slate-950/95 border-t border-amber-200/60">
+        {/* Compact Developer / QA Simulation Control */}
+        <div className="px-3.5 py-1.5 bg-slate-950 border-t border-amber-200/60">
           <RoleSimulationControl variant="bar" />
         </div>
 
@@ -393,16 +445,17 @@ export const FirstSessionContextBar: React.FC = () => {
   return (
     <div className="mb-4 rounded-xl bg-blue-50/60 border border-blue-200/70 text-xs text-slate-700 overflow-hidden">
       <div className="px-3.5 py-2 flex flex-wrap items-center justify-between gap-2">
+        {/* ONE Primary Access Label + ONE Contextual Description */}
         <div className="flex items-center gap-2 flex-wrap">
-          <span className="w-2 h-2 rounded-full bg-blue-500 shrink-0" />
-          <span className="font-semibold text-slate-900">
-            You&apos;re exploring CareerOS Beta ({sessionState === 'FIRST_VISIT' ? 'First Session' : 'Guest Mode'})
+          <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md bg-blue-100/90 border border-blue-200 text-[10px] font-bold tracking-wider text-blue-950 shrink-0">
+            <span className="w-1.5 h-1.5 rounded-full bg-blue-500" />
+            {displayAccess.displayLabel}
           </span>
-          <span className="text-slate-400">·</span>
-          <span className="text-slate-600">
-            Explore all modules freely with curated datasets. Advanced intelligence and creation workflows are available in the Demo Workspace.
+          <span className="text-slate-700 font-medium">
+            {displayAccess.supportingText}
           </span>
         </div>
+
         <div className="flex items-center gap-2.5 shrink-0 flex-wrap">
           <span className="text-[11px] text-slate-500 hidden sm:inline">
             Demo login: <strong className="font-mono text-slate-700">demo-basic</strong> / <strong className="font-mono text-slate-700">demo2026</strong>
@@ -415,18 +468,12 @@ export const FirstSessionContextBar: React.FC = () => {
             <span>Enter Demo Workspace</span>
             <ArrowRight className="w-3 h-3" />
           </button>
-          <button
-            type="button"
-            onClick={() => requestFullAccess(false, 'Guest Mode Context Bar')}
-            className="px-2.5 py-1 rounded-lg bg-slate-900 hover:bg-slate-800 text-white font-semibold text-[11px] transition-colors cursor-pointer"
-          >
-            Request a CareerOS Seat
-          </button>
+          {renderSeatCtaButton('Guest Mode Context Bar')}
         </div>
       </div>
 
-      {/* Development / Demo Role Simulation Bar */}
-      <div className="px-3.5 py-2 bg-slate-950/95 border-t border-blue-200/60">
+      {/* Compact Developer / QA Simulation Control */}
+      <div className="px-3.5 py-1.5 bg-slate-950 border-t border-blue-200/60">
         <RoleSimulationControl variant="bar" />
       </div>
     </div>

@@ -74,50 +74,47 @@ export const AdminCrawlerApi = {
   },
 
   // Password verification for sensitive actions (Run Crawl, Publish, Delete, Policy edit)
+  // Security Hardening (SEC-01): Verified strictly server-side via /api/admin/verify; no plaintext secret in client bundle.
   async verifyAdminPassword(username: string, passwordAttempt: string): Promise<{ verified: boolean; token?: string; error?: string }> {
-    // In production, sent to server-side endpoint /api/admin/verify
     try {
       const res = await fetch('/api/admin/verify', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ username, password: passwordAttempt })
       });
-      if (res.ok) {
-        const data = await res.json();
+      const data = await res.json().catch(() => ({}));
+      if (res.ok && data.verified && data.token) {
+        try {
+          sessionStorage.setItem('careeros_verified_admin_token', data.token);
+        } catch {
+          // Ignore storage error
+        }
         return { verified: true, token: data.token };
       }
+      return {
+        verified: false,
+        error: data.error || 'Invalid administrator credentials. Verification rejected by server.'
+      };
     } catch {
-      // Fallback in case backend server is spinning up or offline
+      return {
+        verified: false,
+        error: 'Unable to reach server-side administrator verification service.'
+      };
     }
-
-    // Default admin credential validation check (never log or store password)
-    const valid = (username.trim() === 'admin_lead' || username.trim() === 'admin') && passwordAttempt === 'career-os-admin';
-    if (valid) {
-      crawlerStore.addAuditLog({
-        actorId: 'admin-lead',
-        actorUsername: username,
-        action: 'VERIFY_ADMIN',
-        result: 'SUCCESS',
-        details: 'Admin verified credentials for sensitive crawler operation.'
-      });
-      return { verified: true, token: `tok-${Date.now()}` };
-    }
-
-    crawlerStore.addAuditLog({
-      actorId: 'unknown',
-      actorUsername: username,
-      action: 'VERIFY_ADMIN',
-      result: 'DENIED',
-      details: 'Failed credential verification attempt for administrative operation.'
-    });
-    return { verified: false, error: 'Invalid administrator credentials. Please check your password.' };
   },
 
   buildHeaders(includeJson = false): Record<string, string> {
-    const user = this.getCurrentUser();
+    let adminToken = '';
+    if (typeof window !== 'undefined') {
+      try {
+        adminToken = sessionStorage.getItem('careeros_verified_admin_token') || '';
+      } catch {
+        // Ignore
+      }
+    }
     return {
       ...dataExposureGuard.getSecurityHeaders(),
-      'X-CareerOS-Admin-Role': user.role,
+      ...(adminToken ? { 'X-CareerOS-Admin-Token': adminToken } : {}),
       ...(includeJson ? { 'Content-Type': 'application/json' } : {})
     };
   },

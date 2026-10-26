@@ -145,6 +145,21 @@ function parseCsvGrid(csvText: string): string[][] {
 }
 
 /**
+ * Security Hardening (SEC-06): Neutralizes CSV Formula Injection (=, +, -, @, \t, \r)
+ * and strips unsafe script tags while enforcing field length bounds.
+ */
+function sanitizeCsvCellInput(raw: string | undefined, maxLen = 1500): string {
+  if (!raw) return '';
+  let cleaned = raw
+    .replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, '')
+    .trim();
+  if (/^[=+\-@\t\r]/.test(cleaned)) {
+    cleaned = cleaned.replace(/^[=+\-@\t\r]+/, '').trim();
+  }
+  return cleaned.slice(0, maxLen);
+}
+
+/**
  * Parses CSV text into RawCsvWorkExperienceRow items.
  * Enforces minimal required fields: Company, Role / Job Title, Start Date.
  */
@@ -152,6 +167,13 @@ export function parseWorkExperienceCsv(csvText: string): {
   rows: RawCsvWorkExperienceRow[];
   errors: string[];
 } {
+  if (csvText.length > 250_000) {
+    return {
+      rows: [],
+      errors: ['CSV file exceeds maximum allowed size (250 KB).']
+    };
+  }
+
   const grid = parseCsvGrid(csvText);
   if (grid.length < 2) {
     return {
@@ -178,12 +200,13 @@ export function parseWorkExperienceCsv(csvText: string): {
 
   const validRows: RawCsvWorkExperienceRow[] = [];
   const errors: string[] = [];
+  const maxRows = Math.min(grid.length, 101); // Max 100 data rows per import batch
 
-  for (let r = 1; r < grid.length; r++) {
+  for (let r = 1; r < maxRows; r++) {
     const row = grid[r];
-    const company = (row[companyIdx] || '').trim();
-    const role = (row[roleIdx] || '').trim();
-    const startDate = (row[startIdx] || '').trim();
+    const company = sanitizeCsvCellInput(row[companyIdx], 160);
+    const role = sanitizeCsvCellInput(row[roleIdx], 160);
+    const startDate = sanitizeCsvCellInput(row[startIdx], 60);
 
     // Skip completely blank lines
     if (!company && !role && !startDate) continue;
@@ -202,11 +225,11 @@ export function parseWorkExperienceCsv(csvText: string): {
       company,
       role,
       startDate,
-      endDate: (row[endIdx] || '').trim() || undefined,
-      currentRole: (row[currentIdx] || '').trim() || undefined,
-      location: (row[locationIdx] || '').trim() || undefined,
-      description: (row[descIdx] || '').trim() || undefined,
-      achievements: (row[achIdx] || '').trim() || undefined
+      endDate: sanitizeCsvCellInput(row[endIdx], 60) || undefined,
+      currentRole: sanitizeCsvCellInput(row[currentIdx], 20) || undefined,
+      location: sanitizeCsvCellInput(row[locationIdx], 120) || undefined,
+      description: sanitizeCsvCellInput(row[descIdx], 2000) || undefined,
+      achievements: sanitizeCsvCellInput(row[achIdx], 2000) || undefined
     });
   }
 

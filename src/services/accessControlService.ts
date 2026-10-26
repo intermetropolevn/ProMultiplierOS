@@ -23,6 +23,7 @@ import { dataExposureGuard } from './dataExposureGuardService';
 import { seatRequestService } from './seatRequestService';
 
 export type BetaAccessLevel = 'PUBLIC' | 'GUEST' | 'DEMO' | 'FULL';
+export type AccessLevel = BetaAccessLevel;
 export type UserRole = 'USER' | 'ADMIN' | 'OWNER';
 
 export type GuestSessionState =
